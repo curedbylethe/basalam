@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `Screen.hit_test(x, y)`: the topmost widget (last painted) whose bounds
+  contain a 0-based cell, or `NoWidget`.
+- `Event.mouse_point()`: the 0-based cell of a `MouseEvent`, converted from
+  the terminal's 1-based `mouse.col` and `mouse.row`.
+
+### Changed
+
+- `Screen.dispatch` routes a decoded `MouseEvent` to the widget under the
+  cursor and bubbles from there. With no widget under the cursor it falls
+  back to the focused widget. Every other event kind still starts at the
+  focused widget.
+
+### Documentation
+
+- Resize detection polls `term.Size()` because Salam has no signal API (no
+  `SIGWINCH`); the limitation and its trade-off (`PollMs`) are documented
+  in the `screen.salam` module comment and the event-loop concept page.
+- The event-loop, `Event`, and `Screen` pages cover mouse routing, mouse
+  coordinates, and the decision to ship no key bindings.
+
 ## [0.1.0] - 2026-10-06
 
 Epic 1 (core): the foundation every later widget, layout, and keymap

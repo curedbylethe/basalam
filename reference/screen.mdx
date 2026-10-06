@@ -1,7 +1,7 @@
 ---
 title: "Screen"
 description: "The terminal session: widget tree, back buffer, input thread, and the event loop."
-keywords: ["screen", "event loop", "next_event", "run", "run_with_tick", "start", "close"]
+keywords: ["screen", "event loop", "next_event", "run", "run_with_tick", "start", "close", "dispatch", "hit_test", "mouse"]
 ---
 
 A `Screen` owns the terminal session. It holds the widget [tree](/reference/tree), the back [buffer](/reference/buffer), and the channel the input thread sends [events](/reference/event) on. You create one per program.
@@ -47,6 +47,7 @@ pub func NewTerminalScreen(root: dyn Widget): Screen
 | `add(parent: int, w: dyn Widget): int` | Adds `w` under `parent` (`RootId` for top level) and returns its ID. Widgets paint in the order you add them. The first focusable widget added while nothing has focus receives it. |
 | `widget(id: int): dyn Widget` | The widget with this ID; the root for an invalid ID. |
 | `focused_id(): int` | The ID of the focused widget, or `NoWidget` when nothing has focus (events then start at the root). |
+| `hit_test(x: int, y: int): int` | The ID of the widget drawn at cell (`x`, `y`), or `NoWidget`. See [Hit testing](#hit-testing). |
 | `fit_root()` | Gives the root the whole buffer. |
 | `resize(width: int, height: int)` | Resizes the buffer and refits the root. |
 
@@ -78,12 +79,42 @@ Each returns `true` when the focus moved, and every change marks the screen dirt
 | Method | Description |
 | --- | --- |
 | `next_event(event &: Event): bool` | Waits for the next event. Returns `false` once the screen is stopped and every queued event was delivered. |
-| `dispatch(event: Event): bool` | Handles one event synchronously. A `ResizeEvent` first resizes the screen. Then the event goes to the focused widget and bubbles up. Returns `true` if a widget consumed it. |
+| `dispatch(event: Event): bool` | Handles one event synchronously. A `ResizeEvent` first resizes the screen. Then the event goes to a starting widget and bubbles up: the widget under the cursor for a mouse event, the focused widget for everything else. Returns `true` if a widget consumed it. See [Hit testing](#hit-testing). |
 | `draw()` | Renders every widget into the buffer, in ID order, each clipped to its visible bounds. |
 | `present()` | `draw()`, then writes the frame to the terminal once attached. Clears `dirty`. |
 | `post(event: Event): bool` | Queues an event as if the input thread had produced it. Safe from any thread. |
 | `run()` | Runs the loop until `stop()`. Redraws only when something changed. An unconsumed Ctrl+C stops it. |
 | `run_with_tick(on_tick: func ())` | Like `run`, and also calls `on_tick` on the main thread for every `TickEvent`. |
+
+### Hit testing
+
+```salam
+pub func hit_test(x: int, y: int): int
+```
+
+`hit_test` returns the ID of the widget drawn at the 0-based cell (`x`, `y`), or `NoWidget` when no widget covers it. Where widgets overlap, the one painted last (the highest ID) wins, so a child beats its parent and a later sibling beats an earlier one. Widgets with empty bounds never match. The root covers the whole buffer, so inside the screen the answer is never `NoWidget` unless you shrank the root yourself.
+
+`dispatch` uses it for mouse routing:
+
+| Event | First widget offered the event |
+| --- | --- |
+| `MouseEvent` with `mouse.ok`, a widget under the cursor | That widget (`hit_test` of `mouse_point()`). |
+| `MouseEvent` with no widget under the cursor, or `mouse.ok` false | The focused widget. |
+| `KeyEvent`, `TickEvent`, `ResizeEvent` | The focused widget. |
+
+From the first widget the event [bubbles up](/reference/event#dispatch-and-bubbling) to the root. Mouse events only arrive when `mouse` is `true`. Routing does not change the focus. To focus what was clicked, call `focus(id)` yourself.
+
+```salam
+mut ev := basalam.Event {}
+until screen.next_event(ev):
+    if ev.kind == basalam.MouseEvent and ev.mouse.ok and ev.mouse.pressed:
+        p := ev.mouse_point()
+        _ := screen.focus(screen.hit_test(p.x, p.y)) // click-to-focus
+    end
+    _ := screen.dispatch(ev)
+    screen.present()
+end
+```
 
 ### Write your own loop
 

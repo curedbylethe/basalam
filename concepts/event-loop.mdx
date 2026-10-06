@@ -1,7 +1,7 @@
 ---
 title: "The event loop"
-description: "How input moves from the terminal to your widgets: one async input thread, one synchronous main loop."
-keywords: ["event loop", "thread", "channel", "async", "tick", "resize"]
+description: "How input moves from the terminal to your widgets: one async input thread, one synchronous main loop, mouse routing, and resize polling."
+keywords: ["event loop", "thread", "channel", "async", "tick", "resize", "mouse", "hit test", "key bindings"]
 ---
 
 Exactly one part of basalam is asynchronous: reading input. Everything that touches your widgets runs synchronously on the main thread, one event at a time. That is why `handle_event` can be plain code with no locks and no `async`.
@@ -17,20 +17,20 @@ sequenceDiagram
     participant W as Widgets
     T->>I: bytes on stdin
     I->>I: term.ReadKey()
-    I->>C: KeyEvent
+    I->>C: KeyEvent / MouseEvent
     I->>C: ResizeEvent (size changed)
     I->>C: TickEvent (every tick_ms)
     M->>C: next_event(ev)
     C-->>M: ev
-    M->>W: dispatch(ev): focused widget, then ancestors
+    M->>W: dispatch(ev): first widget, then ancestors
     M->>W: present(): render every widget into the buffer
     M->>T: one write per frame
 ```
 
 **The input thread** starts in `screen.start()`. It loops over three sources:
 
-- **Keys.** It waits up to `PollMs` (20 ms) for input with `term.KeyReady`, then reads it with `term.ReadKey`. Mouse reports are decoded with `term.DecodeMouse` into a `MouseEvent`.
-- **Size.** It checks `term.Size()` on every pass and sends a `ResizeEvent` when it changes. Polling means no signal handler is needed, and it costs one `ioctl` per pass.
+- **Keys and mouse.** It waits up to `PollMs` (20 ms) for input with `term.KeyReady`, then reads it with `term.ReadKey`. Keys become a `KeyEvent`. Mouse reports are decoded with `term.DecodeMouse` into a `MouseEvent`.
+- **Size.** It checks `term.Size()` on every pass and sends a `ResizeEvent` when it changes. See [Limitations](#limitations) for why this polls.
 - **Ticks.** When `tick_ms` is above zero, it sends a `TickEvent` that often. A late tick is scheduled from the time it was sent, so a slow main thread gets one late tick, not a burst of catch-up ticks.
 
 The input thread never touches widgets, the tree, or the buffer. Its only shared state is the channel, which `std/chan` already synchronizes.
@@ -51,7 +51,7 @@ end
 ```
 
 - `next_event` blocks until an event arrives. It returns `false` when the screen was stopped and the queue is empty.
-- `dispatch` handles a resize (the buffer and root are resized first), then offers the event to the focused widget and [bubbles it up](/reference/event#dispatch-and-bubbling). It returns whether a widget consumed it.
+- `dispatch` handles a resize (the buffer and root are resized first), then offers the event to a starting widget and [bubbles it up](/reference/event#dispatch-and-bubbling). The starting widget is the focused one, except for mouse events (see [Mouse routing](#mouse-routing)). It returns whether a widget consumed it.
 - Anything no widget consumed is yours: keymaps, modes, and quitting are application decisions, not library ones.
 - `present` draws every widget into the buffer and writes the frame.
 
@@ -84,6 +84,29 @@ end
 <Note>
   The layout engine planned for a later release will do this recomputation for you. Until then the core gives you exactly one layout rule: the root fills the screen.
 </Note>
+
+## Mouse routing
+
+A key press belongs to whoever has the focus. A click belongs to whatever is under the cursor. So `dispatch` routes the two differently:
+
+1. For a `MouseEvent`, the screen converts the report to a 0-based cell with `event.mouse_point()` and calls `hit_test(x, y)`.
+2. `hit_test` returns the topmost widget whose bounds contain that cell. Topmost means painted last, which is the highest ID: a child beats its parent, and a later sibling beats an earlier one. It is always what the user sees on that cell.
+3. The event starts at that widget and [bubbles up](/reference/event#dispatch-and-bubbling) through its ancestors.
+4. If no widget contains the cell (a click outside the buffer, or a report that did not decode), the event starts at the focused widget, like every other event.
+
+Every other event kind (keys, ticks, resizes) still starts at the focused widget.
+
+<Note>
+  Routing a click does not move the focus. Whether a click should focus the widget it hits is the widget's or the application's call: call `screen.focus(id)` from your own code when you want it.
+</Note>
+
+Mouse events only arrive when you set `screen.mouse = true` before `start()`.
+
+## No key bindings
+
+basalam delivers raw `KeyEvent`s and ships no bindings. There is no built-in `Tab` for focus, no `q` for quit, and no vim keys (`hjkl`, `gg`, `G`, `/`). The focus methods (`focus_next`, `focus_up`, and the rest) exist, but connecting them to keys is your job.
+
+This is deliberate. Bindings are policy, and every application wants a different one. An application that wants vim-style modes wraps the library and interprets keys itself, the way Televim wraps ratatui. The library stays small, and nobody has to fight a default they cannot turn off. The [demo](https://github.com/curedbylethe/basalam/blob/main/examples/demo.salam) shows the usual shape: an application-owned function that maps keys to focus calls.
 
 ## Limitations
 
