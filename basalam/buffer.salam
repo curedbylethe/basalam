@@ -1,0 +1,187 @@
+/*
+ * basalam - a terminal user interface library for Salam (2026)
+ *
+ *   +-------------------+
+ *   |   B A S A L A M   |
+ *   +-------------------+
+ *
+ * Built on the Salam standard library's std/term package
+ * Salam: https://github.com/SalamLang/Salam
+ *
+ * Repository: https://github.com/curedbylethe/basalam
+ * License: GPL-3.0-or-later
+ *
+ */
+
+/*
+ * Buffer: the drawing surface widgets render into.
+ *
+ * STATUS - MINIMAL, INTERNAL STAND-IN. The full buffer is epic 4
+ * (double buffering, dirty-region tracking). This file is
+ * only what the core needs to work end to end:
+ *
+ *   present:  a width x height grid of Cells (one codepoint + a style),
+ *             cell access (set/get), text and rect helpers (put_str/fill),
+ *             clear, per-row text for tests (row_text), clipping, and a
+ *             render-context flag (focused).
+ *
+ *   missing:  a front buffer and diffing (every frame redraws every cell),
+ *             dirty regions, structured styles (style is a raw SGR string),
+ *             wide characters (a cell holds one codepoint and is assumed to
+ *             be one column wide), and cursor placement.
+ *
+ * Why widgets never touch the terminal: widgets draw here, the screen
+ * decides when and how a frame reaches the terminal. That keeps rendering
+ * testable without a tty (row_text / get inspect the result) and lets the
+ * epic-4 work change output strategy without touching any widget.
+ *
+ * Value semantics. A Buffer is passed to Widget.render by value, but its
+ * cells live in a Vector, and copies of a Vector share storage. Writing a
+ * cell through any copy therefore writes the screen's one grid. The scalar
+ * fields (clip, focused) are per-copy: the screen hands each widget its own
+ * copy with `clip` set to that widget's visible area and `focused` set when
+ * it holds the focus. Only the owner of the original may resize or free it.
+ */
+
+package basalam
+
+import str
+
+@en "Cell"
+/// One terminal cell: a single codepoint and the style it is drawn with.
+pub struct Cell:
+    @en "ch"
+    /// The character, exactly one codepoint. A blank cell holds " ".
+    pub ch: str = " "
+
+    @en "style"
+    /// SGR escape sequence(s) to draw the cell with, built with std/term
+    /// (for example term.Sgr(term.StyleBold) + term.Sgr(term.FgRed)).
+    /// "" means the terminal's default style.
+    pub style: str = ""
+end
+
+@en "Buffer"
+/// A grid of cells that widgets draw into. Writes outside `clip` (or
+/// outside the grid) are silently ignored, so drawing is infallible.
+pub struct Buffer:
+    @en "width"
+    /// Number of columns.
+    pub width: int = 0
+
+    @en "height"
+    /// Number of rows.
+    pub height: int = 0
+
+    @en "cells"
+    /// Row-major cell storage: the cell at (x, y) is cells[y * width + x].
+    /// Prefer get and set, which bounds-check and clip.
+    pub cells: Vector<Cell> = Vector {}
+
+    @en "clip"
+    /// Writes outside this rect are dropped. NewBuffer sets it to the whole
+    /// grid; the screen narrows it to each widget's bounds while that
+    /// widget renders.
+    pub clip: Rect = Rect {}
+
+    @en "focused"
+    /// Render context: true while the screen renders the focused widget,
+    /// so the widget can draw a focus indicator. Always false outside a
+    /// screen-driven render.
+    pub focused: bool = false
+
+    @en "area"
+    /// The rect covering the whole grid: (0, 0, width, height).
+    pub func area(): Rect:
+        ret Rect { width = this.width, height = this.height }
+    end
+
+    @en "set"
+    /// Writes one cell. Does nothing when (x, y) is outside the grid or
+    /// outside `clip`.
+    pub func set(x: int, y: int, cell: Cell):
+        p := Point { x = x, y = y }
+        if not this.area().contains(p) or not this.clip.contains(p):
+            ret
+        end
+        this.cells.set(y * this.width + x, cell)
+    end
+
+    @en "get"
+    /// Reads one cell. Returns a blank default Cell when (x, y) is outside
+    /// the grid. Reading ignores `clip`.
+    pub func get(x: int, y: int): Cell:
+        p := Point { x = x, y = y }
+        if not this.area().contains(p):
+            ret Cell {}
+        end
+        ret this.cells.get(y * this.width + x)
+    end
+
+    @en "put_str"
+    /// Writes text left to right starting at (x, y), one codepoint per
+    /// cell, all in the same style. Text that runs past the clip or the
+    /// grid is cut off; it never wraps.
+    pub func put_str(x: int, y: int, text: str, style: str):
+        chars := str.Chars(text)
+        defer chars.free()
+        repeat chars.len() in i:
+            this.set(x + i, y, Cell { ch = chars.get(i), style = style })
+        end
+    end
+
+    @en "fill"
+    /// Sets every cell of r (clipped) to the same character and style.
+    pub func fill(r: Rect, ch: str, style: str):
+        repeat r.height in dy:
+            repeat r.width in dx:
+                this.set(r.x + dx, r.y + dy, Cell { ch = ch, style = style })
+            end
+        end
+    end
+
+    @en "clear"
+    /// Resets every cell of the grid to a blank default Cell, ignoring
+    /// `clip`.
+    pub func clear():
+        repeat this.cells.len() in i:
+            this.cells.set(i, Cell {})
+        end
+    end
+
+    @en "row_text"
+    /// The characters of row y joined into one string, without styles.
+    /// Returns "" for a row outside the grid. Meant for tests and debugging.
+    pub func row_text(y: int): str:
+        if y < 0 or y >= this.height:
+            ret ""
+        end
+        mut b := str.NewBuilder()
+        defer str.BufFree(b)
+        repeat this.width in x:
+            str.BufAppend(b, this.cells.get(y * this.width + x).ch)
+        end
+        ret str.BufStr(b)
+    end
+
+    @en "free"
+    /// Releases the cell storage. Call it once, on the original Buffer,
+    /// when you are done with it; copies share the storage.
+    pub func free():
+        this.cells.free()
+    end
+end
+
+@en "NewBuffer"
+/// Creates a blank width x height buffer whose clip covers the whole grid.
+/// A negative size is treated as zero.
+pub func NewBuffer(width: int, height: int): Buffer:
+    w := width < 0 ? 0 : width
+    h := height < 0 ? 0 : height
+    mut b := Buffer { width = w, height = h }
+    b.clip = b.area()
+    repeat w * h:
+        b.cells.push(Cell {})
+    end
+    ret b
+end

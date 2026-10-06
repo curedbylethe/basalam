@@ -30,6 +30,9 @@
  * sibling files below are loaded automatically:
  *
  *     rect.salam     geometry: Rect and Point (cell coordinates)
+ *     event.salam    Event, the value input arrives as, and its kinds
+ *     buffer.salam   Buffer and Cell, the grid widgets draw into
+ *     widget.salam   the Widget interface and BaseWidget defaults
  *
  * Keep test programs and examples out of this directory: anything placed
  * here becomes part of the package.

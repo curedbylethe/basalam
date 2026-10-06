@@ -15,6 +15,8 @@ It sits on top of Salam's standard `term` package. `term` already handles raw mo
 ## Design in brief
 
 - **Retained mode.** Widgets are long-lived values. Your application changes their state; the screen redraws them.
+- **Widgets are interfaces.** Anything with the five `Widget` methods is a widget. Embed `BaseWidget` and override only what you need.
+- **Widgets draw into a buffer, never the terminal.** That keeps rendering testable without a terminal.
 - **Geometry on the cell grid.** Every position is an integer cell coordinate, 0-based, with half-open rectangles.
 
 ## Status
@@ -22,12 +24,15 @@ It sits on top of Salam's standard `term` package. `term` already handles raw mo
 | Area | State |
 | --- | --- |
 | Geometry (`Rect`, `Point`) | Available |
+| `Widget` interface and `BaseWidget` | Available |
+| `Event` type | Available |
+| `Buffer` (minimal) | Available; diffing and dirty regions come later |
 
 <Columns cols={2}>
   <Card title="Quickstart" icon="rocket" href="/quickstart">
     Install Salam, add basalam to your project, and build your first program.
   </Card>
-  <Card title="Rect and Point" icon="square" href="/reference/rect">
-    The geometry types every other part of the library uses.
+  <Card title="Writing a widget" icon="puzzle-piece" href="/guides/writing-a-widget">
+    Build and test a custom widget step by step.
   </Card>
 </Columns>

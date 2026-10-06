@@ -1,0 +1,77 @@
+---
+title: "Buffer and Cell"
+description: "The grid of cells widgets draw into, with clipping that makes every write safe."
+keywords: ["buffer", "cell", "draw", "clip", "style"]
+---
+
+A `Buffer` is a grid of `Cell`s. Widgets draw into it; they never write to the terminal. Every write outside the grid or outside the buffer's clip rect is silently dropped, so drawing can never fail.
+
+<Warning>
+  This is a minimal buffer, enough for the core library to work end to end. Double buffering with diffing, dirty-region tracking, structured styles, and wide-character support are planned for a later release. Today every frame redraws every cell, and each cell is assumed to be one column wide.
+</Warning>
+
+## Cell
+
+```salam
+pub struct Cell:
+    pub ch: str = " "
+    pub style: str = ""
+end
+```
+
+<ResponseField name="ch" type="str">Exactly one codepoint. A blank cell holds `" "`.</ResponseField>
+<ResponseField name="style" type="str">SGR escape sequences built with `std/term`, for example `term.Sgr(term.StyleBold) + term.Sgr(term.FgRed)`. `""` is the terminal's default style.</ResponseField>
+
+## Buffer
+
+```salam
+pub struct Buffer:
+    pub width: int = 0
+    pub height: int = 0
+    pub cells: Vector<Cell> = Vector {}
+    pub clip: Rect = Rect {}
+    pub focused: bool = false
+end
+```
+
+<ResponseField name="width" type="int">Number of columns.</ResponseField>
+<ResponseField name="height" type="int">Number of rows.</ResponseField>
+<ResponseField name="cells" type="Vector<Cell>">Row-major storage: the cell at `(x, y)` is `cells[y * width + x]`. Prefer `get` and `set`, which bounds-check and clip.</ResponseField>
+<ResponseField name="clip" type="Rect">Writes outside this rect are dropped. `NewBuffer` sets it to the whole grid. While a widget renders, the screen narrows it to that widget's bounds.</ResponseField>
+<ResponseField name="focused" type="bool">`true` while the screen renders the focused widget. Use it to draw a focus indicator.</ResponseField>
+
+### Copies share cells
+
+A `Buffer` reaches `render` by value, but its cells live in a `Vector`, and copies of a `Vector` share storage. A widget writing through its copy writes the screen's grid. The scalar fields `clip` and `focused` belong to each copy, which is how the screen gives each widget its own clip without affecting the others.
+
+Only the owner of the original buffer may free it.
+
+## Functions and methods
+
+```salam
+pub func NewBuffer(width: int, height: int): Buffer
+```
+
+Creates a blank grid with `clip` covering all of it. A negative size is treated as zero.
+
+| Method | Description |
+| --- | --- |
+| `area(): Rect` | The rect covering the whole grid, `(0, 0, width, height)`. |
+| `set(x: int, y: int, cell: Cell)` | Writes one cell. Ignored outside the grid or the clip. |
+| `get(x: int, y: int): Cell` | Reads one cell. Returns a blank `Cell` outside the grid. Ignores the clip. |
+| `put_str(x: int, y: int, text: str, style: str)` | Writes text left to right, one codepoint per cell. Cut off at the clip; never wraps. |
+| `fill(r: Rect, ch: str, style: str)` | Sets every cell of `r`, clipped, to `ch` in `style`. |
+| `clear()` | Resets every cell to blank, ignoring the clip. |
+| `row_text(y: int): str` | The characters of row `y` without styles. `""` outside the grid. Meant for tests. |
+| `free()` | Releases the cell storage. Call once, on the original. |
+
+## Testing what a widget draws
+
+Because a buffer is plain memory, you can render a widget and inspect the result without a terminal:
+
+```salam
+mut buf := basalam.NewBuffer(12, 1)
+defer buf.free()
+w.render(buf, w.bounds())
+println "[" + buf.row_text(0) + "]" // [apples: 2   ]
+```

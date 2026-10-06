@@ -1,0 +1,50 @@
+---
+title: "Event"
+description: "The single value type that carries key presses, mouse reports, resizes, and ticks to widgets."
+keywords: ["event", "key", "mouse", "resize", "tick", "kind"]
+---
+
+Everything a widget can react to arrives as an `Event`. One struct with a `kind` tag, rather than one type per kind, keeps every handler signature the same: you write one `handle_event` and branch on `kind`.
+
+The payload fields reuse `std/term`'s own types, so key decoding is never reimplemented. Fields that do not apply to an event's kind keep their zero values.
+
+## Event
+
+```salam
+pub struct Event:
+    pub kind: int = 0
+    pub key: term.Key = term.Key {}
+    pub mouse: term.MouseEvent = term.MouseEvent {}
+    pub width: int = 0
+    pub height: int = 0
+end
+```
+
+<ResponseField name="kind" type="int">One of the kind constants below.</ResponseField>
+<ResponseField name="key" type="term.Key">The decoded key for `KeyEvent`, exactly as `term.ReadKey` returned it. For `MouseEvent`, `key.raw` keeps the raw escape sequence.</ResponseField>
+<ResponseField name="mouse" type="term.MouseEvent">The decoded report for `MouseEvent`, from `term.DecodeMouse`.</ResponseField>
+<ResponseField name="width" type="int">The new terminal width in columns, for `ResizeEvent`.</ResponseField>
+<ResponseField name="height" type="int">The new terminal height in rows, for `ResizeEvent`.</ResponseField>
+
+## Kinds
+
+| Constant | Value | Meaningful fields |
+| --- | --- | --- |
+| `NoEvent` | 0 | None. The zero value of `Event`. |
+| `KeyEvent` | 1 | `key` |
+| `MouseEvent` | 2 | `mouse`, `key.raw` |
+| `ResizeEvent` | 3 | `width`, `height` |
+| `TickEvent` | 4 | None. A periodic timer tick. |
+
+## Building events in tests
+
+`term.Decode` turns the bytes a terminal would send into a `term.Key`, so you can build realistic key events without a terminal:
+
+```salam
+func key(seq: str): basalam.Event:
+    ret basalam.Event { kind = basalam.KeyEvent, key = term.Decode(seq) }
+end
+
+up := key("\x1b[A") // key.code == term.KeyUp
+plus := key("+") // key.code == term.KeyChar, key.ch == "+"
+```

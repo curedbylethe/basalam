@@ -1,0 +1,107 @@
+---
+title: "Widget and BaseWidget"
+description: "The interface every widget satisfies, and the struct that supplies its defaults."
+keywords: ["widget", "basewidget", "interface", "dyn", "render", "handle_event"]
+---
+
+A widget is anything with the five methods of the `Widget` interface. Salam interfaces are structural: there is no `implements` keyword, so a struct that has the methods is a widget. A list, a button, and a panel are all `Widget`s, and the screen stores them side by side as `dyn basalam.Widget`.
+
+## Widget
+
+```salam
+pub interface Widget:
+    func render(buf: Buffer, bounds: Rect)
+    func handle_event(event: Event): bool
+    func focusable(): bool
+    func bounds(): Rect
+    func set_bounds(bounds: Rect)
+end
+```
+
+### render
+
+```salam
+func render(buf: Buffer, bounds: Rect)
+```
+
+Draws the widget into `buf`. `bounds` is the widget's own rect, the same value `bounds()` returns. When the screen renders, `buf` is already clipped to `bounds`, so anything drawn outside is dropped. `buf.focused` is `true` while the widget holds the focus; use it to draw a focus indicator. See [Buffer](/reference/buffer).
+
+### handle_event
+
+```salam
+func handle_event(event: Event): bool
+```
+
+Reacts to an [event](/reference/event). Return `true` to consume it. Return `false` to let it bubble to the widget's parent.
+
+### focusable
+
+```salam
+func focusable(): bool
+```
+
+Returns `true` when the widget can take keyboard focus. Only focusable widgets take part in focus navigation.
+
+### bounds and set_bounds
+
+```salam
+func bounds(): Rect
+func set_bounds(bounds: Rect)
+```
+
+`set_bounds` moves and resizes the widget; `bounds` returns the last rect set. Widgets never position themselves. Whoever owns the layout calls `set_bounds`: today that is your application, later it will be the layout engine.
+
+## Rules for implementations
+
+<AccordionGroup>
+  <Accordion title="Methods are infallible">
+    No method returns an error. A widget given a region too small to draw in draws what fits, or nothing. The buffer clips every write, so drawing outside the region is harmless.
+  </Accordion>
+  <Accordion title="Handlers are synchronous">
+    `handle_event` runs on the main thread, between frames, and must return promptly. Do long work in your application, driven by tick events, not inside a handler.
+  </Accordion>
+  <Accordion title="Widgets never write to the terminal">
+    Draw into the `Buffer` you are given. The screen owns terminal output.
+  </Accordion>
+</AccordionGroup>
+
+## BaseWidget
+
+```salam
+pub struct BaseWidget:
+    pub rect: Rect = Rect {}
+end
+```
+
+`BaseWidget` implements every `Widget` method with a default. Embed it with `pub use basalam.BaseWidget` and override only what your widget needs. Your own methods win over the embedded ones.
+
+| Method | Default |
+| --- | --- |
+| `render` | Draws nothing. |
+| `handle_event` | Returns `false`, so every event bubbles on. |
+| `focusable` | Returns `false`. |
+| `bounds` | Returns `rect`. |
+| `set_bounds` | Stores the rect in `rect`. |
+
+<ResponseField name="rect" type="Rect">Storage for `bounds` and `set_bounds`. An embedding widget can read it directly as `this.rect`.</ResponseField>
+
+On its own, a `BaseWidget` is an invisible, unfocusable widget that ignores every event. That makes it a handy container or placeholder.
+
+## Storing widgets
+
+Convert a widget to `dyn basalam.Widget` once, and keep that value. Salam boxes the widget, and every copy of the `dyn` value shares the box. Calling `set_bounds` or `handle_event` through any copy changes the one widget.
+
+```salam
+w := Counter { label = "apples" } as dyn basalam.Widget
+copy := w
+copy.set_bounds(basalam.Rect { width = 12, height = 1 })
+println w.bounds().width // 12: both copies share the widget
+```
+
+<Warning>
+  Salam has no downcast from `dyn` back to the concrete type, and `dyn` values cannot be compared with `==`. Once a widget is stored as `dyn basalam.Widget`, you reach it only through the five interface methods.
+</Warning>
+
+## Example
+
+See [Writing a widget](/guides/writing-a-widget) for a complete, tested walkthrough.

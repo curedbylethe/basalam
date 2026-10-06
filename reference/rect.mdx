@@ -102,12 +102,12 @@ include "basalam/basalam.salam"
 
 func main:
     panel := basalam.Rect { x = 2, y = 1, width = 10, height = 3 }
-    println panel.contains(basalam.Point { x = 11, y = 3 })     // true
-    println panel.contains(basalam.Point { x = 12, y = 3 })     // false: right edge
+    println panel.contains(basalam.Point { x = 11, y = 3 }) // true
+    println panel.contains(basalam.Point { x = 12, y = 3 }) // false: right edge
     beside := basalam.Rect { x = 12, y = 1, width = 5, height = 3 }
-    println panel.intersects(beside)                            // false: they touch
+    println panel.intersects(beside) // false: they touch
     c := panel.center()
-    println c.x, c.y                                            // 7 2
+    println c.x, c.y // 7 2
 end
 ```
 

@@ -1,0 +1,173 @@
+---
+title: "Writing a widget"
+description: "Build a custom widget step by step: embed BaseWidget, draw, react to keys, and test it without a terminal."
+keywords: ["widget", "custom widget", "basewidget", "tutorial", "testing"]
+---
+
+This guide builds `Counter`, a focusable widget that shows a number and changes it when you press `+` or `-`. By the end you have a widget you can drop into any basalam program, and a test that checks it without a terminal.
+
+## What you build
+
+```text
+apples: 2
+```
+
+The line is drawn in reverse video while the widget has focus.
+
+<Steps>
+  <Step title="Declare the struct and embed BaseWidget">
+    Start from `BaseWidget`, which supplies a default for every `Widget` method. Add your own state as fields.
+
+    ```salam
+    import term
+
+    include "basalam/basalam.salam"
+
+    struct Counter:
+        pub use basalam.BaseWidget
+        pub label: str = "count"
+        pub value: int = 0
+    end
+    ```
+
+    Right now `Counter` is already a valid widget: it stores its bounds, draws nothing, and ignores every event.
+  </Step>
+  <Step title="Make it focusable">
+    Only focusable widgets take part in focus navigation. Override `focusable` inside the struct:
+
+    ```salam
+    pub func focusable(): bool:
+        ret true
+    end
+    ```
+  </Step>
+  <Step title="Handle events">
+    Return `true` when you consume an event and `false` to let it bubble to the parent. Check `kind` before reading `key`: the `key` field of a tick or resize event is empty.
+
+    ```salam
+    pub func handle_event(event: basalam.Event): bool:
+        if event.kind != basalam.KeyEvent or event.key.code != term.KeyChar:
+            ret false
+        end
+        if event.key.ch == "+":
+            this.value += 1
+            ret true
+        end
+        if event.key.ch == "-":
+            this.value -= 1
+            ret true
+        end
+        ret false
+    end
+    ```
+
+    Keep handlers fast. They run on the main thread between frames.
+  </Step>
+  <Step title="Draw">
+    Draw inside `bounds` with the buffer's helpers. The buffer is clipped to your bounds, so text that does not fit is cut off rather than spilling into a neighbor. `buf.focused` tells you whether to draw a focus indicator.
+
+    ```salam
+    pub func render(buf: basalam.Buffer, bounds: basalam.Rect):
+        mut style := ""
+        if buf.focused:
+            style = term.Sgr(term.StyleReverse)
+        end
+        buf.fill(bounds, " ", style)
+        buf.put_str(bounds.x, bounds.y, this.label + ": " + this.value, style)
+    end
+    ```
+
+    Build styles with `std/term` (`term.Sgr`, `term.SeqFg256`, and friends). Never write escape sequences by hand.
+  </Step>
+  <Step title="Test it without a terminal">
+    Convert the widget to `dyn basalam.Widget`, give it bounds, feed it events, and render it into a buffer you can inspect. `term.Decode` builds the same `term.Key` a real key press would produce.
+
+    ```salam
+    func key(ch: str): basalam.Event:
+        ret basalam.Event { kind = basalam.KeyEvent, key = term.Decode(ch) }
+    end
+
+    func main:
+        w := Counter { label = "apples" } as dyn basalam.Widget
+        w.set_bounds(basalam.Rect { x = 0, y = 0, width = 12, height = 1 })
+
+        println w.handle_event(key("+")) // true: consumed
+        println w.handle_event(key("+")) // true
+        println w.handle_event(key("x")) // false: bubbles on
+
+        mut buf := basalam.NewBuffer(12, 1)
+        defer buf.free()
+        w.render(buf, w.bounds())
+        println "[" + buf.row_text(0) + "]" // [apples: 2   ]
+    end
+    ```
+  </Step>
+</Steps>
+
+## The complete widget
+
+<Accordion title="counter.salam">
+  ```salam
+  import term
+
+  include "basalam/basalam.salam"
+
+  struct Counter:
+      pub use basalam.BaseWidget
+      pub label: str = "count"
+      pub value: int = 0
+
+      pub func focusable(): bool:
+          ret true
+      end
+
+      pub func handle_event(event: basalam.Event): bool:
+          if event.kind != basalam.KeyEvent or event.key.code != term.KeyChar:
+              ret false
+          end
+          if event.key.ch == "+":
+              this.value += 1
+              ret true
+          end
+          if event.key.ch == "-":
+              this.value -= 1
+              ret true
+          end
+          ret false
+      end
+
+      pub func render(buf: basalam.Buffer, bounds: basalam.Rect):
+          mut style := ""
+          if buf.focused:
+              style = term.Sgr(term.StyleReverse)
+          end
+          buf.fill(bounds, " ", style)
+          buf.put_str(bounds.x, bounds.y, this.label + ": " + this.value, style)
+      end
+  end
+
+  func key(ch: str): basalam.Event:
+      ret basalam.Event { kind = basalam.KeyEvent, key = term.Decode(ch) }
+  end
+
+  func main:
+      w := Counter { label = "apples" } as dyn basalam.Widget
+      w.set_bounds(basalam.Rect { x = 0, y = 0, width = 12, height = 1 })
+
+      println w.handle_event(key("+")) // true: consumed
+      println w.handle_event(key("+")) // true
+      println w.handle_event(key("x")) // false: bubbles on
+
+      mut buf := basalam.NewBuffer(12, 1)
+      defer buf.free()
+      w.render(buf, w.bounds())
+      println "[" + buf.row_text(0) + "]" // [apples: 2   ]
+  end
+  ```
+</Accordion>
+
+## Things to keep in mind
+
+- **Store the `dyn` value, not the struct.** Converting to `dyn basalam.Widget` boxes the widget, and every copy of the `dyn` value shares that box. A copy of the plain struct does not.
+- **No downcasting.** Salam cannot turn a `dyn basalam.Widget` back into a `Counter`. If your application needs to change a widget's fields from outside, do it through events, or keep that state somewhere both can reach, such as a `mut` global or a heap pointer.
+- **Infallible methods.** Never fail on a small region. Draw what fits.

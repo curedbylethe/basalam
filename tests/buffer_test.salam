@@ -1,0 +1,108 @@
+/*
+ * basalam - a terminal user interface library for Salam (2026)
+ *
+ *   +-------------------+
+ *   |   B A S A L A M   |
+ *   +-------------------+
+ *
+ * Built on the Salam standard library's std/term package
+ * Salam: https://github.com/SalamLang/Salam
+ *
+ * Repository: https://github.com/curedbylethe/basalam
+ * License: GPL-3.0-or-later
+ *
+ */
+
+// Unit tests for the minimal Buffer: cell access, clipping (writes outside
+// the grid or the clip rect are dropped, never errors), multi-byte text,
+// and the shared-storage behavior that lets widgets draw through a copy.
+
+import testing
+import term
+
+include "../basalam/basalam.salam"
+
+func rect(x: int, y: int, w: int, h: int): basalam.Rect:
+    ret basalam.Rect { x = x, y = y, width = w, height = h }
+end
+
+func test_new_is_blank():
+    mut b := basalam.NewBuffer(3, 2)
+    testing.AssertEqInt(b.cells.len(), 6)
+    testing.AssertEqStr(b.row_text(0), "   ")
+    testing.AssertEqStr(b.row_text(1), "   ")
+    testing.AssertEqInt(b.clip.width, 3)
+    testing.AssertEqInt(b.clip.height, 2)
+    testing.AssertEqStr(b.get(0, 0).style, "")
+    b.free()
+    neg := basalam.NewBuffer(-4, 2)
+    testing.AssertEqInt(neg.width, 0)
+    testing.AssertEqInt(neg.cells.len(), 0)
+end
+
+func test_set_get():
+    mut b := basalam.NewBuffer(3, 2)
+    bold := term.Sgr(term.StyleBold)
+    b.set(2, 1, basalam.Cell { ch = "x", style = bold })
+    testing.AssertEqStr(b.get(2, 1).ch, "x")
+    testing.AssertEqStr(b.get(2, 1).style, bold)
+    testing.AssertEqStr(b.row_text(1), "  x")
+    b.free()
+end
+
+func test_out_of_range_is_noop():
+    mut b := basalam.NewBuffer(2, 2)
+    b.set(-1, 0, basalam.Cell { ch = "a" })
+    b.set(2, 0, basalam.Cell { ch = "b" })
+    b.set(0, 2, basalam.Cell { ch = "c" })
+    b.set(0, -1, basalam.Cell { ch = "d" })
+    testing.AssertEqStr(b.row_text(0), "  ")
+    testing.AssertEqStr(b.row_text(1), "  ")
+    testing.AssertEqStr(b.get(5, 5).ch, " ")
+    testing.AssertEqStr(b.row_text(9), "")
+    b.free()
+end
+
+func test_clip():
+    mut b := basalam.NewBuffer(6, 1)
+    mut view := b
+    view.clip = rect(1, 0, 3, 1)
+    view.put_str(0, 0, "abcdef", "")
+    // The view shares the cells, so the original sees what fit in the clip.
+    testing.AssertEqStr(b.row_text(0), " bcd  ")
+    // The original's own clip is untouched.
+    testing.AssertEqInt(b.clip.width, 6)
+    b.free()
+end
+
+func test_put_str_codepoints():
+    mut b := basalam.NewBuffer(6, 1)
+    b.put_str(1, 0, "سلام", "")
+    testing.AssertEqStr(b.get(1, 0).ch, "س")
+    testing.AssertEqStr(b.get(4, 0).ch, "م")
+    testing.AssertEqStr(b.get(5, 0).ch, " ")
+    b.put_str(4, 0, "xyz", "")
+    testing.AssertEqStr(b.get(5, 0).ch, "y")
+    b.free()
+end
+
+func test_fill_and_clear():
+    mut b := basalam.NewBuffer(4, 3)
+    b.fill(rect(1, 1, 5, 5), "#", "")
+    testing.AssertEqStr(b.row_text(0), "    ")
+    testing.AssertEqStr(b.row_text(1), " ###")
+    testing.AssertEqStr(b.row_text(2), " ###")
+    b.clear()
+    testing.AssertEqStr(b.row_text(1), "    ")
+    b.free()
+end
+
+func main:
+    test_new_is_blank()
+    test_set_get()
+    test_out_of_range_is_noop()
+    test_clip()
+    test_put_str_codepoints()
+    test_fill_and_clear()
+    ret testing.Summary()
+end

@@ -17,6 +17,13 @@ release builds on.
 - `Rect` and `Point`: integer cell geometry with half-open semantics,
   `contains`, `intersects`, `intersection`, `center`, `is_empty`, `right`,
   and `bottom`.
+- `Widget` interface (`render`, `handle_event`, `focusable`, `bounds`,
+  `set_bounds`) and `BaseWidget` with a default for every method, so a
+  widget embeds it and overrides only what it needs.
+- `Event` with `kind`, `key`, `mouse`, `width`, `height`, and the kinds
+  `NoEvent`, `KeyEvent`, `MouseEvent`, `ResizeEvent`, `TickEvent`.
+- Minimal `Buffer` and `Cell`: a clipped cell grid with `set`, `get`,
+  `put_str`, `fill`, `clear`, `row_text`, and a `focused` render flag.
 - Project scaffolding: GPL-3.0 license, `Makefile`, golden-file test runner,
   GitHub Actions CI, and the Mintlify documentation site.
 

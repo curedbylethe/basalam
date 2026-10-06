@@ -18,9 +18,18 @@
         ]
       },
       {
+        "group": "Guides",
+        "pages": [
+          "guides/writing-a-widget"
+        ]
+      },
+      {
         "group": "Reference",
         "pages": [
-          "reference/rect"
+          "reference/rect",
+          "reference/widget",
+          "reference/event",
+          "reference/buffer"
         ]
       }
     ],

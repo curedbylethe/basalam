@@ -1,0 +1,79 @@
+/*
+ * basalam - a terminal user interface library for Salam (2026)
+ *
+ *   +-------------------+
+ *   |   B A S A L A M   |
+ *   +-------------------+
+ *
+ * Built on the Salam standard library's std/term package
+ * Salam: https://github.com/SalamLang/Salam
+ *
+ * Repository: https://github.com/curedbylethe/basalam
+ * License: GPL-3.0-or-later
+ *
+ */
+
+/*
+ * Events: the one value type that flows from the terminal to widgets.
+ *
+ * Everything a widget can react to arrives as an Event: a key press, a
+ * mouse report, a terminal resize, or a timer tick. A single struct with a
+ * `kind` tag (rather than one type per kind) keeps the event channel, the
+ * dispatch path, and every handler signature uniform: a widget writes one
+ * handle_event and switches on `kind`.
+ *
+ * The payload fields reuse std/term's own types. `key` is a term.Key exactly
+ * as term.ReadKey returned it, and `mouse` is a term.MouseEvent from
+ * term.DecodeMouse, so nothing about key decoding is reimplemented here.
+ * Fields that do not apply to an event's kind keep their zero values.
+ */
+
+package basalam
+
+import term
+
+@en "NoEvent"
+/// Kind of a zero-valued Event that carries nothing.
+pub const NoEvent := 0
+
+@en "KeyEvent"
+/// Kind of a key press. The `key` field holds the decoded key.
+pub const KeyEvent := 1
+
+@en "MouseEvent"
+/// Kind of a mouse report. The `mouse` field holds the decoded report and
+/// `key` keeps the raw escape sequence it came from.
+pub const MouseEvent := 2
+
+@en "ResizeEvent"
+/// Kind of a terminal resize. `width` and `height` hold the new size in
+/// cells.
+pub const ResizeEvent := 3
+
+@en "TickEvent"
+/// Kind of a periodic timer tick, for animation and background work.
+pub const TickEvent := 4
+
+@en "Event"
+/// One input event. `kind` says which of the payload fields are meaningful.
+pub struct Event:
+    @en "kind"
+    /// One of NoEvent, KeyEvent, MouseEvent, ResizeEvent, TickEvent.
+    pub kind: int = 0
+
+    @en "key"
+    /// The key for KeyEvent; the raw sequence (in key.raw) for MouseEvent.
+    pub key: term.Key = term.Key {}
+
+    @en "mouse"
+    /// The decoded report for MouseEvent.
+    pub mouse: term.MouseEvent = term.MouseEvent {}
+
+    @en "width"
+    /// The new terminal width in columns, for ResizeEvent.
+    pub width: int = 0
+
+    @en "height"
+    /// The new terminal height in rows, for ResizeEvent.
+    pub height: int = 0
+end
