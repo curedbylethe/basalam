@@ -64,6 +64,14 @@
  * the core does: every other widget gets its bounds from the application
  * via set_bounds until the layout engine (a later epic) exists.
  *
+ * Resize detection polls term.Size() on the input thread. Salam's stdlib
+ * does not expose a signal API (no sigaction, no SIGWINCH), so polling is
+ * the only option without FFI. The poll interval is PollMs (currently
+ * 20ms); this is a deliberate trade-off between CPU usage and resize
+ * latency: a resize shows up at most one interval late, and the cost is
+ * one size query per wakeup. If Salam gains signal support, only
+ * input_loop needs to change.
+ *
  * Deliberate gaps: no key bindings (the application decides what Tab or q
  * mean; a keymap is a later epic), no vim-style modes (an application
  * concern), no output diffing (see buffer.salam).

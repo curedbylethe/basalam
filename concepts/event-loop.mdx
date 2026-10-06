@@ -84,3 +84,12 @@ end
 <Note>
   The layout engine planned for a later release will do this recomputation for you. Until then the core gives you exactly one layout rule: the root fills the screen.
 </Note>
+
+## Limitations
+
+**Resize is polled, not signalled.** Terminals announce a resize with the `SIGWINCH` signal, and most TUI libraries listen for it. Salam's standard library has no signal API (no `sigaction`, no `SIGWINCH`), and basalam does not use FFI, so the input thread asks `term.Size()` on every pass instead.
+
+- A resize reaches your widgets at most `PollMs` (20 ms) after it happens. That is below one frame at 30 fps, so it is not visible in practice.
+- The cost is one size query per wake-up, whether or not anything changed.
+- Lowering `PollMs` makes resizes snappier and `stop()` quicker, and spends more CPU while idle. Raising it does the opposite.
+- Nothing about your code depends on this. A `ResizeEvent` looks the same however it was detected, so if Salam gains signal support only the input thread changes.
