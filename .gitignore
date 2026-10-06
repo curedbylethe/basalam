@@ -1,0 +1,32 @@
+# Build output. `make` writes every binary under build/.
+/build/
+
+# Binaries from a direct `salam build x.salam` (named after the source file).
+/examples/*
+!/examples/*.salam
+/tests/*
+!/tests/*.salam
+!/tests/*.out
+!/tests/run.sh
+
+# Compiler temporaries: --keep-temp / --emit-c output, objects, LLVM IR,
+# generated API docs and timing traces.
+.salam-build/
+*.o
+*.ll
+*.bc
+*.doc.html
+doc.html
+salam-trace.json
+
+# Editors and OS cruft.
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Local tooling.
+.codegraph/
+node_modules/

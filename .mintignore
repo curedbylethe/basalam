@@ -5,3 +5,10 @@
 # Draft content
 drafts/
 *.draft.mdx
+
+# Repository files that are not documentation pages
+CODE_OF_CONDUCT.md
+basalam/
+examples/
+tests/
+build/

@@ -1,55 +1,65 @@
-# Mintlify Starter Kit
+# basalam
 
-Use the starter kit to get your docs deployed and ready to customize.
+A retained-mode terminal user interface (TUI) library for the
+[Salam](https://github.com/SalamLang/Salam) programming language.
 
-Click the green **Use this template** button at the top of this repo to copy the Mintlify starter kit. The starter kit contains examples with
+basalam is a library, not an application: your program includes it to
+build full-screen terminal interfaces. It sits on top of Salam's standard
+`term` package and adds geometry, widgets, events, focus, and a screen that
+draws frames.
 
-- Guide pages
-- Navigation
-- Customizations
-- API reference pages
-- Use of popular components
+> **Status: 0.1.0, early development.** See the
+> [CHANGELOG](CHANGELOG.md) for what this release contains.
 
-**[Follow the full quickstart guide](https://starter.mintlify.com/quickstart)**
+## Install
 
-## AI-assisted writing
+You need the Salam compiler, version 0.4.9 or later:
 
-Set up your AI coding tool to work with Mintlify:
-
-```bash
-npx skills add https://mintlify.com/docs
+```sh
+{ curl -fsSL https://raw.githubusercontent.com/SalamLang/Salam/refs/heads/main/install.sh || wget -qO- https://raw.githubusercontent.com/SalamLang/Salam/refs/heads/main/install.sh; } | sh
 ```
 
-This command installs Mintlify's documentation skill for your configured AI tools like Claude Code, Cursor, Windsurf, and others. The skill includes component reference, writing standards, and workflow guidance.
+Salam has no third-party package registry yet, so vendor basalam into your
+project:
 
-See the [AI tools guides](/ai-tools) for tool-specific setup.
-
-## Development
-
-Install the [Mintlify CLI](https://www.npmjs.com/package/mint) to preview your documentation changes locally. To install, use the following command:
-
+```sh
+git submodule add https://github.com/curedbylethe/basalam vendor/basalam
 ```
+
+## Quick start
+
+```salam
+include "vendor/basalam/basalam/basalam.salam"
+
+func main:
+    r := basalam.Rect { x = 0, y = 0, width = 80, height = 24 }
+    c := r.center()
+    println "basalam", basalam.Version, "center:", c.x, c.y
+end
+```
+
+```sh
+salam build main.salam && ./main
+```
+
+## Documentation
+
+The full documentation (concepts, guides, and API reference) is a
+[Mintlify](https://mintlify.com) site whose source lives in this repository.
+Start at [`index.mdx`](index.mdx), or preview it locally:
+
+```sh
 npm i -g mint
-```
-
-Run the following command at the root of your documentation, where your `docs.json` is located:
-
-```
 mint dev
 ```
 
-View your local preview at `http://localhost:3000`.
+## Contributing
 
-## Publishing changes
+See [CONTRIBUTING.md](CONTRIBUTING.md). `make check` runs everything CI
+runs. This project follows the [Contributor Covenant](CODE_OF_CONDUCT.md).
 
-Install our GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app) to propagate changes from your repo to your deployment. Changes are deployed to production automatically after pushing to the default branch.
+## License
 
-## Need help?
-
-### Troubleshooting
-
-- If your dev environment isn't running: Run `mint update` to ensure you have the most recent version of the CLI.
-- If a page loads as a 404: Make sure you are running in a folder with a valid `docs.json`.
-
-### Resources
-- [Mintlify documentation](https://mintlify.com/docs)
+GPL-3.0-or-later, the same license family as Salam itself. See
+[LICENSE](LICENSE). Because basalam is GPL, programs that include it are
+distributed under the GPL too.

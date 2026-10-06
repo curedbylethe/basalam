@@ -1,0 +1,43 @@
+/*
+ * basalam - a terminal user interface library for Salam (2026)
+ *
+ *   +-------------------+
+ *   |   B A S A L A M   |
+ *   +-------------------+
+ *
+ * Built on the Salam standard library's std/term package
+ * Salam: https://github.com/SalamLang/Salam
+ *
+ * Repository: https://github.com/curedbylethe/basalam
+ * License: GPL-3.0-or-later
+ *
+ */
+
+/*
+ * Package basalam: the entry file of the library.
+ *
+ * basalam is a retained-mode TUI library. Applications build a tree of
+ * long-lived widgets, mutate their state, and let a Screen turn terminal
+ * input into events and widget output into frames. It sits on top of
+ * std/term and never writes escape sequences of its own.
+ *
+ * Consumers pull the whole package in with one line:
+ *
+ *     include "path/to/basalam/basalam.salam"
+ *
+ * The compiler treats every .salam file in a directory whose name matches
+ * the entry file's stem (basalam/basalam.salam) as one package, so the
+ * sibling files below are loaded automatically:
+ *
+ *     rect.salam     geometry: Rect and Point (cell coordinates)
+ *
+ * Keep test programs and examples out of this directory: anything placed
+ * here becomes part of the package.
+ */
+
+@en "basalam"
+package basalam
+
+@en "Version"
+/// The library version, following semantic versioning.
+pub const Version := "0.1.0"

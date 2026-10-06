@@ -1,0 +1,133 @@
+/*
+ * basalam - a terminal user interface library for Salam (2026)
+ *
+ *   +-------------------+
+ *   |   B A S A L A M   |
+ *   +-------------------+
+ *
+ * Built on the Salam standard library's std/term package
+ * Salam: https://github.com/SalamLang/Salam
+ *
+ * Repository: https://github.com/curedbylethe/basalam
+ * License: GPL-3.0-or-later
+ *
+ */
+
+// Unit tests for Rect and Point: containment, intersection and
+// centering, with the edge cases that the half-open rule decides: zero-size
+// rects, rects that touch without overlapping, and negative coordinates.
+
+import testing
+
+include "../basalam/basalam.salam"
+
+func rect(x: int, y: int, w: int, h: int): basalam.Rect:
+    ret basalam.Rect { x = x, y = y, width = w, height = h }
+end
+
+func pt(x: int, y: int): basalam.Point:
+    ret basalam.Point { x = x, y = y }
+end
+
+func test_contains():
+    r := rect(2, 3, 4, 2)
+    testing.AssertTrue(r.contains(pt(2, 3)))
+    testing.AssertTrue(r.contains(pt(5, 4)))
+    testing.AssertFalse(r.contains(pt(6, 3)))
+    testing.AssertFalse(r.contains(pt(2, 5)))
+    testing.AssertFalse(r.contains(pt(1, 3)))
+    testing.AssertFalse(r.contains(pt(2, 2)))
+end
+
+func test_contains_empty():
+    testing.AssertFalse(rect(0, 0, 0, 0).contains(pt(0, 0)))
+    testing.AssertFalse(rect(0, 0, 0, 5).contains(pt(0, 1)))
+    testing.AssertFalse(rect(0, 0, 5, 0).contains(pt(1, 0)))
+    testing.AssertFalse(rect(0, 0, -3, 4).contains(pt(-1, 1)))
+    testing.AssertTrue(rect(0, 0, 0, 0).is_empty())
+    testing.AssertTrue(rect(0, 0, -1, 1).is_empty())
+    testing.AssertFalse(rect(0, 0, 1, 1).is_empty())
+end
+
+func test_contains_negative():
+    r := rect(-5, -2, 3, 3)
+    testing.AssertTrue(r.contains(pt(-5, -2)))
+    testing.AssertTrue(r.contains(pt(-3, 0)))
+    testing.AssertFalse(r.contains(pt(-2, 0)))
+    testing.AssertFalse(r.contains(pt(-3, 1)))
+end
+
+func test_intersects():
+    a := rect(0, 0, 4, 4)
+    testing.AssertTrue(a.intersects(rect(3, 3, 4, 4)))
+    testing.AssertTrue(a.intersects(rect(1, 1, 1, 1)))
+    testing.AssertTrue(rect(1, 1, 1, 1).intersects(a))
+    testing.AssertTrue(a.intersects(a))
+    testing.AssertFalse(a.intersects(rect(10, 10, 2, 2)))
+end
+
+func test_intersects_touching():
+    a := rect(0, 0, 4, 4)
+    testing.AssertFalse(a.intersects(rect(4, 0, 2, 4)))
+    testing.AssertFalse(a.intersects(rect(0, 4, 4, 2)))
+    testing.AssertFalse(a.intersects(rect(4, 4, 1, 1)))
+    testing.AssertFalse(rect(-2, 0, 2, 4).intersects(a))
+end
+
+func test_intersects_empty():
+    a := rect(0, 0, 4, 4)
+    testing.AssertFalse(a.intersects(rect(1, 1, 0, 0)))
+    testing.AssertFalse(rect(1, 1, 0, 2).intersects(a))
+    testing.AssertFalse(rect(1, 1, 0, 0).intersects(rect(1, 1, 0, 0)))
+end
+
+func test_intersects_negative():
+    a := rect(-4, -4, 5, 5)
+    testing.AssertTrue(a.intersects(rect(0, 0, 3, 3)))
+    testing.AssertFalse(a.intersects(rect(1, 0, 3, 3)))
+end
+
+func test_intersection():
+    i := rect(0, 0, 4, 4).intersection(rect(2, 1, 5, 2))
+    testing.AssertEqInt(i.x, 2)
+    testing.AssertEqInt(i.y, 1)
+    testing.AssertEqInt(i.width, 2)
+    testing.AssertEqInt(i.height, 2)
+    none := rect(0, 0, 4, 4).intersection(rect(4, 0, 2, 2))
+    testing.AssertTrue(none.is_empty())
+end
+
+func test_center():
+    c := rect(0, 0, 3, 3).center()
+    testing.AssertEqInt(c.x, 1)
+    testing.AssertEqInt(c.y, 1)
+    e := rect(0, 0, 4, 4).center()
+    testing.AssertEqInt(e.x, 2)
+    testing.AssertEqInt(e.y, 2)
+    n := rect(-6, -4, 4, 2).center()
+    testing.AssertEqInt(n.x, -4)
+    testing.AssertEqInt(n.y, -3)
+    one := rect(7, 9, 1, 1).center()
+    testing.AssertEqInt(one.x, 7)
+    testing.AssertEqInt(one.y, 9)
+end
+
+func test_edges():
+    r := rect(2, 3, 4, 5)
+    testing.AssertEqInt(r.right(), 6)
+    testing.AssertEqInt(r.bottom(), 8)
+end
+
+func main:
+    test_contains()
+    test_contains_empty()
+    test_contains_negative()
+    test_intersects()
+    test_intersects_touching()
+    test_intersects_empty()
+    test_intersects_negative()
+    test_intersection()
+    test_center()
+    test_edges()
+    ret testing.Summary()
+end

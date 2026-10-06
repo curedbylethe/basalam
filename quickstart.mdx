@@ -1,47 +1,65 @@
 ---
 title: "Quickstart"
-description: "Begin with a guide on the fastest path to a successful outcome"
+description: "Install Salam, add basalam to your project, and build a program that uses it."
+keywords: ["install", "quickstart", "include", "build"]
 ---
-
-Describe how someone begins using your product. What is the first thing they need to do? Are there any prerequisites?
-
-A quickstart should take someone from zero to using your product. They'll get a quick win and a sense of what they can accomplish.
 
 ## Prerequisites
 
-Before you begin, you must have:
-
-- Requirement one (for example, Node.js 18+, a free account, an API key)
-- Requirement two (for example, a compatible device, a compatible browser, a compatible operating system)
-
-## Get started
+- macOS or Linux. basalam uses Salam's POSIX terminal support.
+- The Salam compiler, version 0.4.9 or later. Check with `salam version`.
 
 <Steps>
-  <Step title="Install">
-    Describe how to install your product or sign up.
+  <Step title="Install Salam">
+    Run the official installer, then confirm the compiler is on your `PATH`.
 
     ```bash
-    npm install your-package
+    { curl -fsSL https://raw.githubusercontent.com/SalamLang/Salam/refs/heads/main/install.sh || wget -qO- https://raw.githubusercontent.com/SalamLang/Salam/refs/heads/main/install.sh; } | sh
+    salam version
     ```
   </Step>
-  <Step title="Configure">
-    Describe any setup or configuration needed before first use.
+  <Step title="Add basalam to your project">
+    Salam has no package registry for third-party libraries yet, so you vendor the source. A git submodule keeps it updatable.
 
     ```bash
-    your-cli init
+    git submodule add https://github.com/curedbylethe/basalam vendor/basalam
     ```
+
+    The library itself is the `basalam/` directory inside the repository.
   </Step>
-  <Step title="Run it">
-    Show the first thing a user does to see it working.
+  <Step title="Include the package">
+    One `include` line pulls in the whole library. The path is relative to the file that contains it.
 
-    ```bash
-    your-cli start
+    ```salam main.salam
+    include "vendor/basalam/basalam/basalam.salam"
+
+    func main:
+        r := basalam.Rect { x = 0, y = 0, width = 80, height = 24 }
+        c := r.center()
+        println "basalam", basalam.Version, "center:", c.x, c.y
+    end
     ```
+
+    Salam loads every `.salam` file in `basalam/` as one package because the directory name matches the entry file `basalam.salam`.
+  </Step>
+  <Step title="Build and run">
+    ```bash
+    salam build main.salam
+    ./main
+    ```
+
+    The program prints `basalam 0.1.0 center: 40 12`.
   </Step>
 </Steps>
 
-<Tip>
-  Give people a way to get help. This could be a link to a support page, a chat with a customer support agent, or a forum for your product.
+## Work on basalam itself
 
-  Example: Need help? Reach out to us at [support@yourcompany.com](mailto:support@yourcompany.com).
-</Tip>
+Clone the repository and use the `Makefile`:
+
+```bash
+git clone https://github.com/curedbylethe/basalam
+cd basalam
+make check
+```
+
+`make check` runs the formatter check, compiles the library, and runs the test suite. Run `make help` for the other targets.

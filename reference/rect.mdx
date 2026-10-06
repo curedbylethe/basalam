@@ -1,0 +1,116 @@
+---
+title: "Rect and Point"
+description: "Integer geometry on the terminal cell grid: containment, intersection, and centering."
+keywords: ["rect", "point", "geometry", "hit testing", "bounds"]
+---
+
+`Rect` and `Point` position everything in basalam. Coordinates are terminal cells, so every field is an `int`.
+
+- `x` is the column and `y` is the row.
+- `(0, 0)` is the top-left cell. basalam is 0-based everywhere; the conversion to the 1-based coordinates of terminal escape sequences happens once, when a frame is written.
+- Negative coordinates are valid. A widget can sit partly off-screen; drawing clips it.
+
+## The half-open rule
+
+A `Rect` covers columns `x` through `x + width - 1` and rows `y` through `y + height - 1`. The right and bottom edges are **outside** the rect. Two consequences follow:
+
+<Columns cols={2}>
+  <Card title="Touching is not overlapping" icon="square-split-horizontal">
+    `Rect { x = 0, width = 4 }` and `Rect { x = 4, width = 2 }` share an edge but no cell, so `intersects` returns `false`.
+  </Card>
+  <Card title="Empty means empty" icon="square-dashed">
+    A rect with `width <= 0` or `height <= 0` contains no point and intersects nothing, not even itself.
+  </Card>
+</Columns>
+
+## Point
+
+```salam
+pub struct Point:
+    pub x: int = 0
+    pub y: int = 0
+end
+```
+
+<ResponseField name="x" type="int">Column, counted from 0 at the left edge.</ResponseField>
+<ResponseField name="y" type="int">Row, counted from 0 at the top edge.</ResponseField>
+
+## Rect
+
+```salam
+pub struct Rect:
+    pub x: int = 0
+    pub y: int = 0
+    pub width: int = 0
+    pub height: int = 0
+end
+```
+
+<ResponseField name="x" type="int">Column of the left edge.</ResponseField>
+<ResponseField name="y" type="int">Row of the top edge.</ResponseField>
+<ResponseField name="width" type="int">Number of columns. Zero or negative makes the rect empty.</ResponseField>
+<ResponseField name="height" type="int">Number of rows. Zero or negative makes the rect empty.</ResponseField>
+
+### contains
+
+```salam
+pub func contains(p: Point): bool
+```
+
+Returns `true` when the cell `p` is inside the rect. The right and bottom edges are outside, and an empty rect contains nothing.
+
+### intersects
+
+```salam
+pub func intersects(other: Rect): bool
+```
+
+Returns `true` when the two rects share at least one cell. Rects that only touch along an edge do not intersect, and an empty rect intersects nothing.
+
+### intersection
+
+```salam
+pub func intersection(other: Rect): Rect
+```
+
+Returns the cells both rects share. When they do not intersect, the result is an empty `Rect` at the origin. The screen uses this to clip each widget to the visible area.
+
+### center
+
+```salam
+pub func center(): Point
+```
+
+Returns `(x + width / 2, y + height / 2)` with integer division.
+
+- An odd size has an exact middle cell: a 3x3 rect at the origin has center `(1, 1)`.
+- An even size has none, so you get the cell just right of and below the geometric middle: a 4x4 rect at the origin has center `(2, 2)`.
+- The result is not meaningful for an empty rect.
+
+### is_empty, right, bottom
+
+```salam
+pub func is_empty(): bool   // width <= 0 or height <= 0
+pub func right(): int       // x + width, the first column outside the rect
+pub func bottom(): int      // y + height, the first row outside the rect
+```
+
+## Example
+
+```salam
+include "basalam/basalam.salam"
+
+func main:
+    panel := basalam.Rect { x = 2, y = 1, width = 10, height = 3 }
+    println panel.contains(basalam.Point { x = 11, y = 3 })     // true
+    println panel.contains(basalam.Point { x = 12, y = 3 })     // false: right edge
+    beside := basalam.Rect { x = 12, y = 1, width = 5, height = 3 }
+    println panel.intersects(beside)                            // false: they touch
+    c := panel.center()
+    println c.x, c.y                                            // 7 2
+end
+```
+
+<Note>
+  basalam has no layout engine yet. Until it lands, you compute rects yourself.
+</Note>
