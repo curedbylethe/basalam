@@ -18,6 +18,7 @@ It sits on top of Salam's standard `term` package. `term` already handles raw mo
 - **Only input is asynchronous.** One background thread reads the terminal and produces events. Your widgets handle them synchronously on the main thread, so they need no locks.
 - **Widgets are interfaces.** Anything with the five `Widget` methods is a widget. Embed `BaseWidget` and override only what you need.
 - **Widgets draw into a buffer, never the terminal.** That keeps rendering testable without a terminal.
+- **Two focus models.** Tab-style linear order and arrow-key spatial navigation, as methods your application binds to keys. The library adds no key bindings or modes of its own.
 - **Geometry on the cell grid.** Every position is an integer cell coordinate, 0-based, with half-open rectangles.
 
 ## Status
@@ -29,6 +30,7 @@ It sits on top of Salam's standard `term` package. `term` already handles raw mo
 | `Event` type, helpers, and bubbling dispatch | Available |
 | Widget tree with integer IDs | Available |
 | `Screen`: event loop, input thread, resize, ticks | Available |
+| Focus: stack, linear, and spatial navigation | Available |
 | `Buffer` (minimal) | Available; diffing and dirty regions come later |
 
 <Columns cols={2}>
@@ -43,5 +45,8 @@ It sits on top of Salam's standard `term` package. `term` already handles raw mo
   </Card>
   <Card title="The event loop" icon="arrows-spin" href="/concepts/event-loop">
     How input moves from the terminal to your widgets.
+  </Card>
+  <Card title="Focus" icon="crosshairs" href="/concepts/focus">
+    The focus stack, Tab order, and arrow-key navigation.
   </Card>
 </Columns>

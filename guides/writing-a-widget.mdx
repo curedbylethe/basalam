@@ -104,6 +104,38 @@ The line is drawn in reverse video while the widget has focus.
   </Step>
 </Steps>
 
+## Put it on a screen
+
+Add the widget to a screen, give it bounds, and bind a key to move the focus. The counter only consumes `+` and `-`; everything else bubbles to your loop.
+
+```salam
+func main:
+    mut screen := basalam.NewTerminalScreen(basalam.BaseWidget {})
+    apples := screen.add(basalam.RootId, Counter { label = "apples" })
+    pears := screen.add(basalam.RootId, Counter { label = "pears" })
+    screen.widget(apples).set_bounds(basalam.Rect { x = 2, y = 1, width = 14, height = 1 })
+    screen.widget(pears).set_bounds(basalam.Rect { x = 2, y = 3, width = 14, height = 1 })
+
+    screen.start()
+    defer screen.close()
+    screen.present()
+
+    mut ev := basalam.Event {}
+    until screen.next_event(ev):
+        if not screen.dispatch(ev):
+            if ev.is_char("q"):
+                screen.stop()
+            else ev.is_key(term.KeyTab):
+                _ := screen.focus_next()
+            end
+        end
+        screen.present()
+    end
+end
+```
+
+The first counter is focused automatically, because it is the first focusable widget added. `Tab` moves the focus, the newly focused counter draws in reverse video, and `+` and `-` go to whichever counter has focus.
+
 ## The complete widget
 
 <Accordion title="counter.salam">

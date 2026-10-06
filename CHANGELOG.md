@@ -38,6 +38,13 @@ release builds on.
 - `Buffer.resize`, `Buffer.ansi`, and `Buffer.flush`: full-frame terminal
   output through `std/term`.
 - `Channel<T>`, a wrapper that names `chan.Chan<T>` (compiler workaround).
+- Focus system: a focus stack on `Screen` (`focus`,
+  `push_focus`, `pop_focus`, `focused_id`, `can_focus`), linear
+  navigation (`focus_next`, `focus_prev`), spatial navigation
+  (`focus_up`, `focus_down`, `focus_left`, `focus_right`) backed by the
+  pure `Nearest` search and the `DirUp`/`DirDown`/`DirLeft`/`DirRight`
+  constants, auto-focus of the first focusable widget, and a redraw on
+  every focus change.
 - Examples: `examples/hello.salam` and `examples/demo.salam`.
 - Project scaffolding: GPL-3.0 license, `Makefile`, golden-file test runner,
   GitHub Actions CI, and the Mintlify documentation site.

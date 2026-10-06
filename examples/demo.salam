@@ -24,6 +24,11 @@
 //   - the event loop: the input thread produces events, this main loop
 //     consumes them with next_event and dispatches them synchronously;
 //   - tick events (once a second) driving a counter;
+//   - focus: Tab moves to the next panel (linear order), the arrow keys
+//     move to the nearest panel in that direction (spatial navigation), and
+//     the focused panel draws a highlighted border;
+//   - Enter or Space is consumed by the focused panel; every other key
+//     bubbles up to the main loop, which decides what it means;
 //   - q (or Ctrl+C) quits, and `defer screen.close()` restores the terminal
 //     on every exit path.
 
@@ -49,7 +54,7 @@ struct App:
         top := basalam.Rect { x = bounds.x, y = bounds.y, width = bounds.width, height = 1 }
         buf.fill(top, " ", bar)
         buf.put_str(bounds.x + 1, bounds.y, "basalam " + basalam.Version + " demo", bar)
-        status := "last key: " + last_key + "  |  " + bounds.width + "x" + bounds.height + "  |  " + seconds + "s  |  q quits"
+        status := "key: " + last_key + " | " + bounds.width + "x" + bounds.height + " | " + seconds + "s | Tab/arrows focus, Enter press, q quit"
         buf.put_str(bounds.x + 1, bounds.bottom() - 1, status, term.Sgr(term.StyleDim))
     end
 end
@@ -123,15 +128,39 @@ func describe(k: term.Key): str:
     ret "key " + k.code
 end
 
-// The application's layout: two panels side by side between the title bar
-// and the status line. The core has no layout engine; this is the
-// "set_bounds directly" approach the core is designed for.
-func arrange(screen: basalam.Screen, left: int, right: int):
+// The application's layout: two panels side by side, and a wide one under
+// them, between the title bar and the status line. The core has no layout
+// engine; this is the "set_bounds directly" approach the core is designed
+// for.
+func arrange(screen: basalam.Screen, left: int, right: int, bottom: int):
     w := screen.buffer.width
     h := screen.buffer.height - 3
     half := w / 2
-    screen.widget(left).set_bounds(basalam.Rect { x = 1, y = 2, width = half - 1, height = h })
-    screen.widget(right).set_bounds(basalam.Rect { x = half + 1, y = 2, width = w - half - 2, height = h })
+    top_h := h - h / 3
+    screen.widget(left).set_bounds(basalam.Rect { x = 1, y = 2, width = half - 1, height = top_h })
+    screen.widget(right).set_bounds(basalam.Rect { x = half + 1, y = 2, width = w - half - 2, height = top_h })
+    screen.widget(bottom).set_bounds(basalam.Rect { x = 1, y = 2 + top_h, width = w - 2, height = h - top_h })
+end
+
+// The application's own key bindings for focus. The library provides the
+// navigation; which keys trigger it is the application's choice.
+func move_focus(screen &: basalam.Screen, ev: basalam.Event): bool:
+    if ev.is_key(term.KeyTab):
+        ret screen.focus_next()
+    end
+    if ev.is_key(term.KeyUp):
+        ret screen.focus_up()
+    end
+    if ev.is_key(term.KeyDown):
+        ret screen.focus_down()
+    end
+    if ev.is_key(term.KeyLeft):
+        ret screen.focus_left()
+    end
+    if ev.is_key(term.KeyRight):
+        ret screen.focus_right()
+    end
+    ret false
 end
 
 func main:
@@ -144,19 +173,20 @@ func main:
     screen.tick_ms = 1000
     left := screen.add(basalam.RootId, Panel { label = "Left" })
     right := screen.add(basalam.RootId, Panel { label = "Right" })
+    bottom := screen.add(basalam.RootId, Panel { label = "Bottom" })
 
     screen.start()
     // From here on, every return path restores the terminal.
     defer screen.close()
 
-    arrange(screen, left, right)
+    arrange(screen, left, right, bottom)
     screen.present()
 
     mut ev := basalam.Event {}
     until screen.next_event(ev):
         consumed := screen.dispatch(ev)
         if ev.kind == basalam.ResizeEvent:
-            arrange(screen, left, right)
+            arrange(screen, left, right, bottom)
         end
         if ev.kind == basalam.TickEvent:
             seconds += 1
@@ -164,8 +194,12 @@ func main:
         if ev.kind == basalam.KeyEvent:
             last_key = describe(ev.key)
         end
-        if not consumed and (ev.is_char("q") or ev.is_ctrl("c")):
-            screen.stop()
+        if not consumed:
+            if ev.is_char("q") or ev.is_ctrl("c"):
+                screen.stop()
+            else:
+                _ := move_focus(screen, ev)
+            end
         end
         screen.present()
     end

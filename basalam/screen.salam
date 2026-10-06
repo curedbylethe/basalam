@@ -42,6 +42,14 @@
  * them, and draws into its buffer; present() then skips terminal output.
  * The integration tests drive the real channel and dispatch path this way.
  *
+ * Focus. The screen keeps a focus stack of widget IDs; the top is the
+ * focused widget, which receives each event first and renders with
+ * buf.focused set. Every focus change marks the screen dirty, so the next
+ * present() redraws both the old and the new focus indicator. Linear
+ * (focus_next/prev) and spatial (focus_up/down/left/right, see
+ * focus.salam) navigation are methods here; binding them to keys is the
+ * application's job.
+ *
  * Resizing. On a ResizeEvent the screen resizes its buffer and gives the
  * root widget the full terminal rect (fit_root). That is the only layout
  * the core does: every other widget gets its bounds from the application
@@ -139,8 +147,15 @@ pub struct Screen:
 
     @en "dirty"
     /// True when the next present() has something new to show. Set by
-    /// consumed events, resizes, and widget changes the screen sees.
+    /// consumed events, resizes, focus changes, and added widgets.
     pub dirty: bool = true
+
+    @en "focus_stack"
+    /// Widget IDs; the top (last) entry is the focused widget, and an
+    /// empty stack means nothing is focused. Change it through focus,
+    /// push_focus, pop_focus, and the navigation methods, which keep
+    /// `focused` and `dirty` in sync.
+    pub focus_stack: Vector<int> = Vector {}
 
     attached: bool = false
     closed: bool = false
@@ -149,10 +164,15 @@ pub struct Screen:
 
     @en "add"
     /// Adds w under parent (an ID; RootId for top level) and returns the
-    /// new widget's ID. Widgets paint in the order they are added.
+    /// new widget's ID. Widgets paint in the order they are added. The
+    /// first focusable widget added while nothing has focus receives it.
     pub func add(parent: int, w: dyn Widget): int:
         this.dirty = true
-        ret this.tree.add(parent, w)
+        id := this.tree.add(parent, w)
+        if this.focus_stack.len() == 0 and w.focusable():
+            _ := this.focus(id)
+        end
+        ret id
     end
 
     @en "widget"
@@ -162,9 +182,103 @@ pub struct Screen:
     end
 
     @en "focused_id"
-    /// The ID of the widget that receives events first.
+    /// The ID of the focused widget, or NoWidget when nothing has focus
+    /// (events then start at the root).
     pub func focused_id(): int:
-        ret RootId
+        if this.focus_stack.len() == 0:
+            ret NoWidget
+        end
+        ret this.focus_stack.get(this.focus_stack.len() - 1)
+    end
+
+    @en "can_focus"
+    /// True when id names a widget that is currently focusable.
+    pub func can_focus(id: int): bool:
+        ret this.tree.valid(id) and this.tree.get(id).focusable()
+    end
+
+    @en "focus"
+    /// Moves the focus to id, replacing the top of the focus stack (or
+    /// starting it). Returns false, changing nothing, when id is not a
+    /// focusable widget.
+    pub func focus(id: int): bool:
+        if not this.can_focus(id):
+            ret false
+        end
+        if this.focus_stack.len() == 0:
+            this.focus_stack.push(id)
+        else:
+            this.focus_stack.set(this.focus_stack.len() - 1, id)
+        end
+        this.focus_changed()
+        ret true
+    end
+
+    @en "push_focus"
+    /// Focuses id and remembers the previous focus underneath it, for
+    /// example while a dialog is open. pop_focus returns to it. Returns
+    /// false, changing nothing, when id is not a focusable widget.
+    pub func push_focus(id: int): bool:
+        if not this.can_focus(id):
+            ret false
+        end
+        this.focus_stack.push(id)
+        this.focus_changed()
+        ret true
+    end
+
+    @en "pop_focus"
+    /// Drops the top of the focus stack, returning the focus to whatever
+    /// was focused before the matching push_focus. Returns false when the
+    /// stack was already empty.
+    pub func pop_focus(): bool:
+        if this.focus_stack.len() == 0:
+            ret false
+        end
+        _ := this.focus_stack.pop()
+        this.focus_changed()
+        ret true
+    end
+
+    @en "focus_next"
+    /// Moves the focus to the next focusable widget in ID order, wrapping
+    /// from the last to the first. With nothing focused, focuses the first.
+    /// Returns true when the focus moved.
+    pub func focus_next(): bool:
+        ret this.focus_step(1)
+    end
+
+    @en "focus_prev"
+    /// Moves the focus to the previous focusable widget in ID order,
+    /// wrapping from the first to the last. With nothing focused, focuses
+    /// the last. Returns true when the focus moved.
+    pub func focus_prev(): bool:
+        ret this.focus_step(-1)
+    end
+
+    @en "focus_up"
+    /// Moves the focus to the nearest focusable widget above (see Nearest
+    /// for the exact rule). Returns true when the focus moved.
+    pub func focus_up(): bool:
+        ret this.focus_toward(DirUp)
+    end
+
+    @en "focus_down"
+    /// Moves the focus to the nearest focusable widget below.
+    pub func focus_down(): bool:
+        ret this.focus_toward(DirDown)
+    end
+
+    @en "focus_left"
+    /// Moves the focus to the nearest focusable widget to the left.
+    pub func focus_left(): bool:
+        ret this.focus_toward(DirLeft)
+    end
+
+    @en "focus_right"
+    /// Moves the focus to the nearest focusable widget to the right.
+    pub func focus_right(): bool:
+        ret this.focus_toward(DirRight)
     end
 
     @en "fit_root"
@@ -306,6 +420,7 @@ pub struct Screen:
         this.events.ch.free()
         this.tree.free()
         this.buffer.free()
+        this.focus_stack.free()
     end
 
     @en "run"
@@ -322,6 +437,66 @@ pub struct Screen:
     /// every tick_ms milliseconds; set tick_ms before start().
     pub func run_with_tick(on_tick: func ()):
         this.loop(true, on_tick)
+    end
+
+    // Keeps the `focused` field in step with the stack and asks for a
+    // redraw, so the old and new focus can update their indicators.
+    func focus_changed():
+        id := this.focused_id()
+        if id == NoWidget:
+            this.focused = this.root
+        else:
+            this.focused = this.tree.get(id)
+        end
+        this.dirty = true
+    end
+
+    // Linear navigation. Walks IDs from the current focus in steps of
+    // `step` (+1 or -1), wrapping around, and stops at the first focusable
+    // widget. With nothing focused it starts just outside the range, so
+    // the first step lands on the first (or last) ID.
+    func focus_step(step: int): bool:
+        n := this.tree.count()
+        current := this.focused_id()
+        mut id := current
+        if id == NoWidget:
+            id = step > 0 ? n - 1 : 0
+        end
+        repeat n:
+            id = (id + step + n) % n
+            if id == current:
+                ret false
+            end
+            if this.can_focus(id):
+                ret this.focus(id)
+            end
+        end
+        ret false
+    end
+
+    // Spatial navigation: collects the bounds of every other focusable
+    // widget and lets Nearest pick one. With nothing focused there is no
+    // starting rect, so it falls back to focusing the first widget.
+    func focus_toward(dir: int): bool:
+        current := this.focused_id()
+        if current == NoWidget:
+            ret this.focus_next()
+        end
+        mut ids := Vector {} as Vector<int>
+        defer ids.free()
+        mut rects := Vector {} as Vector<Rect>
+        defer rects.free()
+        repeat this.tree.count() in id:
+            if id != current and this.can_focus(id):
+                ids.push(id)
+                rects.push(this.tree.get(id).bounds())
+            end
+        end
+        pick := Nearest(this.tree.get(current).bounds(), rects, dir)
+        if pick < 0:
+            ret false
+        end
+        ret this.focus(ids.get(pick))
     end
 
     func loop(ticking: bool, on_tick: func ()):

@@ -1,0 +1,132 @@
+---
+title: "Focus"
+description: "The focus stack, linear Tab-style order, and spatial arrow-key navigation: the overlap rule and how ties are broken."
+keywords: ["focus", "focus stack", "spatial navigation", "tab order", "focus_next", "focus_left"]
+---
+
+The focused widget receives every event first. If it does not consume the event, the event [bubbles](/reference/event#dispatch-and-bubbling) to its ancestors. While rendering, the focused widget sees `buf.focused == true` and can draw a focus indicator.
+
+Only widgets whose `focusable()` returns `true` can take focus.
+
+## The focus stack
+
+The screen tracks focus as a stack of widget IDs. The top entry is the focused widget; an empty stack means nothing has focus, and events start at the root.
+
+| Method | Effect |
+| --- | --- |
+| `focus(id): bool` | Replaces the top of the stack with `id`. |
+| `push_focus(id): bool` | Pushes `id`, remembering the previous focus underneath it. |
+| `pop_focus(): bool` | Drops the top, returning focus to what was there before. |
+| `focused_id(): int` | The top of the stack, or `NoWidget`. |
+| `can_focus(id): bool` | Whether `id` names a focusable widget. |
+
+`focus` and `push_focus` refuse IDs that are invalid or not focusable and return `false` without changing anything.
+
+Use `push_focus` and `pop_focus` for anything temporary, such as a dialog: push the dialog's widget when it opens, pop when it closes, and the focus goes back where it was.
+
+```salam
+if screen.push_focus(dialog):
+    // ... the dialog handles keys until it closes ...
+    _ := screen.pop_focus()
+end
+```
+
+<Note>
+  The first focusable widget you `add` while nothing has focus receives it automatically, so a new screen always starts with something focused if it can.
+</Note>
+
+## Two ways to move
+
+basalam provides the movement; your application decides which keys trigger it. The library binds no keys itself.
+
+```salam
+func move_focus(screen &: basalam.Screen, ev: basalam.Event): bool:
+    if ev.is_key(term.KeyTab):
+        ret screen.focus_next()
+    end
+    if ev.is_key(term.KeyUp):
+        ret screen.focus_up()
+    end
+    if ev.is_key(term.KeyDown):
+        ret screen.focus_down()
+    end
+    if ev.is_key(term.KeyLeft):
+        ret screen.focus_left()
+    end
+    if ev.is_key(term.KeyRight):
+        ret screen.focus_right()
+    end
+    ret false
+end
+```
+
+Every method returns `true` when the focus moved. Each focus change marks the screen dirty, so the next `present()` redraws both the old and the new focus indicator.
+
+### Linear: focus_next and focus_prev
+
+Linear navigation walks the focusable widgets in ID order, the same order they paint in, and wraps around at the ends. Unfocusable widgets are skipped. With nothing focused, `focus_next` focuses the first focusable widget and `focus_prev` the last.
+
+### Spatial: focus_up, focus_down, focus_left, focus_right
+
+Spatial navigation moves to the nearest focusable widget in a direction. The search is `basalam.Nearest(from, candidates, dir)`, a pure function over rects that looks at each candidate once (O(n)). With nothing focused, spatial moves fall back to `focus_next`.
+
+## The spatial rule
+
+A candidate qualifies only if it passes both of these tests.
+
+<Steps>
+  <Step title="It lies beyond the edge you are moving toward">
+    Moving right, the candidate's left edge must be at or past the current widget's right edge. A candidate that overlaps the current widget along the direction of motion is beside it or on top of it, not to its right, so it is skipped. Touching edges (a gap of zero) qualify.
+  </Step>
+  <Step title="It overlaps on the perpendicular axis">
+    Moving left or right, the candidate must share at least one **row** with the current widget. Moving up or down, it must share at least one **column**. A widget that is only diagonally away never qualifies, however close it is. This keeps focus moving in straight lines.
+  </Step>
+</Steps>
+
+```text
+moving right from F:
+
+    +-----+          +---+        A: shares rows with F   -> qualifies
+    |  F  |  gap 3   | A |
+    |     |          +---+
+    +-----+ +---+                 B: closer, but no shared row -> skipped
+            | B |
+            +---+
+```
+
+Rows and columns use the same half-open rule as `Rect`, so rects that only touch at a corner do not overlap, and an empty rect overlaps nothing.
+
+### Ranking and tie-breaking
+
+Among the candidates that qualify:
+
+1. **Nearest edge wins.** The smallest gap between the current widget's edge and the candidate's facing edge.
+2. **On equal gaps, best alignment wins.** The smallest distance between the two widgets' centers on the perpendicular axis.
+3. **On a full tie, the earliest wins.** The candidate with the lowest ID, which is the one earliest in focus and paint order.
+
+```text
+moving up from the wide panel W:
+
+    +--------+ +--------+     L and R: same gap, and W's center is exactly
+    |   L    | |   R    |     between theirs -> full tie -> L (lower ID) wins
+    +--------+ +--------+
+    +-------------------+
+    |         W         |
+    +-------------------+
+```
+
+Centers are compared at double resolution (`2 * x + width`) so that half-cell differences are never lost to integer division. Two candidates half a row off in opposite directions are a genuine tie, broken by rule 3, rather than one of them being misjudged as perfectly aligned.
+
+## Showing focus
+
+Check `buf.focused` in `render`:
+
+```salam
+pub func render(buf: basalam.Buffer, bounds: basalam.Rect):
+    mut style := ""
+    if buf.focused:
+        style = term.Sgr(term.StyleReverse)
+    end
+    buf.put_str(bounds.x, bounds.y, this.label, style)
+end
+```

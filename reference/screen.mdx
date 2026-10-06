@@ -37,17 +37,33 @@ pub func NewTerminalScreen(root: dyn Widget): Screen
 <ResponseField name="tree" type="Tree">The widget registry. Prefer `add` and `widget`.</ResponseField>
 <ResponseField name="tick_ms" type="int" default="0">Interval of `TickEvent`s in milliseconds. `0` sends none. Set it before `start()`.</ResponseField>
 <ResponseField name="mouse" type="bool" default="false">When `true`, `start()` enables mouse reporting and clicks arrive as `MouseEvent`s. Set it before `start()`.</ResponseField>
-<ResponseField name="dirty" type="bool">`true` when the next `present()` has something new to show.</ResponseField>
+<ResponseField name="dirty" type="bool">`true` when the next `present()` has something new to show. Set by consumed events, resizes, focus changes, and added widgets.</ResponseField>
+<ResponseField name="focus_stack" type="Vector<int>">Widget IDs; the last entry is the focused widget. Change it only through the focus methods, which keep `focused` and `dirty` in sync.</ResponseField>
 
 ## Building the tree
 
 | Method | Description |
 | --- | --- |
-| `add(parent: int, w: dyn Widget): int` | Adds `w` under `parent` (`RootId` for top level) and returns its ID. Widgets paint in the order you add them. |
+| `add(parent: int, w: dyn Widget): int` | Adds `w` under `parent` (`RootId` for top level) and returns its ID. Widgets paint in the order you add them. The first focusable widget added while nothing has focus receives it. |
 | `widget(id: int): dyn Widget` | The widget with this ID; the root for an invalid ID. |
-| `focused_id(): int` | The ID of the widget that receives events first. |
+| `focused_id(): int` | The ID of the focused widget, or `NoWidget` when nothing has focus (events then start at the root). |
 | `fit_root()` | Gives the root the whole buffer. |
 | `resize(width: int, height: int)` | Resizes the buffer and refits the root. |
+
+## Focus
+
+See [Focus](/concepts/focus) for the rules behind these methods.
+
+| Method | Description |
+| --- | --- |
+| `focus(id: int): bool` | Focuses `id`, replacing the top of the focus stack. `false` if `id` is not focusable. |
+| `push_focus(id: int): bool` | Focuses `id` and remembers the previous focus underneath it. |
+| `pop_focus(): bool` | Returns to the focus before the last `push_focus`. `false` if the stack is empty. |
+| `can_focus(id: int): bool` | Whether `id` names a focusable widget. |
+| `focus_next(): bool` / `focus_prev(): bool` | Next or previous focusable widget in ID order, wrapping around. |
+| `focus_up(): bool` / `focus_down(): bool` / `focus_left(): bool` / `focus_right(): bool` | Nearest focusable widget in that direction. |
+
+Each returns `true` when the focus moved, and every change marks the screen dirty so the focus indicators are redrawn.
 
 ## Terminal lifecycle
 
