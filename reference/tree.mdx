@@ -1,0 +1,80 @@
+---
+title: "Tree"
+description: "The widget registry: integer IDs, parent links, paint order, and event bubbling."
+keywords: ["tree", "widget id", "parent", "dispatch", "bubbling", "z-order"]
+---
+
+A `Tree` records which widgets exist and who is whose parent. It lives outside the widgets, so a widget never needs to know where it sits and the `Widget` interface stays at five methods.
+
+## Why integer IDs
+
+Salam's `dyn` values cannot be compared with `==`, and cannot be cast back to their concrete type. So "is this the focused widget?" can only be answered by position. A widget's ID is its index in the tree:
+
+- The root is always ID `0` (`RootId`). Its parent is `NoWidget` (`-1`).
+- `add` appends, so IDs stay stable for the tree's lifetime.
+- A parent's ID is always smaller than its children's. That makes bubbling loop-free by construction.
+
+## Order is z-order
+
+ID order is also paint order and focus order. Widgets paint in ID order, so a child (added after its parent) paints over the parent, and a later sibling paints over an earlier one. Linear focus navigation follows the same order.
+
+```text
+root(0)                paints first
+|-- panel(1)
+|   |-- left(2)
+|   `-- right(3)
+`-- footer(4)          paints last, on top
+```
+
+## Constants
+
+| Constant | Value | Meaning |
+| --- | --- | --- |
+| `RootId` | `0` | The root widget's ID in every tree. |
+| `NoWidget` | `-1` | No widget: the root's parent, and the result of a dispatch nobody consumed. |
+
+## Tree
+
+```salam
+pub struct Tree:
+    pub widgets: Vector<dyn Widget> = Vector {}
+    pub parents: Vector<int> = Vector {}
+end
+
+pub func NewTree(root: dyn Widget): Tree
+```
+
+`NewTree` creates a tree whose root is `root`. A tree always holds at least its root.
+
+| Method | Description |
+| --- | --- |
+| `add(parent: int, w: dyn Widget): int` | Adds `w` as the last child of `parent` and returns its ID. An invalid parent attaches it to the root. |
+| `get(id: int): dyn Widget` | The widget with this ID. An invalid ID returns the root, so the call never fails. |
+| `parent(id: int): int` | The parent's ID; `NoWidget` for the root and for invalid IDs. |
+| `valid(id: int): bool` | Whether `id` names a widget in this tree. |
+| `count(): int` | The number of widgets, root included. |
+| `dispatch(from: int, event: Event): int` | Offers `event` to `from`, then to each ancestor, until one consumes it. Returns the consumer's ID or `NoWidget`. An invalid `from` starts at the root. |
+| `free()` | Releases the tree's own storage. The widgets themselves are left alone. |
+
+## Example
+
+```salam
+mut t := basalam.NewTree(basalam.BaseWidget {})
+panel := t.add(basalam.RootId, basalam.BaseWidget {})
+counter := t.add(panel, Counter { label = "apples" })
+
+// Counter consumes "+", so dispatch stops there and returns its ID.
+plus := basalam.Event { kind = basalam.KeyEvent, key = term.Decode("+") }
+println t.dispatch(counter, plus) == counter // true
+
+// Nobody consumes "x": it visits counter, panel, root, and comes back unhandled.
+x := basalam.Event { kind = basalam.KeyEvent, key = term.Decode("x") }
+println t.dispatch(counter, x) == basalam.NoWidget // true
+t.free()
+```
+
+`Counter` is the widget from [Writing a widget](/guides/writing-a-widget).
+
+<Note>
+  The tree cannot remove or reparent widgets yet, because either would shift IDs. Build the tree once and change widgets' state instead.
+</Note>

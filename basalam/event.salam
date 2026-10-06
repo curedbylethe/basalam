@@ -76,4 +76,28 @@ pub struct Event:
     @en "height"
     /// The new terminal height in rows, for ResizeEvent.
     pub height: int = 0
+
+    @en "is_key"
+    /// True for a KeyEvent whose key code is code (a term.Key* constant,
+    /// for example term.KeyEnter or term.KeyUp). Modifiers are ignored.
+    pub func is_key(code: int): bool:
+        ret this.kind == KeyEvent and this.key.code == code
+    end
+
+    @en "is_char"
+    /// True for a KeyEvent that typed exactly ch with neither Ctrl nor Alt
+    /// held, so is_char("q") does not match Ctrl+Q or Alt+Q.
+    pub func is_char(ch: str): bool:
+        if not this.is_key(term.KeyChar) or this.key.ctrl or this.key.alt:
+            ret false
+        end
+        ret this.key.ch == ch
+    end
+
+    @en "is_ctrl"
+    /// True for Ctrl plus the letter ch, for example is_ctrl("c") for
+    /// Ctrl+C. In raw mode Ctrl+C arrives as this key, not as a signal.
+    pub func is_ctrl(ch: str): bool:
+        ret this.is_key(term.KeyChar) and this.key.ctrl and this.key.ch == ch
+    end
 end

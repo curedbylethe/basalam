@@ -33,6 +33,7 @@
  *     event.salam    Event, the value input arrives as, and its kinds
  *     buffer.salam   Buffer and Cell, the grid widgets draw into
  *     widget.salam   the Widget interface and BaseWidget defaults
+ *     tree.salam     the widget registry (IDs, parents) and event bubbling
  *
  * Keep test programs and examples out of this directory: anything placed
  * here becomes part of the package.

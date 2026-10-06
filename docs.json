@@ -29,6 +29,7 @@
           "reference/rect",
           "reference/widget",
           "reference/event",
+          "reference/tree",
           "reference/buffer"
         ]
       }

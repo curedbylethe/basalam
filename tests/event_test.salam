@@ -1,0 +1,107 @@
+/*
+ * basalam - a terminal user interface library for Salam (2026)
+ *
+ *   +-------------------+
+ *   |   B A S A L A M   |
+ *   +-------------------+
+ *
+ * Built on the Salam standard library's std/term package
+ * Salam: https://github.com/SalamLang/Salam
+ *
+ * Repository: https://github.com/curedbylethe/basalam
+ * License: GPL-3.0-or-later
+ *
+ */
+
+// Unit tests for Event kinds and the key helpers. Keys are built
+// with term.Decode from the exact bytes a terminal sends, so these tests
+// exercise the same decoding a real key press goes through.
+
+import testing
+import term
+
+include "../basalam/basalam.salam"
+
+func key(seq: str): basalam.Event:
+    ret basalam.Event { kind = basalam.KeyEvent, key = term.Decode(seq) }
+end
+
+func test_kinds_are_distinct():
+    mut kinds := Vector {} as Vector<int>
+    defer kinds.free()
+    kinds.push(basalam.NoEvent)
+    kinds.push(basalam.KeyEvent)
+    kinds.push(basalam.MouseEvent)
+    kinds.push(basalam.ResizeEvent)
+    kinds.push(basalam.TickEvent)
+    repeat kinds.len() in i:
+        repeat kinds.len() in j:
+            if i != j:
+                testing.AssertNeInt(kinds.get(i), kinds.get(j))
+            end
+        end
+    end
+end
+
+func test_zero_event():
+    e := basalam.Event {}
+    testing.AssertEqInt(e.kind, basalam.NoEvent)
+    testing.AssertFalse(e.is_key(term.KeyUnknown))
+    testing.AssertFalse(e.is_char(""))
+end
+
+func test_is_key():
+    testing.AssertTrue(key("\x1b[A").is_key(term.KeyUp))
+    testing.AssertTrue(key("\r").is_key(term.KeyEnter))
+    testing.AssertTrue(key("\t").is_key(term.KeyTab))
+    testing.AssertFalse(key("\x1b[A").is_key(term.KeyDown))
+    // Same key code, wrong kind: a resize event never matches a key.
+    mut r := key("\x1b[A")
+    r.kind = basalam.ResizeEvent
+    testing.AssertFalse(r.is_key(term.KeyUp))
+end
+
+func test_is_char():
+    testing.AssertTrue(key("q").is_char("q"))
+    testing.AssertFalse(key("q").is_char("Q"))
+    testing.AssertFalse(key("\x11").is_char("q"))
+    testing.AssertFalse(key("\x1bq").is_char("q"))
+    testing.AssertTrue(key("س").is_char("س"))
+end
+
+func test_is_ctrl():
+    ctrl_c := key("\x03")
+    testing.AssertTrue(ctrl_c.is_ctrl("c"))
+    testing.AssertFalse(ctrl_c.is_char("c"))
+    testing.AssertFalse(key("c").is_ctrl("c"))
+end
+
+func test_resize_and_tick_payloads():
+    r := basalam.Event { kind = basalam.ResizeEvent, width = 120, height = 40 }
+    testing.AssertEqInt(r.width, 120)
+    testing.AssertEqInt(r.height, 40)
+    testing.AssertFalse(r.is_key(term.KeyUnknown))
+    t := basalam.Event { kind = basalam.TickEvent }
+    testing.AssertEqStr(t.key.ch, "")
+end
+
+func test_mouse_payload():
+    seq := "\x1b[<0;10;5M"
+    m := basalam.Event { kind = basalam.MouseEvent, key = term.Decode(seq), mouse = term.DecodeMouse(seq) }
+    testing.AssertTrue(m.mouse.ok)
+    testing.AssertEqInt(m.mouse.col, 10)
+    testing.AssertEqInt(m.mouse.row, 5)
+    testing.AssertTrue(m.mouse.pressed)
+    testing.AssertEqInt(m.key.code, term.KeyMouse)
+end
+
+func main:
+    test_kinds_are_distinct()
+    test_zero_event()
+    test_is_key()
+    test_is_char()
+    test_is_ctrl()
+    test_resize_and_tick_payloads()
+    test_mouse_payload()
+    ret testing.Summary()
+end
