@@ -29,18 +29,39 @@ git submodule add https://github.com/curedbylethe/basalam vendor/basalam
 ## Quick start
 
 ```salam
+import term
+
 include "vendor/basalam/basalam/basalam.salam"
 
+struct Hello:
+    pub use basalam.BaseWidget
+
+    pub func render(buf: basalam.Buffer, bounds: basalam.Rect):
+        buf.put_str(bounds.x + 2, bounds.y + 1, "Hello from basalam! Press q to quit.", term.Sgr(term.StyleBold))
+    end
+end
+
 func main:
-    r := basalam.Rect { x = 0, y = 0, width = 80, height = 24 }
-    c := r.center()
-    println "basalam", basalam.Version, "center:", c.x, c.y
+    mut screen := basalam.NewTerminalScreen(Hello {})
+    screen.start()
+    defer screen.close()
+
+    screen.present()
+    mut ev := basalam.Event {}
+    until screen.next_event(ev):
+        if not screen.dispatch(ev) and ev.is_char("q"):
+            screen.stop()
+        end
+        screen.present()
+    end
 end
 ```
 
 ```sh
 salam build main.salam && ./main
 ```
+
+To see more, clone this repository and run `make run` for the demo.
 
 ## Documentation
 

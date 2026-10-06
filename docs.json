@@ -18,6 +18,13 @@
         ]
       },
       {
+        "group": "Concepts",
+        "pages": [
+          "concepts/architecture",
+          "concepts/event-loop"
+        ]
+      },
+      {
         "group": "Guides",
         "pages": [
           "guides/writing-a-widget"
@@ -30,7 +37,8 @@
           "reference/widget",
           "reference/event",
           "reference/tree",
-          "reference/buffer"
+          "reference/buffer",
+          "reference/screen"
         ]
       }
     ],

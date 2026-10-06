@@ -18,17 +18,26 @@
  *
  * STATUS - MINIMAL, INTERNAL STAND-IN. The full buffer is epic 4
  * (double buffering, dirty-region tracking). This file is
- * only what the core needs to work end to end:
+ * only what the core needs to work end to end. For the epic-4 author:
  *
- *   present:  a width x height grid of Cells (one codepoint + a style),
- *             cell access (set/get), text and rect helpers (put_str/fill),
- *             clear, per-row text for tests (row_text), clipping, and a
- *             render-context flag (focused).
+ *   present:  ONE grid (the back buffer) of width x height Cells, each one
+ *             codepoint plus a style; cell access (set/get); text and rect
+ *             helpers (put_str/fill); clear; resize; per-row text for tests
+ *             (row_text); clipping; a render-context flag (focused); and
+ *             output: ansi() serializes the WHOLE grid into one string
+ *             (cursor moves via term.SeqMoveTo, a term.Reset + style
+ *             whenever the style changes) and flush() writes it with
+ *             term.Emit.
  *
- *   missing:  a front buffer and diffing (every frame redraws every cell),
- *             dirty regions, structured styles (style is a raw SGR string),
- *             wide characters (a cell holds one codepoint and is assumed to
- *             be one column wide), and cursor placement.
+ *   missing:  a front buffer and diffing against it: every flush redraws
+ *             every cell; dirty regions; structured
+ *             styles (style is a raw SGR string from std/term); wide
+ *             characters (a cell holds one codepoint and is assumed to be
+ *             one column wide); cursor placement for text input.
+ *
+ *   contract to keep: Widget.render receives a Buffer by value, writes
+ *             through it reach the screen's grid, and `clip` / `focused`
+ *             are per-copy render context set by Screen.draw.
  *
  * Why widgets never touch the terminal: widgets draw here, the screen
  * decides when and how a frame reaches the terminal. That keeps rendering
@@ -46,6 +55,7 @@
 package basalam
 
 import str
+import term
 
 @en "Cell"
 /// One terminal cell: a single codepoint and the style it is drawn with.
@@ -162,6 +172,49 @@ pub struct Buffer:
             str.BufAppend(b, this.cells.get(y * this.width + x).ch)
         end
         ret str.BufStr(b)
+    end
+
+    @en "resize"
+    /// Replaces the grid with a blank width x height one and resets clip to
+    /// cover it. Only the owner of the original Buffer may call this: it
+    /// frees the old storage that copies were sharing.
+    pub func resize(width: int, height: int):
+        this.cells.free()
+        fresh := NewBuffer(width, height)
+        this.width = fresh.width
+        this.height = fresh.height
+        this.cells = fresh.cells
+        this.clip = fresh.clip
+    end
+
+    @en "ansi"
+    /// The whole grid as one string of terminal output: for each row, a
+    /// cursor move to its first column, then its cells, switching style
+    /// only where it changes, and a final style reset. This is the entire
+    /// frame; nothing is diffed against the previous one.
+    pub func ansi(): str:
+        mut b := str.NewBuilder()
+        defer str.BufFree(b)
+        mut style := ""
+        repeat this.height in y:
+            str.BufAppend(b, term.SeqMoveTo(y + 1, 1))
+            repeat this.width in x:
+                c := this.cells.get(y * this.width + x)
+                if c.style != style:
+                    str.BufAppend(b, term.Reset + c.style)
+                    style = c.style
+                end
+                str.BufAppend(b, c.ch)
+            end
+        end
+        str.BufAppend(b, term.Reset)
+        ret str.BufStr(b)
+    end
+
+    @en "flush"
+    /// Writes the frame (see ansi) to the terminal in a single write.
+    pub func flush():
+        term.Emit(this.ansi())
     end
 
     @en "free"

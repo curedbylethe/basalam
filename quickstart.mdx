@@ -27,16 +27,37 @@ keywords: ["install", "quickstart", "include", "build"]
 
     The library itself is the `basalam/` directory inside the repository.
   </Step>
-  <Step title="Include the package">
+  <Step title="Write a program">
     One `include` line pulls in the whole library. The path is relative to the file that contains it.
 
     ```salam main.salam
+    import term
+
     include "vendor/basalam/basalam/basalam.salam"
 
+    struct Hello:
+        pub use basalam.BaseWidget
+
+        pub func render(buf: basalam.Buffer, bounds: basalam.Rect):
+            buf.put_str(2, 1, "Hello from basalam!", term.Sgr(term.StyleBold))
+            buf.put_str(2, 3, "Screen size: " + bounds.width + "x" + bounds.height, "")
+            buf.put_str(2, 4, "Press q to quit.", "")
+        end
+    end
+
     func main:
-        r := basalam.Rect { x = 0, y = 0, width = 80, height = 24 }
-        c := r.center()
-        println "basalam", basalam.Version, "center:", c.x, c.y
+        mut screen := basalam.NewTerminalScreen(Hello {})
+        screen.start()
+        defer screen.close()
+
+        screen.present()
+        mut ev := basalam.Event {}
+        until screen.next_event(ev):
+            if not screen.dispatch(ev) and ev.is_char("q"):
+                screen.stop()
+            end
+            screen.present()
+        end
     end
     ```
 
@@ -48,17 +69,34 @@ keywords: ["install", "quickstart", "include", "build"]
     ./main
     ```
 
-    The program prints `basalam 0.1.0 center: 40 12`.
+    The terminal switches to a full-screen view. Press `q` and your shell comes back exactly as it was.
   </Step>
 </Steps>
 
-## Work on basalam itself
+## What just happened
 
-Clone the repository and use the `Makefile`:
+- `Hello` embeds `BaseWidget`, so it is a widget. It only overrides `render`.
+- `NewTerminalScreen` makes `Hello` the root widget, sized to the terminal.
+- `start()` switches the terminal to raw mode and the alternate screen and starts the input thread. `defer screen.close()` undoes all of it on every exit path.
+- The `until` loop takes one event at a time. `dispatch` offers it to the widgets; `q` is not consumed by any widget, so the loop stops the screen.
+
+Read [The event loop](/concepts/event-loop) for the details, or [Writing a widget](/guides/writing-a-widget) to build an interactive one.
+
+## Run the demo
+
+The repository ships a larger demo with panels, ticks, and resize handling:
 
 ```bash
 git clone https://github.com/curedbylethe/basalam
 cd basalam
+make run
+```
+
+## Work on basalam itself
+
+From a clone of the repository:
+
+```bash
 make check
 ```
 

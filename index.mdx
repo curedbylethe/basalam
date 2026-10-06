@@ -15,6 +15,7 @@ It sits on top of Salam's standard `term` package. `term` already handles raw mo
 ## Design in brief
 
 - **Retained mode.** Widgets are long-lived values. Your application changes their state; the screen redraws them.
+- **Only input is asynchronous.** One background thread reads the terminal and produces events. Your widgets handle them synchronously on the main thread, so they need no locks.
 - **Widgets are interfaces.** Anything with the five `Widget` methods is a widget. Embed `BaseWidget` and override only what you need.
 - **Widgets draw into a buffer, never the terminal.** That keeps rendering testable without a terminal.
 - **Geometry on the cell grid.** Every position is an integer cell coordinate, 0-based, with half-open rectangles.
@@ -27,6 +28,7 @@ It sits on top of Salam's standard `term` package. `term` already handles raw mo
 | `Widget` interface and `BaseWidget` | Available |
 | `Event` type, helpers, and bubbling dispatch | Available |
 | Widget tree with integer IDs | Available |
+| `Screen`: event loop, input thread, resize, ticks | Available |
 | `Buffer` (minimal) | Available; diffing and dirty regions come later |
 
 <Columns cols={2}>
@@ -35,5 +37,11 @@ It sits on top of Salam's standard `term` package. `term` already handles raw mo
   </Card>
   <Card title="Writing a widget" icon="puzzle-piece" href="/guides/writing-a-widget">
     Build and test a custom widget step by step.
+  </Card>
+  <Card title="Architecture" icon="sitemap" href="/concepts/architecture">
+    How the event loop, dispatch, the widget tree, and the buffer fit together.
+  </Card>
+  <Card title="The event loop" icon="arrows-spin" href="/concepts/event-loop">
+    How input moves from the terminal to your widgets.
   </Card>
 </Columns>

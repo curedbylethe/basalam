@@ -1,0 +1,140 @@
+---
+title: "Screen"
+description: "The terminal session: widget tree, back buffer, input thread, and the event loop."
+keywords: ["screen", "event loop", "next_event", "run", "run_with_tick", "start", "close"]
+---
+
+A `Screen` owns the terminal session. It holds the widget [tree](/reference/tree), the back [buffer](/reference/buffer), and the channel the input thread sends [events](/reference/event) on. You create one per program.
+
+```salam
+mut screen := basalam.NewTerminalScreen(MyRoot {})
+screen.start()
+defer screen.close()
+```
+
+<Warning>
+  Call `defer screen.close()` on the line right after `start()`. `start()` puts the terminal in raw mode and switches to the alternate screen. `close()` undoes both, and `defer` makes sure it runs on every return path.
+</Warning>
+
+## Constructors
+
+```salam
+pub func NewScreen(root: dyn Widget, width: int, height: int): Screen
+pub func NewTerminalScreen(root: dyn Widget): Screen
+```
+
+`NewScreen` creates a screen of `width` x `height` cells. `root` becomes widget `0` and is sized to the whole screen. Nothing touches the terminal until `start()`, so a screen made with `NewScreen` works headlessly in tests.
+
+`NewTerminalScreen` does the same with the current terminal size.
+
+## Fields
+
+<ResponseField name="events" type="Channel<Event>">The channel the input thread sends on. `events.ch` is the underlying `std/chan` channel. See [why the wrapper exists](#the-channel-wrapper).</ResponseField>
+<ResponseField name="root" type="dyn Widget">The root widget (ID `0`). It always covers the whole screen.</ResponseField>
+<ResponseField name="focused" type="dyn Widget">The widget that receives events first.</ResponseField>
+<ResponseField name="buffer" type="Buffer">The back buffer widgets draw into.</ResponseField>
+<ResponseField name="running" type="bool">`true` from `start()` (or the start of `run`) until `stop()`.</ResponseField>
+<ResponseField name="tree" type="Tree">The widget registry. Prefer `add` and `widget`.</ResponseField>
+<ResponseField name="tick_ms" type="int" default="0">Interval of `TickEvent`s in milliseconds. `0` sends none. Set it before `start()`.</ResponseField>
+<ResponseField name="mouse" type="bool" default="false">When `true`, `start()` enables mouse reporting and clicks arrive as `MouseEvent`s. Set it before `start()`.</ResponseField>
+<ResponseField name="dirty" type="bool">`true` when the next `present()` has something new to show.</ResponseField>
+
+## Building the tree
+
+| Method | Description |
+| --- | --- |
+| `add(parent: int, w: dyn Widget): int` | Adds `w` under `parent` (`RootId` for top level) and returns its ID. Widgets paint in the order you add them. |
+| `widget(id: int): dyn Widget` | The widget with this ID; the root for an invalid ID. |
+| `focused_id(): int` | The ID of the widget that receives events first. |
+| `fit_root()` | Gives the root the whole buffer. |
+| `resize(width: int, height: int)` | Resizes the buffer and refits the root. |
+
+## Terminal lifecycle
+
+| Method | Description |
+| --- | --- |
+| `start()` | Raw mode, alternate screen, hidden cursor, mouse reporting if `mouse` is set, a buffer sized to the terminal, and the input thread. |
+| `stop()` | Ends the loop. `next_event` returns `false` once the queue is drained. Safe to call more than once. |
+| `close()` | Stops the loop, restores the terminal exactly as `start()` found it, joins the input thread, and frees the screen's storage. Safe to call more than once. |
+
+## The event loop
+
+| Method | Description |
+| --- | --- |
+| `next_event(event &: Event): bool` | Waits for the next event. Returns `false` once the screen is stopped and every queued event was delivered. |
+| `dispatch(event: Event): bool` | Handles one event synchronously. A `ResizeEvent` first resizes the screen. Then the event goes to the focused widget and bubbles up. Returns `true` if a widget consumed it. |
+| `draw()` | Renders every widget into the buffer, in ID order, each clipped to its visible bounds. |
+| `present()` | `draw()`, then writes the frame to the terminal once attached. Clears `dirty`. |
+| `post(event: Event): bool` | Queues an event as if the input thread had produced it. Safe from any thread. |
+| `run()` | Runs the loop until `stop()`. Redraws only when something changed. An unconsumed Ctrl+C stops it. |
+| `run_with_tick(on_tick: func ())` | Like `run`, and also calls `on_tick` on the main thread for every `TickEvent`. |
+
+### Write your own loop
+
+This is the shape most applications use, because the application decides what unhandled keys mean:
+
+```salam
+screen.present()
+mut ev := basalam.Event {}
+until screen.next_event(ev):
+    if not screen.dispatch(ev) and ev.is_char("q"):
+        screen.stop()
+    end
+    screen.present()
+end
+```
+
+<Note>
+  Salam's `each` loop only iterates vectors, maps, arrays, and slices, so it cannot consume a live channel. `until screen.next_event(ev):` is the equivalent: Salam's `until` loops *while* its condition is true.
+</Note>
+
+### Or let the screen run it
+
+If every key is handled by widgets, `run_with_tick` is enough. Lambdas capture by value in Salam, so share state with the callback through a global.
+
+```salam
+mut frames := 0
+
+func main:
+    mut screen := basalam.NewTerminalScreen(MyRoot {})
+    screen.tick_ms = 100
+    screen.start()
+    defer screen.close()
+    screen.run_with_tick((): frames += 1 end)
+end
+```
+
+## Constants
+
+| Constant | Value | Meaning |
+| --- | --- | --- |
+| `PollMs` | `20` | The longest the input thread sleeps between checks. Bounds resize-detection and `stop()` latency. |
+| `EventCapacity` | `256` | Events the channel buffers before the input thread waits. |
+
+## The channel wrapper
+
+```salam
+pub struct Channel<T>:
+    pub ch: chan.Chan<T>
+    pub static func Open(capacity: i64): Channel<T>
+end
+```
+
+The specification calls for `events: chan Event`. Salam 0.4.9 and the 0.5.0 nightly cannot spell `chan.Chan<Event>` inside the package that declares `Event`, but they do resolve it through a generic parameter. `Channel<T>` exists only to name the channel; use `screen.events.ch` for the full `std/chan` API.
+
+## Running headless
+
+A screen that was never started has no input thread and never writes to the terminal, but everything else works. Post events, consume them, and inspect the buffer:
+
+```salam
+mut s := basalam.NewScreen(MyRoot {}, 20, 5)
+defer s.close()
+_ := s.post(basalam.Event { kind = basalam.KeyEvent, key = term.Decode("a") })
+s.stop()
+mut ev := basalam.Event {}
+until s.next_event(ev):
+    _ := s.dispatch(ev)
+end
+s.present()
+println s.buffer.row_text(0)
+```

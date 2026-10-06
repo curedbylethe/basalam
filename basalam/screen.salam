@@ -1,0 +1,427 @@
+/*
+ * basalam - a terminal user interface library for Salam (2026)
+ *
+ *   +-------------------+
+ *   |   B A S A L A M   |
+ *   +-------------------+
+ *
+ * Built on the Salam standard library's std/term package
+ * Salam: https://github.com/SalamLang/Salam
+ *
+ * Repository: https://github.com/curedbylethe/basalam
+ * License: GPL-3.0-or-later
+ *
+ */
+
+/*
+ * Screen: owns the terminal, the widget tree, the buffer, and the loop.
+ *
+ * Threading model. Exactly one part of basalam is asynchronous: input.
+ *
+ *     input thread                         main thread
+ *     ------------                         -----------
+ *     poll stdin (term.KeyReady)           screen.next_event(ev)  <- blocks
+ *     term.ReadKey -> KeyEvent  ----+      screen.dispatch(ev)    <- sync
+ *     term.Size changed -> Resize --+-->   (focused widget, then its
+ *     timer due -> TickEvent -------+       ancestors, see tree.salam)
+ *                    events channel        screen.present()       <- draw
+ *
+ * The input thread only produces Events onto the `events` channel. It never
+ * touches widgets, the tree, or the buffer, so none of those need locks.
+ * Everything that touches widgets happens on the main thread, one event at
+ * a time, which is why Widget.handle_event can be plain synchronous code.
+ *
+ * Stopping. stop() closes the channel. The input thread notices on its next
+ * poll (within PollMs) and exits; next_event drains what is left and then
+ * returns false. close() additionally joins the thread and restores the
+ * terminal. Applications call start() and immediately `defer
+ * screen.close()`, so the terminal is restored on every exit path.
+ *
+ * Headless use. Nothing here requires a terminal until start() is called.
+ * A screen that was never started still accepts post()ed events, dispatches
+ * them, and draws into its buffer; present() then skips terminal output.
+ * The integration tests drive the real channel and dispatch path this way.
+ *
+ * Resizing. On a ResizeEvent the screen resizes its buffer and gives the
+ * root widget the full terminal rect (fit_root). That is the only layout
+ * the core does: every other widget gets its bounds from the application
+ * via set_bounds until the layout engine (a later epic) exists.
+ *
+ * Deliberate gaps: no key bindings (the application decides what Tab or q
+ * mean; a keymap is a later epic), no vim-style modes (an application
+ * concern), no output diffing (see buffer.salam).
+ *
+ * Compiler workaround. The issue specifies `events: chan Event`. Salam
+ * 0.4.9 and the 0.5.0 nightly cannot spell chan.Chan<Event> inside the
+ * package that declares Event (the type argument does not resolve), but
+ * they do resolve it through a generic parameter. Channel<T> is therefore
+ * a one-field wrapper whose only job is to name chan.Chan<T>;
+ * screen.events.ch is the std/chan channel itself.
+ */
+
+package basalam
+
+import chan
+import mem
+import sync
+import term
+
+@en "PollMs"
+/// How often, at most, the input thread wakes when no key arrives, in
+/// milliseconds. Bounds the latency of resize detection and of stop().
+pub const PollMs := 20
+
+@en "EventCapacity"
+/// How many events the channel buffers before the input thread waits.
+pub const EventCapacity := 256
+
+// What the input thread needs, copied onto the heap because spawn() passes
+// exactly one pointer. The channel copy shares the screen's channel.
+struct InputContext:
+    pub events: Channel<Event>
+    pub tick_ms: int = 0
+end
+
+@en "Channel"
+/// A thin wrapper that names a std/chan channel of T (see the module
+/// comment for why it exists). Use `ch` for everything.
+pub struct Channel<T>:
+    @en "ch"
+    /// The underlying std/chan channel.
+    pub ch: chan.Chan<T>
+
+    @en "Open"
+    /// Creates an open channel buffering up to capacity values.
+    pub static func Open(capacity: i64): Channel<T>:
+        mut c := chan.Chan {} as chan.Chan<T>
+        c.init(capacity)
+        ret Channel { ch = c }
+    end
+end
+
+@en "Screen"
+/// The terminal session: widget tree, back buffer, focus, and the event
+/// loop. Create it with NewScreen.
+pub struct Screen:
+    @en "events"
+    /// The channel the input thread sends events on and next_event reads.
+    pub events: Channel<Event>
+
+    @en "root"
+    /// The root widget (ID 0). It always covers the whole screen.
+    pub root: dyn Widget
+
+    @en "focused"
+    /// The widget that currently receives events first.
+    pub focused: dyn Widget
+
+    @en "buffer"
+    /// The back buffer widgets draw into.
+    pub buffer: Buffer = Buffer {}
+
+    @en "running"
+    /// True from start() (or the first run) until stop().
+    pub running: bool = false
+
+    @en "tree"
+    /// The widget registry. Prefer add() and widget() to editing it.
+    pub tree: Tree = Tree {}
+
+    @en "tick_ms"
+    /// Interval of TickEvents in milliseconds; 0 (the default) sends none.
+    /// Set it before start().
+    pub tick_ms: int = 0
+
+    @en "mouse"
+    /// When true, start() enables mouse reporting and clicks arrive as
+    /// MouseEvents. Set it before start().
+    pub mouse: bool = false
+
+    @en "dirty"
+    /// True when the next present() has something new to show. Set by
+    /// consumed events, resizes, and widget changes the screen sees.
+    pub dirty: bool = true
+
+    attached: bool = false
+    closed: bool = false
+    input_thread: i64 = 0
+    term_state: term.TermState = term.TermState {}
+
+    @en "add"
+    /// Adds w under parent (an ID; RootId for top level) and returns the
+    /// new widget's ID. Widgets paint in the order they are added.
+    pub func add(parent: int, w: dyn Widget): int:
+        this.dirty = true
+        ret this.tree.add(parent, w)
+    end
+
+    @en "widget"
+    /// The widget with this ID (the root for an invalid ID).
+    pub func widget(id: int): dyn Widget:
+        ret this.tree.get(id)
+    end
+
+    @en "focused_id"
+    /// The ID of the widget that receives events first.
+    pub func focused_id(): int:
+        ret RootId
+    end
+
+    @en "fit_root"
+    /// Gives the root widget the whole buffer: (0, 0, width, height).
+    pub func fit_root():
+        this.root.set_bounds(this.buffer.area())
+        this.dirty = true
+    end
+
+    @en "resize"
+    /// Resizes the back buffer to width x height and refits the root.
+    pub func resize(width: int, height: int):
+        this.buffer.resize(width, height)
+        this.fit_root()
+    end
+
+    @en "dispatch"
+    /// Handles one event synchronously: a ResizeEvent first resizes the
+    /// screen, then the event goes to the focused widget and bubbles up
+    /// the tree. Returns true when a widget consumed it.
+    pub func dispatch(event: Event): bool:
+        if event.kind == ResizeEvent:
+            this.resize(event.width, event.height)
+        end
+        consumed := this.tree.dispatch(this.focused_id(), event) != NoWidget
+        if consumed:
+            this.dirty = true
+        end
+        ret consumed
+    end
+
+    @en "draw"
+    /// Renders every widget into the back buffer, in ID order (later
+    /// widgets paint over earlier ones). Each widget gets a copy of the
+    /// buffer clipped to its visible bounds, with `focused` set if it holds
+    /// the focus. Widgets with no visible area are skipped.
+    pub func draw():
+        this.buffer.clear()
+        area := this.buffer.area()
+        focus := this.focused_id()
+        repeat this.tree.count() in id:
+            w := this.tree.get(id)
+            b := w.bounds()
+            visible := b.intersection(area)
+            if not visible.is_empty():
+                mut view := this.buffer
+                view.clip = visible
+                view.focused = id == focus
+                w.render(view, b)
+            end
+        end
+    end
+
+    @en "present"
+    /// Draws and, once start() has attached the terminal, writes the frame
+    /// out. Clears `dirty`.
+    pub func present():
+        this.draw()
+        if this.attached:
+            this.buffer.flush()
+        end
+        this.dirty = false
+    end
+
+    @en "post"
+    /// Queues an event as if the input thread had produced it. Safe from
+    /// any thread. Returns false once the screen is stopped.
+    pub func post(event: Event): bool:
+        ret this.events.ch.send(event)
+    end
+
+    @en "next_event"
+    /// Waits for the next event and stores it in event. Returns false once
+    /// the screen has been stopped and every queued event was delivered.
+    /// The intended loop is: until screen.next_event(ev): ... end
+    pub func next_event(event &: Event): bool:
+        mut ok := true
+        got := this.events.ch.recv(ok)
+        if not ok:
+            this.running = false
+            ret false
+        end
+        event = got
+        ret true
+    end
+
+    @en "start"
+    /// Takes over the terminal: raw mode, alternate screen, hidden cursor,
+    /// mouse reporting if `mouse` is set, a buffer sized to the terminal,
+    /// and the input thread. Call `defer screen.close()` right after it.
+    pub func start():
+        if this.attached or this.closed:
+            ret
+        end
+        this.term_state = term.MakeRaw(term.StdinFd)
+        mut setup := term.SeqEnterAltScreen() + term.SeqHideCursor() + term.SeqClearScreen()
+        if this.mouse:
+            setup = setup + term.SeqEnableMouse()
+        end
+        term.Emit(setup)
+        this.attached = true
+        size := term.Size()
+        this.resize(size.cols, size.rows)
+        ctx := mem.Allocate(sizeof(InputContext) as u64) as InputContext*
+        ctx[0] = InputContext { events = this.events, tick_ms = this.tick_ms }
+        this.input_thread = spawn(input_loop, ctx)
+        this.running = true
+    end
+
+    @en "stop"
+    /// Ends the event loop: next_event returns false once the queue is
+    /// drained. Safe to call more than once and from a widget-free context
+    /// such as a tick callback.
+    pub func stop():
+        this.running = false
+        this.events.ch.close()
+    end
+
+    @en "close"
+    /// Stops the loop, restores the terminal exactly as start() found it,
+    /// waits for the input thread, and frees the screen's storage. Safe to
+    /// call more than once; meant for `defer`.
+    pub func close():
+        if this.closed:
+            ret
+        end
+        this.closed = true
+        this.stop()
+        if this.attached:
+            mut teardown := term.Reset + term.SeqShowCursor() + term.SeqExitAltScreen()
+            if this.mouse:
+                teardown = term.SeqDisableMouse() + teardown
+            end
+            term.Emit(teardown)
+            _ := term.Restore(this.term_state)
+            join(this.input_thread)
+            this.attached = false
+        end
+        this.events.ch.free()
+        this.tree.free()
+        this.buffer.free()
+    end
+
+    @en "run"
+    /// Runs the loop until stop(): present, then for every event dispatch
+    /// it and present again if anything changed. An unconsumed Ctrl+C
+    /// stops the loop, so a raw-mode program can always be left.
+    pub func run():
+        this.loop(false, (): ret end)
+    end
+
+    @en "run_with_tick"
+    /// Like run, and also calls on_tick on the main thread for every
+    /// TickEvent, before the tick is dispatched, then redraws. Ticks arrive
+    /// every tick_ms milliseconds; set tick_ms before start().
+    pub func run_with_tick(on_tick: func ()):
+        this.loop(true, on_tick)
+    end
+
+    func loop(ticking: bool, on_tick: func ()):
+        this.running = true
+        this.present()
+        mut ev := Event {}
+        until this.next_event(ev):
+            if ticking and ev.kind == TickEvent:
+                on_tick()
+                this.dirty = true
+            end
+            consumed := this.dispatch(ev)
+            if not consumed and ev.is_ctrl("c"):
+                this.stop()
+            end
+            if this.dirty:
+                this.present()
+            end
+        end
+    end
+end
+
+// The input thread. It owns nothing but its copy of the channel and polls
+// three sources: stdin (with a timeout, so it never blocks indefinitely),
+// the terminal size, and the tick timer. It exits when the channel is
+// closed, either noticed on a poll or because a send was refused.
+func input_loop(ctx: InputContext*):
+    c := ctx[0]
+    mem.Free(ctx as void*)
+    events := c.events
+    mut size := term.Size()
+    mut next_tick := sync.NowMs() + c.tick_ms
+    mut reading := true
+    until not events.ch.is_closed():
+        mut wait := PollMs
+        if c.tick_ms > 0:
+            left := (next_tick - sync.NowMs()) as int
+            if left < wait:
+                wait = left < 0 ? 0 : left
+            end
+        end
+        if reading:
+            if term.KeyReady(wait):
+                k := term.ReadKey()
+                if k.code == term.KeyEOF:
+                    // stdin is closed (or not a terminal): report it once,
+                    // then stop reading so the loop does not spin on it.
+                    reading = false
+                end
+                if not events.ch.send(key_event(k)):
+                    break
+                end
+            end
+        else:
+            sync.SleepMs(wait)
+        end
+        now := term.Size()
+        if now.cols != size.cols or now.rows != size.rows:
+            size = now
+            resized := Event { kind = ResizeEvent, width = now.cols, height = now.rows }
+            if not events.ch.send(resized):
+                break
+            end
+        end
+        if c.tick_ms > 0 and sync.NowMs() >= next_tick:
+            // Schedule from now, not from the missed deadline: a slow main
+            // thread gets one late tick, not a burst of catch-up ticks.
+            next_tick = sync.NowMs() + c.tick_ms
+            tick := Event { kind = TickEvent }
+            if not events.ch.send(tick):
+                break
+            end
+        end
+    end
+end
+
+// Wraps a key from term.ReadKey in an Event; mouse reports are decoded.
+func key_event(k: term.Key): Event:
+    if k.code == term.KeyMouse:
+        ret Event { kind = MouseEvent, key = k, mouse = term.DecodeMouse(k.raw) }
+    end
+    ret Event { kind = KeyEvent, key = k }
+end
+
+@en "NewScreen"
+/// Creates a screen of width x height cells with root as its root widget
+/// (ID 0, sized to the whole screen). Nothing touches the terminal until
+/// start(), which resizes the screen to the real terminal.
+pub func NewScreen(root: dyn Widget, width: int, height: int): Screen:
+    mut s := Screen {
+        events = Channel.Open(EventCapacity as i64) as Channel<Event>, root = root, focused = root,
+        tree = NewTree(root), buffer = NewBuffer(width, height)
+    }
+    s.fit_root()
+    ret s
+end
+
+@en "NewTerminalScreen"
+/// Creates a screen sized to the current terminal (term.Size()).
+pub func NewTerminalScreen(root: dyn Widget): Screen:
+    size := term.Size()
+    ret NewScreen(root, size.cols, size.rows)
+end

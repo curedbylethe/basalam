@@ -29,6 +29,16 @@ release builds on.
 - `Tree`: the widget registry with integer IDs (`RootId`, `NoWidget`),
   parent links, and `dispatch`, which offers an event to a widget and
   bubbles it up through its ancestors until one consumes it.
+- `Screen` with an asynchronous input thread and a synchronous main loop:
+  `NewScreen`, `NewTerminalScreen`, `start`, `stop`, `close`,
+  `next_event`, `dispatch`, `draw`, `present`, `post`, `run`,
+  `run_with_tick`, `add`, `widget`, `fit_root`, `resize`, and the
+  `tick_ms` and `mouse` options. Resize detection, tick events, mouse
+  decoding, and terminal restore on every exit path.
+- `Buffer.resize`, `Buffer.ansi`, and `Buffer.flush`: full-frame terminal
+  output through `std/term`.
+- `Channel<T>`, a wrapper that names `chan.Chan<T>` (compiler workaround).
+- Examples: `examples/hello.salam` and `examples/demo.salam`.
 - Project scaffolding: GPL-3.0 license, `Makefile`, golden-file test runner,
   GitHub Actions CI, and the Mintlify documentation site.
 

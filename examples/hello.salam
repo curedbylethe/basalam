@@ -1,0 +1,48 @@
+/*
+ * basalam - a terminal user interface library for Salam (2026)
+ *
+ *   +-------------------+
+ *   |   B A S A L A M   |
+ *   +-------------------+
+ *
+ * Built on the Salam standard library's std/term package
+ * Salam: https://github.com/SalamLang/Salam
+ *
+ * Repository: https://github.com/curedbylethe/basalam
+ * License: GPL-3.0-or-later
+ *
+ */
+
+// The smallest complete basalam program: one widget, the event loop, and a
+// clean exit on q.
+//
+//     salam build examples/hello.salam && ./hello
+
+import term
+
+include "../basalam/basalam.salam"
+
+struct Hello:
+    pub use basalam.BaseWidget
+
+    pub func render(buf: basalam.Buffer, bounds: basalam.Rect):
+        buf.put_str(2, 1, "Hello from basalam!", term.Sgr(term.StyleBold))
+        buf.put_str(2, 3, "Screen size: " + bounds.width + "x" + bounds.height, "")
+        buf.put_str(2, 4, "Press q to quit.", "")
+    end
+end
+
+func main:
+    mut screen := basalam.NewTerminalScreen(Hello {})
+    screen.start()
+    defer screen.close()
+
+    screen.present()
+    mut ev := basalam.Event {}
+    until screen.next_event(ev):
+        if not screen.dispatch(ev) and ev.is_char("q"):
+            screen.stop()
+        end
+        screen.present()
+    end
+end

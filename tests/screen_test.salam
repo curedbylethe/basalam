@@ -1,0 +1,205 @@
+/*
+ * basalam - a terminal user interface library for Salam (2026)
+ *
+ *   +-------------------+
+ *   |   B A S A L A M   |
+ *   +-------------------+
+ *
+ * Built on the Salam standard library's std/term package
+ * Salam: https://github.com/SalamLang/Salam
+ *
+ * Repository: https://github.com/curedbylethe/basalam
+ * License: GPL-3.0-or-later
+ *
+ */
+
+// Headless integration tests for Screen. No terminal is used:
+// the screen is never start()ed, so present() draws into the buffer without
+// writing to the terminal. Synthetic events go through the real events
+// channel (post / next_event / run_with_tick), the real dispatch path, and
+// the real draw path, and the tests assert on the resulting buffer.
+
+import testing
+import term
+
+include "../basalam/basalam.salam"
+
+mut ticks := 0
+
+// Root widget: draws a title on row 0 and counts the keys that bubble up
+// to it. Consumes "r".
+struct Frame:
+    pub use basalam.BaseWidget
+    pub title: str = ""
+    pub seen: int = 0
+
+    pub func handle_event(event: basalam.Event): bool:
+        if event.kind == basalam.KeyEvent:
+            this.seen += 1
+        end
+        ret event.is_char("r")
+    end
+
+    pub func render(buf: basalam.Buffer, bounds: basalam.Rect):
+        buf.put_str(bounds.x, bounds.y, this.title + " " + this.seen, "")
+    end
+end
+
+// A filled box of one character; consumes nothing.
+struct Block:
+    pub use basalam.BaseWidget
+    pub ch: str = "#"
+
+    pub func render(buf: basalam.Buffer, bounds: basalam.Rect):
+        buf.fill(bounds, this.ch, "")
+    end
+end
+
+func rect(x: int, y: int, w: int, h: int): basalam.Rect:
+    ret basalam.Rect { x = x, y = y, width = w, height = h }
+end
+
+func key(seq: str): basalam.Event:
+    ret basalam.Event { kind = basalam.KeyEvent, key = term.Decode(seq) }
+end
+
+func test_new_screen_fits_root():
+    mut s := basalam.NewScreen(Frame { title = "t" }, 20, 5)
+    defer s.close()
+    testing.AssertEqInt(s.buffer.width, 20)
+    testing.AssertEqInt(s.buffer.height, 5)
+    testing.AssertEqInt(s.root.bounds().width, 20)
+    testing.AssertEqInt(s.root.bounds().height, 5)
+    testing.AssertEqInt(s.tree.count(), 1)
+    testing.AssertFalse(s.running)
+end
+
+func test_events_flow_through_channel():
+    mut s := basalam.NewScreen(Frame { title = "app" }, 12, 3)
+    defer s.close()
+    testing.AssertTrue(s.post(key("a")))
+    testing.AssertTrue(s.post(key("r")))
+    testing.AssertTrue(s.post(basalam.Event { kind = basalam.TickEvent }))
+    s.stop()
+    testing.AssertFalse(s.post(key("late")))
+
+    mut ev := basalam.Event {}
+    mut kinds := ""
+    mut consumed := 0
+    until s.next_event(ev):
+        kinds = kinds + ev.kind
+        if s.dispatch(ev):
+            consumed += 1
+        end
+    end
+    testing.AssertEqStr(kinds, "114")
+    testing.AssertEqInt(consumed, 1)
+    testing.AssertFalse(s.next_event(ev))
+    s.present()
+    testing.AssertEqStr(s.buffer.row_text(0), "app 2       ")
+end
+
+func test_draw_order_and_clipping():
+    mut s := basalam.NewScreen(Frame { title = "z" }, 6, 3)
+    defer s.close()
+    a := s.add(basalam.RootId, Block { ch = "a" })
+    b := s.add(basalam.RootId, Block { ch = "b" })
+    // Partly off-screen: only the visible part is drawn.
+    c := s.add(basalam.RootId, Block { ch = "c" })
+    s.widget(a).set_bounds(rect(0, 1, 4, 2))
+    s.widget(b).set_bounds(rect(2, 1, 4, 1))
+    s.widget(c).set_bounds(rect(-2, 2, 3, 5))
+    s.present()
+    testing.AssertEqStr(s.buffer.row_text(0), "z 0   ")
+    // b was added after a, so it paints over a where they overlap.
+    testing.AssertEqStr(s.buffer.row_text(1), "aabbbb")
+    // c covers columns -2..0 and rows 2..6; only (0, 2) is on screen.
+    testing.AssertEqStr(s.buffer.row_text(2), "caaa  ")
+end
+
+func test_widget_clipped_to_own_bounds():
+    mut s := basalam.NewScreen(Frame { title = "" }, 8, 2)
+    defer s.close()
+    // A Frame whose title is longer than its 3-cell-wide bounds.
+    id := s.add(basalam.RootId, Frame { title = "overflow" })
+    s.widget(id).set_bounds(rect(2, 1, 3, 1))
+    s.present()
+    testing.AssertEqStr(s.buffer.row_text(1), "  ove   ")
+end
+
+func test_zero_size_widget_is_skipped():
+    mut s := basalam.NewScreen(Frame { title = "" }, 4, 1)
+    defer s.close()
+    id := s.add(basalam.RootId, Block { ch = "x" })
+    s.widget(id).set_bounds(rect(1, 0, 0, 1))
+    s.present()
+    testing.AssertEqStr(s.buffer.row_text(0), " 0  ")
+end
+
+func test_resize_event():
+    mut s := basalam.NewScreen(Frame { title = "r" }, 10, 4)
+    defer s.close()
+    resize := basalam.Event { kind = basalam.ResizeEvent, width = 30, height = 7 }
+    testing.AssertFalse(s.dispatch(resize))
+    testing.AssertEqInt(s.buffer.width, 30)
+    testing.AssertEqInt(s.buffer.height, 7)
+    testing.AssertEqInt(s.root.bounds().width, 30)
+    testing.AssertEqInt(s.root.bounds().height, 7)
+    testing.AssertTrue(s.dirty)
+    s.present()
+    testing.AssertFalse(s.dirty)
+    testing.AssertEqStr(s.buffer.row_text(6), "                              ")
+end
+
+func test_run_with_tick():
+    mut s := basalam.NewScreen(Frame { title = "run" }, 10, 2)
+    defer s.close()
+    ticks = 0
+    _ := s.post(basalam.Event { kind = basalam.TickEvent })
+    _ := s.post(key("x"))
+    _ := s.post(basalam.Event { kind = basalam.TickEvent })
+    // An unconsumed Ctrl+C ends run_with_tick without anyone calling stop().
+    _ := s.post(key("\x03"))
+    _ := s.post(key("y"))
+    s.run_with_tick((): ticks += 1 end)
+    testing.AssertEqInt(ticks, 2)
+    testing.AssertFalse(s.running)
+    // The last frame was drawn on the second tick: Frame counts keys it
+    // does not consume, which do not mark the screen dirty.
+    testing.AssertEqStr(s.buffer.row_text(0), "run 1     ")
+    // "y" was queued after Ctrl+C; the loop drains the queue before ending,
+    // so Frame saw x, Ctrl+C, and y.
+    s.present()
+    testing.AssertEqStr(s.buffer.row_text(0), "run 3     ")
+end
+
+func test_ansi_frame():
+    mut b := basalam.NewBuffer(3, 2)
+    defer b.free()
+    bold := term.Sgr(term.StyleBold)
+    b.put_str(0, 0, "ab", bold)
+    b.put_str(0, 1, "c", "")
+    out := b.ansi()
+    want := term.SeqMoveTo(1, 1) + term.Reset + bold + "ab" + term.Reset + " " + term.SeqMoveTo(2, 1) + "c  " + term.Reset
+    testing.AssertEqStr(out, want)
+end
+
+func test_close_is_idempotent():
+    mut s := basalam.NewScreen(Frame { title = "c" }, 4, 1)
+    s.close()
+    s.close()
+    testing.AssertFalse(s.running)
+end
+
+func main:
+    test_new_screen_fits_root()
+    test_events_flow_through_channel()
+    test_draw_order_and_clipping()
+    test_widget_clipped_to_own_bounds()
+    test_zero_size_widget_is_skipped()
+    test_resize_event()
+    test_run_with_tick()
+    test_ansi_frame()
+    test_close_is_idempotent()
+    ret testing.Summary()
+end

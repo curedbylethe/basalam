@@ -1,0 +1,173 @@
+/*
+ * basalam - a terminal user interface library for Salam (2026)
+ *
+ *   +-------------------+
+ *   |   B A S A L A M   |
+ *   +-------------------+
+ *
+ * Built on the Salam standard library's std/term package
+ * Salam: https://github.com/SalamLang/Salam
+ *
+ * Repository: https://github.com/curedbylethe/basalam
+ * License: GPL-3.0-or-later
+ *
+ */
+
+// basalam demo: a small interactive program that exercises the core.
+//
+//     make run          (or: salam build examples/demo.salam && ./demo)
+//
+// What it shows:
+//   - a root widget that draws a title bar and a status line;
+//   - placeholder panels positioned by the application with set_bounds,
+//     re-laid-out when the terminal is resized;
+//   - the event loop: the input thread produces events, this main loop
+//     consumes them with next_event and dispatches them synchronously;
+//   - tick events (once a second) driving a counter;
+//   - q (or Ctrl+C) quits, and `defer screen.close()` restores the terminal
+//     on every exit path.
+
+import term
+
+include "../basalam/basalam.salam"
+
+// Application state lives in globals: the main loop updates it and the
+// root widget reads it when drawing. (Salam cannot downcast a dyn widget,
+// so state the application changes from outside a widget is shared this
+// way or through events.)
+mut last_key := "none"
+mut seconds := 0
+
+// The root widget: a reverse-video title bar on the first row and a status
+// line on the last. It covers the whole screen and consumes nothing, so
+// unhandled keys reach the main loop.
+struct App:
+    pub use basalam.BaseWidget
+
+    pub func render(buf: basalam.Buffer, bounds: basalam.Rect):
+        bar := term.Sgr(term.StyleReverse)
+        top := basalam.Rect { x = bounds.x, y = bounds.y, width = bounds.width, height = 1 }
+        buf.fill(top, " ", bar)
+        buf.put_str(bounds.x + 1, bounds.y, "basalam " + basalam.Version + " demo", bar)
+        status := "last key: " + last_key + "  |  " + bounds.width + "x" + bounds.height + "  |  " + seconds + "s  |  q quits"
+        buf.put_str(bounds.x + 1, bounds.bottom() - 1, status, term.Sgr(term.StyleDim))
+    end
+end
+
+// A placeholder panel: a box with a label. Pressing Enter or Space while
+// it has the focus counts a press.
+struct Panel:
+    pub use basalam.BaseWidget
+    pub label: str = ""
+    pub presses: int = 0
+
+    pub func focusable(): bool:
+        ret true
+    end
+
+    pub func handle_event(event: basalam.Event): bool:
+        if event.is_key(term.KeyEnter) or event.is_key(term.KeySpace):
+            this.presses += 1
+            ret true
+        end
+        ret false
+    end
+
+    pub func render(buf: basalam.Buffer, bounds: basalam.Rect):
+        mut style := ""
+        if buf.focused:
+            style = term.Sgr(term.FgGreen) + term.Sgr(term.StyleBold)
+        end
+        draw_box(buf, bounds, style)
+        buf.put_str(bounds.x + 2, bounds.y, " " + this.label + " ", style)
+        buf.put_str(bounds.x + 2, bounds.y + 1, "presses: " + this.presses, "")
+    end
+end
+
+// Draws a single-line border around r.
+func draw_box(buf: basalam.Buffer, r: basalam.Rect, style: str):
+    if r.width < 2 or r.height < 2:
+        ret
+    end
+    right := r.right() - 1
+    bottom := r.bottom() - 1
+    repeat r.width in i:
+        buf.set(r.x + i, r.y, basalam.Cell { ch = "─", style = style })
+        buf.set(r.x + i, bottom, basalam.Cell { ch = "─", style = style })
+    end
+    repeat r.height in i:
+        buf.set(r.x, r.y + i, basalam.Cell { ch = "│", style = style })
+        buf.set(right, r.y + i, basalam.Cell { ch = "│", style = style })
+    end
+    buf.set(r.x, r.y, basalam.Cell { ch = "┌", style = style })
+    buf.set(right, r.y, basalam.Cell { ch = "┐", style = style })
+    buf.set(r.x, bottom, basalam.Cell { ch = "└", style = style })
+    buf.set(right, bottom, basalam.Cell { ch = "┘", style = style })
+end
+
+// A readable name for a key, for the status line.
+func describe(k: term.Key): str:
+    if k.code == term.KeyChar:
+        if k.ctrl:
+            ret "Ctrl+" + k.ch
+        end
+        ret k.ch
+    end
+    names := [term.KeyEnter, term.KeyTab, term.KeySpace, term.KeyBackspace, term.KeyEscape, term.KeyUp, term.KeyDown, term.KeyLeft, term.KeyRight]
+    labels := ["Enter", "Tab", "Space", "Backspace", "Esc", "Up", "Down", "Left", "Right"]
+    repeat len(names) in i:
+        if names[i] == k.code:
+            ret labels[i]
+        end
+    end
+    ret "key " + k.code
+end
+
+// The application's layout: two panels side by side between the title bar
+// and the status line. The core has no layout engine; this is the
+// "set_bounds directly" approach the core is designed for.
+func arrange(screen: basalam.Screen, left: int, right: int):
+    w := screen.buffer.width
+    h := screen.buffer.height - 3
+    half := w / 2
+    screen.widget(left).set_bounds(basalam.Rect { x = 1, y = 2, width = half - 1, height = h })
+    screen.widget(right).set_bounds(basalam.Rect { x = half + 1, y = 2, width = w - half - 2, height = h })
+end
+
+func main:
+    if not term.IsTTY(term.StdinFd) or not term.IsTerminal():
+        printerrln "demo: needs an interactive terminal"
+        ret 1
+    end
+
+    mut screen := basalam.NewTerminalScreen(App {})
+    screen.tick_ms = 1000
+    left := screen.add(basalam.RootId, Panel { label = "Left" })
+    right := screen.add(basalam.RootId, Panel { label = "Right" })
+
+    screen.start()
+    // From here on, every return path restores the terminal.
+    defer screen.close()
+
+    arrange(screen, left, right)
+    screen.present()
+
+    mut ev := basalam.Event {}
+    until screen.next_event(ev):
+        consumed := screen.dispatch(ev)
+        if ev.kind == basalam.ResizeEvent:
+            arrange(screen, left, right)
+        end
+        if ev.kind == basalam.TickEvent:
+            seconds += 1
+        end
+        if ev.kind == basalam.KeyEvent:
+            last_key = describe(ev.key)
+        end
+        if not consumed and (ev.is_char("q") or ev.is_ctrl("c")):
+            screen.stop()
+        end
+        screen.present()
+    end
+    ret 0
+end
