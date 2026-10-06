@@ -22,7 +22,7 @@
  *     ------------                         -----------
  *     poll stdin (term.KeyReady)           screen.next_event(ev)  <- blocks
  *     term.ReadKey -> KeyEvent  ----+      screen.dispatch(ev)    <- sync
- *     term.Size changed -> Resize --+-->   (focused widget, then its
+ *     term.Size changed -> Resize --+-->   (first widget, then its
  *     timer due -> TickEvent -------+       ancestors, see tree.salam)
  *                    events channel        screen.present()       <- draw
  *
@@ -49,6 +49,15 @@
  * (focus_next/prev) and spatial (focus_up/down/left/right, see
  * focus.salam) navigation are methods here; binding them to keys is the
  * application's job.
+ *
+ * Mouse routing. A decoded MouseEvent starts at the widget under the
+ * cursor instead of the focused one: hit_test finds the topmost widget
+ * (highest ID, i.e. last painted) whose bounds contain the cell, and the
+ * event bubbles up from there. If no widget contains it (a click outside
+ * the buffer, or an undecodable report) it starts at the focused widget
+ * like any other event. Routing never moves the focus: a click does not
+ * focus what it hits, because whether a click should focus is a widget
+ * and application decision, and it can call focus() itself.
  *
  * Resizing. On a ResizeEvent the screen resizes its buffer and gives the
  * root widget the full terminal rect (fit_root). That is the only layout
@@ -295,15 +304,44 @@ pub struct Screen:
         this.fit_root()
     end
 
+    @en "hit_test"
+    /// The ID of the widget drawn at cell (x, y), both 0-based, or
+    /// NoWidget when no widget covers it. Where widgets overlap, the one
+    /// painted last (the highest ID) wins, so a child beats its parent and
+    /// a later sibling beats an earlier one: the result is whatever the
+    /// user sees on that cell. Widgets with empty bounds never match.
+    pub func hit_test(x: int, y: int): int:
+        p := Point { x = x, y = y }
+        mut id := this.tree.count() - 1
+        until id >= 0:
+            if this.tree.get(id).bounds().contains(p):
+                ret id
+            end
+            id = id - 1
+        end
+        ret NoWidget
+    end
+
     @en "dispatch"
     /// Handles one event synchronously: a ResizeEvent first resizes the
-    /// screen, then the event goes to the focused widget and bubbles up
-    /// the tree. Returns true when a widget consumed it.
+    /// screen. A decoded MouseEvent then goes to the widget under the
+    /// cursor (see hit_test); every other event, and a mouse event with no
+    /// widget under it, goes to the focused widget. From that first widget
+    /// the event bubbles up the tree. Returns true when a widget consumed
+    /// it.
     pub func dispatch(event: Event): bool:
         if event.kind == ResizeEvent:
             this.resize(event.width, event.height)
         end
-        consumed := this.tree.dispatch(this.focused_id(), event) != NoWidget
+        mut from := this.focused_id()
+        if event.kind == MouseEvent and event.mouse.ok:
+            p := event.mouse_point()
+            hit := this.hit_test(p.x, p.y)
+            if hit != NoWidget:
+                from = hit
+            end
+        end
+        consumed := this.tree.dispatch(from, event) != NoWidget
         if consumed:
             this.dirty = true
         end
