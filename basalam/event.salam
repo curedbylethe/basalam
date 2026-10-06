@@ -26,6 +26,11 @@
  * as term.ReadKey returned it, and `mouse` is a term.MouseEvent from
  * term.DecodeMouse, so nothing about key decoding is reimplemented here.
  * Fields that do not apply to an event's kind keep their zero values.
+ *
+ * Mouse coordinates. term.DecodeMouse reports the terminal's own 1-based
+ * column and row. Everything else in basalam is 0-based (see rect.salam),
+ * and the conversion happens in exactly one place, mouse_point, so a
+ * widget never has to remember the off-by-one.
  */
 
 package basalam
@@ -76,6 +81,15 @@ pub struct Event:
     @en "height"
     /// The new terminal height in rows, for ResizeEvent.
     pub height: int = 0
+
+    @en "mouse_point"
+    /// The cell a MouseEvent happened on, as a 0-based Point like every
+    /// other coordinate in basalam. term.DecodeMouse keeps the terminal's
+    /// 1-based column and row, so this subtracts 1 from each. Only
+    /// meaningful for a MouseEvent whose `mouse.ok` is true.
+    pub func mouse_point(): Point:
+        ret Point { x = this.mouse.col - 1, y = this.mouse.row - 1 }
+    end
 
     @en "is_key"
     /// True for a KeyEvent whose key code is code (a term.Key* constant,
