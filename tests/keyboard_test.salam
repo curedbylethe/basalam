@@ -1,0 +1,96 @@
+/*
+ * basalam - a terminal user interface library for Salam (2026)
+ *
+ *   +-------------------+
+ *   |   B A S A L A M   |
+ *   +-------------------+
+ *
+ * Built on the Salam standard library's std/term package
+ * Salam: https://github.com/SalamLang/Salam
+ *
+ * Repository: https://github.com/curedbylethe/basalam
+ * License: GPL-3.0-or-later
+ *
+ */
+
+// Decode coverage for the keyboard path. Every sequence a terminal sends is
+// built with term.Decode from its exact bytes and wrapped in a basalam.Event,
+// so these tests prove the delegation from basalam to std/term decodes special
+// keys, function keys, and modifier flags correctly. No terminal is touched:
+// the screen is never start()ed and stdin is never read.
+
+import testing
+import term
+
+include "../basalam/basalam.salam"
+
+func key(seq: str): basalam.Event:
+    ret basalam.Event { kind = basalam.KeyEvent, key = term.Decode(seq) }
+end
+
+func test_escape_and_arrows():
+    esc := key("\x1b")
+    testing.AssertEqInt(esc.kind, basalam.KeyEvent)
+    testing.AssertEqInt(esc.key.code, term.KeyEscape)
+    testing.AssertEqInt(key("\x1b[A").key.code, term.KeyUp)
+    testing.AssertEqInt(key("\x1b[B").key.code, term.KeyDown)
+    testing.AssertEqInt(key("\x1b[C").key.code, term.KeyRight)
+    testing.AssertEqInt(key("\x1b[D").key.code, term.KeyLeft)
+    testing.AssertTrue(key("\x1b[A").is_key(term.KeyUp))
+end
+
+func test_navigation():
+    testing.AssertEqInt(key("\x1b[H").key.code, term.KeyHome)
+    testing.AssertEqInt(key("\x1b[F").key.code, term.KeyEnd)
+    testing.AssertEqInt(key("\x1b[2~").key.code, term.KeyInsert)
+    testing.AssertEqInt(key("\x1b[3~").key.code, term.KeyDelete)
+    testing.AssertEqInt(key("\x1b[5~").key.code, term.KeyPageUp)
+    testing.AssertEqInt(key("\x1b[6~").key.code, term.KeyPageDown)
+end
+
+func test_function_keys():
+    testing.AssertEqInt(key("\x1bOP").key.code, term.KeyF1)
+    // std/term only exports KeyF1; F5 and F12 are KeyF1 + 4 and KeyF1 + 11.
+    testing.AssertEqInt(key("\x1b[15~").key.code, term.KeyF1 + 4)
+    testing.AssertEqInt(key("\x1b[24~").key.code, term.KeyF1 + 11)
+end
+
+func test_modifiers():
+    shift_up := key("\x1b[1;2A")
+    testing.AssertEqInt(shift_up.key.code, term.KeyUp)
+    testing.AssertTrue(shift_up.key.shift)
+    testing.AssertFalse(shift_up.key.ctrl)
+    testing.AssertFalse(shift_up.key.alt)
+    ctrl_right := key("\x1b[1;5C")
+    testing.AssertEqInt(ctrl_right.key.code, term.KeyRight)
+    testing.AssertTrue(ctrl_right.key.ctrl)
+    alt_delete := key("\x1b[3;3~")
+    testing.AssertEqInt(alt_delete.key.code, term.KeyDelete)
+    testing.AssertTrue(alt_delete.key.alt)
+end
+
+func test_alt_char():
+    q := key("\x1bq")
+    testing.AssertEqInt(q.key.code, term.KeyChar)
+    testing.AssertEqStr(q.key.ch, "q")
+    testing.AssertTrue(q.key.alt)
+    testing.AssertFalse(q.is_char("q"))
+end
+
+func test_space_and_backspace():
+    space := key(" ")
+    testing.AssertEqInt(space.key.code, term.KeySpace)
+    testing.AssertEqStr(space.key.ch, " ")
+    testing.AssertEqInt(key("\x7f").key.code, term.KeyBackspace)
+    testing.AssertEqInt(key("\x08").key.code, term.KeyBackspace)
+end
+
+func main:
+    test_escape_and_arrows()
+    test_navigation()
+    test_function_keys()
+    test_modifiers()
+    test_alt_char()
+    test_space_and_backspace()
+    ret testing.Summary()
+end
