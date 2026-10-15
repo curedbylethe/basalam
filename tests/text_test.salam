@@ -237,6 +237,209 @@ func test_text_degenerate_bounds_do_not_panic():
     testing.AssertFalse(t.focusable())
 end
 
+// ---- AC1: static and dynamic text ------------------------------------
+
+func test_text_dynamic_counter_sequence():
+    mut b := basalam.NewBuffer(6, 1)
+    defer b.free()
+    mut t := basalam.NewText("9")
+    t.render(b, rect(0, 0, 6, 1))
+    testing.AssertEqStr(b.row_text(0), "9     ")
+    // A one-cell value becoming a two-cell one: the old text is fully gone.
+    t.set_text("10")
+    t.render(b, rect(0, 0, 6, 1))
+    testing.AssertEqStr(b.row_text(0), "10    ")
+    t.set_text("9")
+    t.render(b, rect(0, 0, 6, 1))
+    testing.AssertEqStr(b.row_text(0), "9     ")
+end
+
+// ---- AC2: alignment --------------------------------------------------
+
+func test_text_align_center_odd_slack_13_in_20():
+    mut b := basalam.NewBuffer(20, 1)
+    defer b.free()
+    mut t := basalam.NewText("thirteenchars")
+    t.set_align(basalam.Alignment.Center)
+    // free = 7, floor(7 / 2) = 3, so 3 left and the extra cell on the right.
+    t.render(b, rect(0, 0, 20, 1))
+    testing.AssertEqStr(b.row_text(0), "   thirteenchars    ")
+end
+
+func test_text_align_center_even_slack_12_in_20():
+    mut b := basalam.NewBuffer(20, 1)
+    defer b.free()
+    mut t := basalam.NewText("abcdefghijkl")
+    t.set_align(basalam.Alignment.Center)
+    // free = 8, symmetric.
+    t.render(b, rect(0, 0, 20, 1))
+    testing.AssertEqStr(b.row_text(0), "    abcdefghijkl    ")
+end
+
+func test_text_align_right_free_one_and_center_free_one():
+    mut b := basalam.NewBuffer(20, 1)
+    defer b.free()
+    mut t := basalam.NewText("abcdefghijklmnopqrs")
+    t.set_align(basalam.Alignment.Right)
+    // free = 1: the line sits one column in.
+    t.render(b, rect(0, 0, 20, 1))
+    testing.AssertEqStr(b.row_text(0), " abcdefghijklmnopqrs")
+    t.set_align(basalam.Alignment.Center)
+    // free = 1 centers to floor(1 / 2) = 0, the same as left.
+    t.render(b, rect(0, 0, 20, 1))
+    testing.AssertEqStr(b.row_text(0), "abcdefghijklmnopqrs ")
+end
+
+func test_text_align_center_every_wrapped_line():
+    mut b := basalam.NewBuffer(12, 5)
+    defer b.free()
+    mut t := basalam.NewText("abcdefghij\nabcdefghijkl\nabcdefgh\nabcdefghijkl\nabcde")
+    t.set_align(basalam.Alignment.Center)
+    t.render(b, rect(0, 0, 12, 5))
+    // Artifact: lines of 10, 12, 8, 12, 5 in a 12-cell box give pads
+    // 1, 0, 2, 0, 3 (the 5-cell line has free 7, padded 3 | 4).
+    testing.AssertEqStr(b.row_text(0), " abcdefghij ")
+    testing.AssertEqStr(b.row_text(1), "abcdefghijkl")
+    testing.AssertEqStr(b.row_text(2), "  abcdefgh  ")
+    testing.AssertEqStr(b.row_text(3), "abcdefghijkl")
+    testing.AssertEqStr(b.row_text(4), "   abcde    ")
+end
+
+func test_text_align_overwide_clips_first_cells():
+    mut b := basalam.NewBuffer(4, 1)
+    defer b.free()
+    mut t := basalam.NewText("abcdefgh")
+    t.set_wrap(basalam.WrapMode.None)
+    // Artifact: len >= W puts offset = 0 for every alignment, so left, right,
+    // and center all show the same first W cells (never the tail).
+    t.render(b, rect(0, 0, 4, 1))
+    testing.AssertEqStr(b.row_text(0), "abcd")
+    t.set_align(basalam.Alignment.Right)
+    t.render(b, rect(0, 0, 4, 1))
+    testing.AssertEqStr(b.row_text(0), "abcd")
+    t.set_align(basalam.Alignment.Center)
+    t.render(b, rect(0, 0, 4, 1))
+    testing.AssertEqStr(b.row_text(0), "abcd")
+end
+
+// ---- AC3: style ------------------------------------------------------
+
+func test_text_style_foreground_and_background():
+    mut b := basalam.NewBuffer(4, 1)
+    defer b.free()
+    red := term.Sgr(term.FgRed)
+    mut t := basalam.NewText("hi")
+    t.set_style(red)
+    t.render(b, rect(0, 0, 4, 1))
+    testing.AssertEqStr(b.get(0, 0).style, red)
+    testing.AssertEqStr(b.get(1, 0).style, red)
+    // The right-edge padding cell carries the style too.
+    testing.AssertEqStr(b.get(3, 0).style, red)
+
+    mut b2 := basalam.NewBuffer(4, 1)
+    defer b2.free()
+    blue := term.Sgr(term.BgBlue)
+    mut t2 := basalam.NewText("hi")
+    t2.set_style(blue)
+    t2.render(b2, rect(0, 0, 4, 1))
+    testing.AssertEqStr(b2.get(0, 0).style, blue)
+    testing.AssertEqStr(b2.get(2, 0).ch, " ")
+    testing.AssertEqStr(b2.get(2, 0).style, blue)
+end
+
+func test_text_style_padding_on_wrapped_row():
+    mut b := basalam.NewBuffer(5, 2)
+    defer b.free()
+    bold := term.Sgr(term.StyleBold)
+    mut t := basalam.NewText("ab cde")
+    t.set_style(bold)
+    t.render(b, rect(0, 0, 5, 2))
+    // Row 0 holds "ab" then blank padding cells the glyphs never touch.
+    testing.AssertEqStr(b.row_text(0), "ab   ")
+    testing.AssertEqStr(b.row_text(1), "cde  ")
+    testing.AssertEqStr(b.get(4, 0).style, bold)
+    testing.AssertEqStr(b.get(4, 1).style, bold)
+end
+
+func test_text_ansi_frame_carries_style():
+    mut b := basalam.NewBuffer(4, 1)
+    defer b.free()
+    bold := term.Sgr(term.StyleBold)
+    mut t := basalam.NewText("hi")
+    t.set_style(bold)
+    t.render(b, rect(0, 0, 4, 1))
+    want := term.SeqMoveTo(1, 1) + term.Reset + bold + "hi  " + term.Reset
+    testing.AssertEqStr(b.ansi(), want)
+end
+
+// ---- AC4: wrapping within bounds -------------------------------------
+
+func test_text_render_wrapped_rows():
+    mut b := basalam.NewBuffer(9, 2)
+    defer b.free()
+    mut t := basalam.NewText("the quick brown fox")
+    t.render(b, rect(0, 0, 9, 2))
+    testing.AssertEqStr(b.row_text(0), "the quick")
+    testing.AssertEqStr(b.row_text(1), "brown fox")
+    // No emitted row exceeds the box width.
+    testing.AssertTrue(term.Width(b.row_text(0)) <= 9)
+    testing.AssertTrue(term.Width(b.row_text(1)) <= 9)
+end
+
+func test_text_render_clips_taller_content():
+    mut b := basalam.NewBuffer(3, 4)
+    defer b.free()
+    mut t := basalam.NewText("one two three")
+    // Wrapped at 3 this is one / two / three; the box is two rows tall.
+    t.render(b, rect(0, 0, 3, 2))
+    testing.AssertEqStr(b.row_text(0), "one")
+    testing.AssertEqStr(b.row_text(1), "two")
+    // Rows below the box are untouched (the box was filled, not the buffer).
+    testing.AssertEqStr(b.row_text(2), "   ")
+    testing.AssertEqStr(b.row_text(3), "   ")
+end
+
+func test_text_wrap_none_does_not_spill():
+    mut b := basalam.NewBuffer(6, 1)
+    defer b.free()
+    // Screen hands each widget a buffer clipped to its bounds; model that so
+    // the cell just outside the box is the buffer's untouched default.
+    b.clip = rect(0, 0, 4, 1)
+    mut t := basalam.NewText("abcdefgh")
+    t.set_wrap(basalam.WrapMode.None)
+    t.render(b, rect(0, 0, 4, 1))
+    // Exactly the first 4 codepoints; outside the box stays buffer default.
+    testing.AssertEqStr(b.row_text(0), "abcd  ")
+    testing.AssertEqStr(b.get(4, 0).ch, " ")
+    testing.AssertEqStr(b.get(4, 0).style, "")
+    testing.AssertEqStr(b.get(5, 0).style, "")
+end
+
+// ---- AC5: preferred size ---------------------------------------------
+
+func test_text_preferred_single_line():
+    t := basalam.NewText("hi")
+    r := t.preferred_size(10)
+    testing.AssertEqInt(r.width, 2)
+    testing.AssertEqInt(r.height, 1)
+    testing.AssertEqInt(t.preferred_width(), 2)
+end
+
+func test_text_preferred_explicit_newlines():
+    t := basalam.NewText("hi\nthere\nx")
+    r := t.preferred_size(0)
+    testing.AssertEqInt(r.width, 5)
+    testing.AssertEqInt(r.height, 3)
+    testing.AssertEqInt(t.preferred_width(), 5)
+end
+
+func test_text_preferred_unbounded_negative():
+    t := basalam.NewText("aaa\nbbbbb")
+    r := t.preferred_size(-3)
+    testing.AssertEqInt(r.width, 5)
+    testing.AssertEqInt(r.height, 2)
+end
+
 func main:
     test_wrap_word_boundary()
     test_wrap_consumes_break_space()
@@ -259,5 +462,20 @@ func main:
     test_text_clips_lines_taller_than_box()
     test_text_preferred_size_and_width()
     test_text_degenerate_bounds_do_not_panic()
+    test_text_dynamic_counter_sequence()
+    test_text_align_center_odd_slack_13_in_20()
+    test_text_align_center_even_slack_12_in_20()
+    test_text_align_right_free_one_and_center_free_one()
+    test_text_align_center_every_wrapped_line()
+    test_text_align_overwide_clips_first_cells()
+    test_text_style_foreground_and_background()
+    test_text_style_padding_on_wrapped_row()
+    test_text_ansi_frame_carries_style()
+    test_text_render_wrapped_rows()
+    test_text_render_clips_taller_content()
+    test_text_wrap_none_does_not_spill()
+    test_text_preferred_single_line()
+    test_text_preferred_explicit_newlines()
+    test_text_preferred_unbounded_negative()
     ret testing.Summary()
 end
