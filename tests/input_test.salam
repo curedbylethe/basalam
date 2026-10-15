@@ -1,0 +1,419 @@
+/*
+ * basalam - a terminal user interface library for Salam (2026)
+ *
+ *   +-------------------+
+ *   |   B A S A L A M   |
+ *   +-------------------+
+ *
+ * Built on the Salam standard library's std/term package
+ * Salam: https://github.com/SalamLang/Salam
+ *
+ * Repository: https://github.com/curedbylethe/basalam
+ * License: GPL-3.0-or-later
+ *
+ */
+
+// Tests for the Input widget: the frozen defaults, the key table
+// (printable and space append, backspace splices a codepoint, enter is
+// consumed, everything else bubbles), the value getter and setters, the
+// tail-anchored stateless render (value or placeholder, styled cursor cell,
+// codepoint counts), the overflow window, and the screen-level focus gating
+// that routes keys to the input only while it holds the focus. Keys are
+// built with term.Decode from the exact bytes a terminal sends, or as a
+// literal term.Key code for specials. SGR strings are compared as produced
+// by term.Sgr, never hand-written.
+
+import testing
+import term
+
+include "../basalam/basalam.salam"
+
+// A focusable widget that consumes nothing, so it can steal the focus from
+// the input.
+struct Sink:
+    pub use basalam.BaseWidget
+
+    pub func focusable(): bool:
+        ret true
+    end
+end
+
+func rect(x: int, y: int, w: int, h: int): basalam.Rect:
+    ret basalam.Rect { x = x, y = y, width = w, height = h }
+end
+
+func key(seq: str): basalam.Event:
+    ret basalam.Event { kind = basalam.KeyEvent, key = term.Decode(seq) }
+end
+
+func special(code: int): basalam.Event:
+    ret basalam.Event { kind = basalam.KeyEvent, key = term.Key { code = code } }
+end
+
+// ---- Defaults ---------------------------------------------------------
+
+func test_defaults():
+    mut e := basalam.NewInput()
+    testing.AssertTrue(e.focusable())
+    testing.AssertEqStr(e.value(), "")
+    testing.AssertEqStr(e.placeholder, "")
+    testing.AssertEqStr(e.style, "")
+    testing.AssertEqStr(e.cursor_style, "")
+    testing.AssertEqStr(e.placeholder_style, "")
+end
+
+// ---- Editing (AC2) ----------------------------------------------------
+
+func test_editing_append_printable():
+    mut e := basalam.NewInput()
+    testing.AssertTrue(e.handle_event(key("a")))
+    testing.AssertEqStr(e.value(), "a")
+    testing.AssertTrue(e.handle_event(key("b")))
+    testing.AssertEqStr(e.value(), "ab")
+end
+
+func test_editing_space_wire_shape():
+    mut e := basalam.NewInput()
+    // A space on the wire is KeySpace, not KeyChar (G4).
+    testing.AssertTrue(e.handle_event(key(" ")))
+    testing.AssertEqStr(e.value(), " ")
+    // The literal form appends the same way.
+    testing.AssertTrue(e.handle_event(special(term.KeySpace)))
+    testing.AssertEqStr(e.value(), "  ")
+end
+
+func test_editing_backspace_sequence():
+    mut e := basalam.NewInput()
+    e.set_value("ab")
+    testing.AssertTrue(e.handle_event(special(term.KeyBackspace)))
+    testing.AssertEqStr(e.value(), "a")
+    testing.AssertTrue(e.handle_event(special(term.KeyBackspace)))
+    testing.AssertEqStr(e.value(), "")
+    // One extra press at the start stays consumed and changes nothing.
+    testing.AssertTrue(e.handle_event(special(term.KeyBackspace)))
+    testing.AssertEqStr(e.value(), "")
+end
+
+func test_editing_enter_consumed():
+    mut e := basalam.NewInput()
+    e.set_value("hi")
+    testing.AssertTrue(e.handle_event(key("\r")))
+    testing.AssertEqStr(e.value(), "hi")
+end
+
+func test_editing_unhandled_keys_bubble():
+    mut e := basalam.NewInput()
+    // Tab, escape, arrow, delete, home: not consumed, so they bubble on.
+    testing.AssertFalse(e.handle_event(key("\t")))
+    testing.AssertFalse(e.handle_event(key("\x1b")))
+    testing.AssertFalse(e.handle_event(key("\x1b[A")))
+    testing.AssertFalse(e.handle_event(key("\x1b[3~")))
+    testing.AssertFalse(e.handle_event(key("\x1b[H")))
+    testing.AssertFalse(e.handle_event(basalam.Event { kind = basalam.MouseEvent }))
+    testing.AssertEqStr(e.value(), "")
+end
+
+// ---- Getter and setters (AC6) -----------------------------------------
+
+func test_getter_and_setters():
+    mut e := basalam.NewInput()
+    e.set_value("hello")
+    testing.AssertEqStr(e.value(), "hello")
+    e.set_value("")
+    testing.AssertEqStr(e.value(), "")
+    e.set_placeholder("name")
+    testing.AssertEqStr(e.value(), "")
+end
+
+// ---- Render (AC1, AC3) ------------------------------------------------
+
+func test_render_value_unfocused():
+    mut b := basalam.NewBuffer(16, 1)
+    defer b.free()
+    mut e := basalam.NewInput()
+    e.set_value("hello")
+    e.render(b, rect(0, 0, 16, 1))
+    testing.AssertEqStr(b.get(0, 0).ch, "h")
+    testing.AssertEqStr(b.get(4, 0).ch, "o")
+    testing.AssertEqStr(b.get(5, 0).ch, " ")
+    testing.AssertEqStr(b.row_text(0), "hello           ")
+    // The background fill carries the base style; nothing is reverse while
+    // unfocused.
+    testing.AssertEqStr(b.get(15, 0).style, "")
+    mut reversed := false
+    repeat 16 in x:
+        if b.get(x, 0).style == term.Sgr(term.StyleReverse):
+            reversed = true
+        end
+    end
+    testing.AssertFalse(reversed)
+end
+
+func test_render_cursor_default():
+    reverse := term.Sgr(term.StyleReverse)
+    mut e := basalam.NewInput()
+    e.set_value("hello")
+    mut b := basalam.NewBuffer(16, 1)
+    defer b.free()
+    b.focused = true
+    e.render(b, rect(0, 0, 16, 1))
+    // The caret is past the last glyph, so the cursor cell is the blank at
+    // column 5, reverse video (G04).
+    testing.AssertEqStr(b.get(5, 0).ch, " ")
+    testing.AssertEqStr(b.get(5, 0).style, reverse)
+    testing.AssertEqStr(b.row_text(0), "hello           ")
+
+    // Empty content puts the cursor at column 0.
+    mut empty := basalam.NewInput()
+    mut b2 := basalam.NewBuffer(16, 1)
+    defer b2.free()
+    b2.focused = true
+    empty.render(b2, rect(0, 0, 16, 1))
+    testing.AssertEqStr(b2.get(0, 0).ch, " ")
+    testing.AssertEqStr(b2.get(0, 0).style, reverse)
+end
+
+func test_render_placeholder_default():
+    gray := term.Sgr(term.FgBlack + term.FgBright)
+    reverse := term.Sgr(term.StyleReverse)
+    mut e := basalam.NewInput()
+    e.set_placeholder("Name")
+    testing.AssertEqStr(e.value(), "")
+
+    mut b := basalam.NewBuffer(16, 1)
+    defer b.free()
+    e.render(b, rect(0, 0, 16, 1))
+    testing.AssertEqStr(b.row_text(0), "Name            ")
+    testing.AssertEqStr(b.get(0, 0).ch, "N")
+    testing.AssertEqStr(b.get(0, 0).style, gray)
+    testing.AssertEqStr(b.get(3, 0).style, gray)
+    testing.AssertEqStr(b.get(4, 0).style, "")
+
+    mut b2 := basalam.NewBuffer(16, 1)
+    defer b2.free()
+    b2.focused = true
+    e.render(b2, rect(0, 0, 16, 1))
+    // The cursor cell keeps the placeholder glyph but drops the grey (G02).
+    testing.AssertEqStr(b2.get(0, 0).ch, "N")
+    testing.AssertEqStr(b2.get(0, 0).style, reverse)
+    testing.AssertEqStr(b2.get(1, 0).style, gray)
+    testing.AssertEqStr(e.value(), "")
+end
+
+func test_render_themed_styles():
+    base := term.Sgr(term.FgBlack) + term.Sgr(term.BgWhite)
+    gray := term.Sgr(term.FgBlack + term.FgBright)
+    reverse := term.Sgr(term.StyleReverse)
+    mut b := basalam.NewBuffer(16, 1)
+    defer b.free()
+    mut e := basalam.NewInput()
+    e.style = base
+    e.set_value("hi")
+    e.render(b, rect(0, 0, 16, 1))
+    testing.AssertEqStr(b.get(0, 0).style, base)
+    testing.AssertEqStr(b.get(15, 0).style, base)
+    testing.AssertFalse(b.get(2, 0).style == reverse)
+    b.focused = true
+    e.render(b, rect(0, 0, 16, 1))
+    testing.AssertEqStr(b.get(0, 0).style, base)
+    testing.AssertEqStr(b.get(2, 0).style, base + reverse)
+
+    // Placeholder and cursor compose on top of the base style.
+    mut p := basalam.NewInput()
+    p.style = base
+    p.set_placeholder("Name")
+    p.render(b, rect(0, 0, 16, 1))
+    testing.AssertEqStr(b.get(0, 0).ch, "N")
+    testing.AssertEqStr(b.get(0, 0).style, base + reverse)
+    testing.AssertEqStr(b.get(1, 0).style, base + gray)
+    testing.AssertEqStr(b.get(4, 0).style, base)
+end
+
+// ---- Cursor tracking (AC5) --------------------------------------------
+
+func test_cursor_tracks_value_and_backspace():
+    reverse := term.Sgr(term.StyleReverse)
+    mut e := basalam.NewInput()
+    mut b := basalam.NewBuffer(16, 1)
+    defer b.free()
+    b.focused = true
+    e.set_value("ab")
+    e.render(b, rect(0, 0, 16, 1))
+    testing.AssertEqStr(b.get(2, 0).style, reverse)
+    testing.AssertTrue(e.handle_event(special(term.KeyBackspace)))
+    e.render(b, rect(0, 0, 16, 1))
+    testing.AssertEqStr(b.get(1, 0).style, reverse)
+    testing.AssertTrue(e.handle_event(special(term.KeyBackspace)))
+    e.render(b, rect(0, 0, 16, 1))
+    testing.AssertEqStr(b.get(0, 0).style, reverse)
+end
+
+func test_render_overflow_wide_value():
+    mut e := basalam.NewInput()
+    e.set_value("abcdefghij")
+    mut b := basalam.NewBuffer(8, 1)
+    defer b.free()
+    // Unfocused: the last 8 cells.
+    e.render(b, rect(0, 0, 8, 1))
+    testing.AssertEqStr(b.row_text(0), "cdefghij")
+    // Focused: one cell reserved for the cursor, so the last 7 plus the
+    // cursor at column 7.
+    b.focused = true
+    e.render(b, rect(0, 0, 8, 1))
+    testing.AssertEqStr(b.row_text(0), "defghij ")
+    testing.AssertEqStr(b.get(7, 0).style, term.Sgr(term.StyleReverse))
+end
+
+func test_render_scroll_starts_at_boundary():
+    mut e := basalam.NewInput()
+    mut b := basalam.NewBuffer(8, 1)
+    defer b.free()
+    b.focused = true
+    // Focused at count == width: the first cell scrolls away.
+    e.set_value("abcdefgh")
+    e.render(b, rect(0, 0, 8, 1))
+    testing.AssertEqStr(b.row_text(0), "bcdefgh ")
+    // Unfocused at count == width + 1: the window starts one cell in.
+    b.focused = false
+    e.set_value("abcdefghi")
+    e.render(b, rect(0, 0, 8, 1))
+    testing.AssertEqStr(b.row_text(0), "bcdefghi")
+end
+
+func test_render_width5_focused():
+    mut e := basalam.NewInput()
+    e.set_value("hello")
+    mut b := basalam.NewBuffer(5, 1)
+    defer b.free()
+    b.focused = true
+    e.render(b, rect(0, 0, 5, 1))
+    testing.AssertEqStr(b.row_text(0), "ello ")
+    testing.AssertEqStr(b.get(4, 0).style, term.Sgr(term.StyleReverse))
+end
+
+func test_render_width1():
+    mut e := basalam.NewInput()
+    e.set_value("ab")
+    mut b := basalam.NewBuffer(1, 1)
+    defer b.free()
+    // Focused: the whole cell is the cursor.
+    b.focused = true
+    e.render(b, rect(0, 0, 1, 1))
+    testing.AssertEqStr(b.row_text(0), " ")
+    testing.AssertEqStr(b.get(0, 0).style, term.Sgr(term.StyleReverse))
+    // Unfocused: the last cell of the value.
+    b.focused = false
+    e.render(b, rect(0, 0, 1, 1))
+    testing.AssertEqStr(b.row_text(0), "b")
+end
+
+func test_render_width0_draws_nothing():
+    mut e := basalam.NewInput()
+    e.set_value("ab")
+    mut b := basalam.NewBuffer(2, 1)
+    defer b.free()
+    b.focused = true
+    e.render(b, rect(0, 0, 0, 1))
+    testing.AssertEqStr(b.row_text(0), "  ")
+end
+
+// ---- Focus gating at screen level (AC4) -------------------------------
+
+func test_screen_dispatch_reaches_focused_input():
+    mut s := basalam.NewScreen(basalam.BaseWidget {}, 24, 3)
+    defer s.close()
+    // Keep the dyn handle: it shares the box the screen stores, so after
+    // screen dispatch it renders the value the screen's copy appended
+    // (dyn has no downcast; a plain struct copy is not shared).
+    w := basalam.NewInput() as dyn basalam.Widget
+    id := s.add(basalam.RootId, w)
+    s.widget(id).set_bounds(rect(0, 0, 24, 1))
+    // The first focusable widget added receives the focus.
+    testing.AssertEqInt(s.focused_id(), id)
+    testing.AssertTrue(s.dispatch(key("a")))
+    mut probe := basalam.NewBuffer(24, 1)
+    defer probe.free()
+    w.render(probe, rect(0, 0, 24, 1))
+    testing.AssertEqStr(probe.get(0, 0).ch, "a")
+    testing.AssertEqStr(probe.get(1, 0).ch, " ")
+    s.present()
+    testing.AssertEqStr(s.buffer.get(0, 0).ch, "a")
+    testing.AssertEqStr(s.buffer.get(1, 0).style, term.Sgr(term.StyleReverse))
+end
+
+func test_screen_unfocused_input_does_not_consume():
+    mut s := basalam.NewScreen(basalam.BaseWidget {}, 24, 3)
+    defer s.close()
+    w := basalam.NewInput() as dyn basalam.Widget
+    inlet := s.add(basalam.RootId, w)
+    s.widget(inlet).set_bounds(rect(0, 0, 24, 1))
+    other := s.add(basalam.RootId, Sink {})
+    s.widget(other).set_bounds(rect(0, 1, 24, 1))
+    // Move the focus off the input.
+    testing.AssertTrue(s.focus(other))
+    testing.AssertFalse(s.dispatch(key("a")))
+    mut probe := basalam.NewBuffer(24, 1)
+    defer probe.free()
+    w.render(probe, rect(0, 0, 24, 1))
+    testing.AssertEqStr(probe.row_text(0), "                        ")
+    s.present()
+    testing.AssertEqStr(s.buffer.get(0, 0).ch, " ")
+    // Unfocused: no cursor cell is drawn anywhere.
+    mut reversed := false
+    repeat 24 in x:
+        if s.buffer.get(x, 0).style == term.Sgr(term.StyleReverse):
+            reversed = true
+        end
+    end
+    testing.AssertFalse(reversed)
+end
+
+// ---- Unicode ----------------------------------------------------------
+
+func test_unicode_codepoint_editing():
+    reverse := term.Sgr(term.StyleReverse)
+    mut e := basalam.NewInput()
+    mut b := basalam.NewBuffer(16, 1)
+    defer b.free()
+    b.focused = true
+    // One multibyte glyph is one codepoint: one append, one caret step.
+    testing.AssertTrue(e.handle_event(key("é")))
+    testing.AssertEqStr(e.value(), "é")
+    e.render(b, rect(0, 0, 16, 1))
+    testing.AssertEqStr(b.get(0, 0).ch, "é")
+    testing.AssertEqStr(b.get(1, 0).style, reverse)
+    // Two codepoints: the caret is at codepoint column 2.
+    testing.AssertTrue(e.handle_event(key("é")))
+    testing.AssertEqStr(e.value(), "éé")
+    e.render(b, rect(0, 0, 16, 1))
+    testing.AssertEqStr(b.get(2, 0).style, reverse)
+    // Backspace removes the whole codepoint, not one byte.
+    testing.AssertTrue(e.handle_event(special(term.KeyBackspace)))
+    testing.AssertEqStr(e.value(), "é")
+    testing.AssertTrue(e.handle_event(special(term.KeyBackspace)))
+    testing.AssertEqStr(e.value(), "")
+end
+
+func main:
+    test_defaults()
+    test_editing_append_printable()
+    test_editing_space_wire_shape()
+    test_editing_backspace_sequence()
+    test_editing_enter_consumed()
+    test_editing_unhandled_keys_bubble()
+    test_getter_and_setters()
+    test_render_value_unfocused()
+    test_render_cursor_default()
+    test_render_placeholder_default()
+    test_render_themed_styles()
+    test_cursor_tracks_value_and_backspace()
+    test_render_overflow_wide_value()
+    test_render_scroll_starts_at_boundary()
+    test_render_width5_focused()
+    test_render_width1()
+    test_render_width0_draws_nothing()
+    test_screen_dispatch_reaches_focused_input()
+    test_screen_unfocused_input_does_not_consume()
+    test_unicode_codepoint_editing()
+    ret testing.Summary()
+end
