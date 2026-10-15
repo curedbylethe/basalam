@@ -33,11 +33,12 @@
  * independent.
  *
  * Measurement. Cross-axis Pref reads the child's Widget.preferred_size once,
- * after the main-axis split, resolving x before y (R8). A child that cannot
- * measure (a container, or any widget using the BaseWidget default) reports
- * the negative sentinel, which fills the axis instead. max_width <= 0 is
- * never forwarded; that axis resolves to 0 with no call. Pref on a main axis
- * is reserved and acts as Fill.
+ * after the main-axis split, resolving x before y (R8). A Fixed request on a
+ * non-stretch cross axis is used directly instead, with no call. A child that
+ * cannot measure (a container, or any widget using the BaseWidget default)
+ * reports the negative sentinel, which fills the axis instead. max_width <= 0
+ * is never forwarded; that axis resolves to 0 with no call. Pref on a main
+ * axis is reserved and acts as Fill.
  *
  * Neighbours. rect.salam is the geometry these helpers build on: Point, Rect,
  * and the half-open rule. widget.salam owns set_bounds and preferred_size,
@@ -507,6 +508,24 @@ func _naturalHeight(child: dyn Widget, max_width: int, avail: int): int:
     ret _clampNeg(p.height)
 end
 
+// R7/R8 natural width on a non-stretch cross axis: a Fixed request is taken
+// directly, Fill and Pref both ask the child's preferred_size.
+func _crossWidth(child: dyn Widget, size: LayoutSize, max_width: int, avail: int): int:
+    if size.kind == SizeKind.Fixed:
+        ret _clampNeg(size.cells)
+    end
+    ret _naturalWidth(child, max_width, avail)
+end
+
+// R7/R8 natural height on a non-stretch cross axis, as _crossWidth for the y
+// axis (max_width is the resolved width).
+func _crossHeight(child: dyn Widget, size: LayoutSize, max_width: int, avail: int): int:
+    if size.kind == SizeKind.Fixed:
+        ret _clampNeg(size.cells)
+    end
+    ret _naturalHeight(child, max_width, avail)
+end
+
 // The prefix sum of lengths[0..index), offset by start.
 func _prefixTotal(lengths: Vector<int>, index: int, start: int): int:
     mut acc := start
@@ -610,12 +629,12 @@ func _arrangeLinear(content: Rect, items: Vector<LayoutSlot>, main_is_width: boo
         mut rect := Rect {}
         if main_is_width:
             if s.align_y != CrossAlign.Stretch:
-                n = _naturalHeight(s.child, box.width, box.height)
+                n = _crossHeight(s.child, s.height, box.width, box.height)
             end
             rect = Rect { x = box.x, y = box.y + PlaceAxisOffset(box.height, s.align_y, n), width = box.width, height = PlaceAxisSize(box.height, s.align_y, n) }
         else:
             if s.align_x != CrossAlign.Stretch:
-                n = _naturalWidth(s.child, box.width, box.width)
+                n = _crossWidth(s.child, s.width, box.width, box.width)
             end
             rect = Rect { x = box.x + PlaceAxisOffset(box.width, s.align_x, n), y = box.y, width = PlaceAxisSize(box.width, s.align_x, n), height = box.height }
         end
@@ -643,12 +662,12 @@ func _arrangeGrid(content: Rect, items: Vector<LayoutSlot>, rows: int, cols: int
             box := InsetRect(slot, s.margin)
             mut nw := 0
             if s.align_x != CrossAlign.Stretch:
-                nw = _naturalWidth(s.child, box.width, box.width)
+                nw = _crossWidth(s.child, s.width, box.width, box.width)
             end
             resolved := PlaceAxisSize(box.width, s.align_x, nw)
             mut nh := 0
             if s.align_y != CrossAlign.Stretch:
-                nh = _naturalHeight(s.child, resolved, box.height)
+                nh = _crossHeight(s.child, s.height, resolved, box.height)
             end
             rect := Rect { x = box.x + PlaceAxisOffset(box.width, s.align_x, nw), y = box.y + PlaceAxisOffset(box.height, s.align_y, nh), width = resolved, height = PlaceAxisSize(box.height, s.align_y, nh) }
             out.push(FitRect(rect, content))
