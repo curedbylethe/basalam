@@ -1,0 +1,275 @@
+/*
+ * basalam - a terminal user interface library for Salam (2026)
+ *
+ *   +-------------------+
+ *   |   B A S A L A M   |
+ *   +-------------------+
+ *
+ * Built on the Salam standard library's std/term package
+ * Salam: https://github.com/SalamLang/Salam
+ *
+ * Repository: https://github.com/curedbylethe/basalam
+ * License: GPL-3.0-or-later
+ *
+ */
+
+/*
+ * Layout: the pure box arithmetic behind the layout engine.
+ *
+ * Widgets never compute their own position. A layout pass (a later stage)
+ * walks the widget tree, hands each widget a finished rect through
+ * Widget.set_bounds, and fills a container's content box from a list of child
+ * slots. This file is the arithmetic that pass runs on: rectangle clipping,
+ * padding and margin, the main-axis split, grid track sizes, and single-axis
+ * alignment. Everything here is pure and static: the same inputs give the
+ * same rects, no widget state is read, and no measurement hook is called.
+ * Resolving a child's preferred size happens above this layer, so axis
+ * placement receives the natural size as a plain int.
+ *
+ * Neighbours. rect.salam is the geometry these helpers build on: Point, Rect,
+ * and the half-open rule. widget.salam owns set_bounds, the contract every
+ * rect below is destined for. screen.salam drives the pass. This module sits
+ * between them and depends on none of them beyond Rect.
+ *
+ * Rect normal form. Every rect handed to a widget is either non-empty
+ * (width > 0 and height > 0) or exactly 0x0. FitRect clamps to a box and,
+ * when the intersection is empty, returns a 0x0 rect at the nearest point
+ * inside that box, so negative dimensions never escape this file. An empty
+ * rect keeps a position, but the position carries no meaning; only the 0x0
+ * size does.
+ *
+ * Deliberately absent. Containers and their widgets, the per-child slot type,
+ * and the recursive pass belong to later stages; this file defines no Row,
+ * Column, Grid or Stack. No preferred-size calls: Pref is resolved by the
+ * caller and arrives here as an int. No flex weights or two-pass sizing, no
+ * gap between slots, no grid spanning, no z-order or focus-to-topmost.
+ */
+
+package basalam
+
+@en "CrossAlign"
+/// How a child is placed on the container's cross axis, the axis the
+/// container does not split. Stretch (the default) fills the whole axis;
+/// the others place a child of natural size inside the free space.
+pub enum CrossAlign:
+    @en "Start"
+    /// The child starts at the box's leading edge; free space follows it.
+    Start
+    @en "Center"
+    /// The child is centred; when the free space is odd the extra cell goes
+    /// right (Row) or bottom (Column).
+    Center
+    @en "End"
+    /// The child ends at the box's trailing edge; free space precedes it.
+    End
+    @en "Stretch"
+    /// The child fills the whole axis (the default); any size is ignored.
+    Stretch
+end
+
+@en "SizeKind"
+/// How a child resolves its size on one axis.
+pub enum SizeKind:
+    @en "Fill"
+    /// An equal share of whatever is left after the Fixed children (R5). On
+    /// a cross axis, Fill behaves like Pref (R8).
+    Fill
+    @en "Fixed"
+    /// Exactly `cells` long. A negative value clamps to 0.
+    Fixed
+    @en "Pref"
+    /// The child's preferred size, resolved by the caller. On a main axis it
+    /// is reserved and acts as Fill (R8).
+    Pref
+end
+
+@en "LayoutSize"
+/// A child's requested size on one axis. `cells` is read only when `kind` is
+/// Fixed.
+pub struct LayoutSize:
+    @en "kind"
+    /// How the size is resolved. Defaults to Fill.
+    pub kind: SizeKind = SizeKind.Fill
+
+    @en "cells"
+    /// The requested length, read only when kind is Fixed. Negative values
+    /// clamp to 0 when used.
+    pub cells: int = 0
+end
+
+@en "Insets"
+/// Four side lengths in cells, written top, right, bottom, left. Used for
+/// both a container's padding and a child's margin. Negatives clamp to 0 at
+/// use (InsetRect); NewInsets and UniformInsets clamp on construction.
+pub struct Insets:
+    @en "top"
+    /// Cells added above the content (padding) or reserved above the child
+    /// (margin).
+    pub top: int = 0
+
+    @en "right"
+    /// Cells added to the right of the content or reserved right of the
+    /// child.
+    pub right: int = 0
+
+    @en "bottom"
+    /// Cells added below the content or reserved below the child.
+    pub bottom: int = 0
+
+    @en "left"
+    /// Cells added to the left of the content or reserved left of the child.
+    pub left: int = 0
+end
+
+// Clamps v into [lo, hi]. When lo > hi the lower bound wins, matching the
+// nearest-point rule FitRect relies on.
+func _clamp(v: int, lo: int, hi: int): int:
+    mut out := v
+    if out > hi:
+        out = hi
+    end
+    if out < lo:
+        out = lo
+    end
+    ret out
+end
+
+// Clamps negatives to 0; used for every inset side and Fixed size.
+func _clampNeg(v: int): int:
+    if v < 0:
+        ret 0
+    end
+    ret v
+end
+
+@en "NewInsets"
+/// Builds an Insets from the four sides in top, right, bottom, left order,
+/// clamping each negative value to 0.
+pub func NewInsets(top: int, right: int, bottom: int, left: int): Insets:
+    ret Insets { top = _clampNeg(top), right = _clampNeg(right), bottom = _clampNeg(bottom), left = _clampNeg(left) }
+end
+
+@en "UniformInsets"
+/// Builds an Insets with the same value on all four sides, clamped to 0.
+pub func UniformInsets(v: int): Insets:
+    ret NewInsets(v, v, v, v)
+end
+
+@en "FitRect"
+/// The cells shared by r and box (R2). When they do not intersect, a 0x0 rect
+/// at the nearest point of box to r: the result is never empty in the
+/// negative sense, so a rect that leaves this function is either non-empty or
+/// exactly 0x0.
+pub func FitRect(r: Rect, box: Rect): Rect:
+    x0 := r.x > box.x ? r.x : box.x
+    y0 := r.y > box.y ? r.y : box.y
+    x1 := r.x + r.width < box.x + box.width ? r.x + r.width : box.x + box.width
+    y1 := r.y + r.height < box.y + box.height ? r.y + r.height : box.y + box.height
+    if x1 > x0 and y1 > y0:
+        ret Rect { x = x0, y = y0, width = x1 - x0, height = y1 - y0 }
+    end
+    ret Rect { x = _clamp(r.x, box.x, box.x + box.width), y = _clamp(r.y, box.y, box.y + box.height) }
+end
+
+@en "InsetRect"
+/// Insets r by i, then clips the result back inside r (R3, R4). Each side is
+/// first clamped to 0, so a negative padding or margin adds nothing. Padding
+/// larger than r gives an empty content box anchored inside r; the returned
+/// rect is never negative.
+pub func InsetRect(r: Rect, i: Insets): Rect:
+    left := _clampNeg(i.left)
+    top := _clampNeg(i.top)
+    right := _clampNeg(i.right)
+    bottom := _clampNeg(i.bottom)
+    raw := Rect { x = r.x + left, y = r.y + top, width = r.width - left - right, height = r.height - top - bottom }
+    ret FitRect(raw, r)
+end
+
+@en "SplitMain"
+/// Splits a main-axis length of `length` cells between sizes, in order (R5).
+/// A Fixed size takes max(0, cells); the rest is shared equally among the
+/// Fill and Pref entries, with the remainder going to the earliest of them,
+/// one cell each. When there are no Fill or Pref entries the leftover stays
+/// unused; the returned vector always has one entry per input size and sums
+/// to at most max(0, length).
+pub func SplitMain(length: int, sizes: Vector<LayoutSize>): Vector<int>:
+    mut fixed := 0
+    mut fills := 0
+    repeat sizes.len() in idx:
+        s := sizes.get(idx)
+        if s.kind == SizeKind.Fixed:
+            fixed = fixed + _clampNeg(s.cells)
+        else:
+            fills = fills + 1
+        end
+    end
+    share := _clampNeg(length - fixed)
+    mut base := 0
+    mut rem := 0
+    if fills > 0:
+        base = share / fills
+        rem = share % fills
+    end
+    out := Vector {} as Vector<int>
+    mut k := 0
+    repeat sizes.len() in idx:
+        s := sizes.get(idx)
+        if s.kind == SizeKind.Fixed:
+            out.push(_clampNeg(s.cells))
+        else:
+            extra := k < rem ? 1 : 0
+            out.push(base + extra)
+            k = k + 1
+        end
+    end
+    ret out
+end
+
+@en "TrackSizes"
+/// Divides a total length into n grid tracks (R9). Track k is floor(total/n)
+/// plus one for each of the earliest total mod n tracks, so the tracks sum to
+/// total exactly. A non-positive n gives an empty vector.
+pub func TrackSizes(total: int, n: int): Vector<int>:
+    out := Vector {} as Vector<int>
+    if n <= 0:
+        ret out
+    end
+    base := total / n
+    rem := total % n
+    repeat n in idx:
+        extra := idx < rem ? 1 : 0
+        out.push(base + extra)
+    end
+    ret out
+end
+
+@en "PlaceAxisSize"
+/// The length a child takes on one axis (R7). Stretch, or a non-positive
+/// avail, gives max(0, avail); otherwise the natural size clamped into
+/// [0, avail].
+pub func PlaceAxisSize(avail: int, align: CrossAlign, natural: int): int:
+    if align == CrossAlign.Stretch or avail <= 0:
+        ret _clampNeg(avail)
+    end
+    ret _clamp(natural, 0, avail)
+end
+
+@en "PlaceAxisOffset"
+/// The offset of a child from the box start on one axis (R7). Stretch, or a
+/// non-positive avail, gives 0; otherwise the natural size is clamped into
+/// [0, avail] and the free space is split per align: Start 0, Center
+/// floor(free/2) with the odd cell trailing, End free.
+pub func PlaceAxisOffset(avail: int, align: CrossAlign, natural: int): int:
+    if align == CrossAlign.Stretch or avail <= 0:
+        ret 0
+    end
+    n := _clamp(natural, 0, avail)
+    free := avail - n
+    if align == CrossAlign.End:
+        ret free
+    end
+    if align == CrossAlign.Center:
+        ret free / 2
+    end
+    ret 0
+end
