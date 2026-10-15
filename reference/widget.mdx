@@ -4,7 +4,7 @@ description: "The interface every widget satisfies, and the struct that supplies
 keywords: ["widget", "basewidget", "interface", "dyn", "render", "handle_event"]
 ---
 
-A widget is anything with the five methods of the `Widget` interface. Salam interfaces are structural: there is no `implements` keyword, so a struct that has the methods is a widget. A list, a button, and a panel are all `Widget`s, and the screen stores them side by side as `dyn basalam.Widget`.
+A widget is anything with the six methods of the `Widget` interface. Salam interfaces are structural: there is no `implements` keyword, so a struct that has the methods is a widget. A list, a button, and a panel are all `Widget`s, and the screen stores them side by side as `dyn basalam.Widget`.
 
 ## Widget
 
@@ -15,6 +15,7 @@ pub interface Widget:
     func focusable(): bool
     func bounds(): Rect
     func set_bounds(bounds: Rect)
+    func preferred_size(max_width: int): Rect
 end
 ```
 
@@ -49,7 +50,15 @@ func bounds(): Rect
 func set_bounds(bounds: Rect)
 ```
 
-`set_bounds` moves and resizes the widget; `bounds` returns the last rect set. Widgets never position themselves. Whoever owns the layout calls `set_bounds`: today that is your application, later it will be the layout engine.
+`set_bounds` moves and resizes the widget; `bounds` returns the last rect set. Widgets never position themselves. A [container](/reference/layout) calls `set_bounds` on its children, and the screen gives the root its bounds through `fit_root`; call `set_bounds` yourself only for widgets you place by hand.
+
+### preferred_size
+
+```salam
+func preferred_size(max_width: int): Rect
+```
+
+The size the widget wants at `max_width`, as a `Rect` at `(0, 0)`. `max_width <= 0` means unbounded. The [layout engine](/reference/layout) reads it to size a child on the cross axis: a widget that cannot measure returns a rect with negative width and height as a sentinel, and the engine fills the axis instead. The `BaseWidget` default does exactly that, so a container or placeholder fills the axis.
 
 ## Rules for implementations
 
@@ -82,6 +91,7 @@ end
 | `focusable` | Returns `false`. |
 | `bounds` | Returns `rect`. |
 | `set_bounds` | Stores the rect in `rect`. |
+| `preferred_size` | Returns the negative sentinel, so the layout engine fills the axis. |
 
 <ResponseField name="rect" type="Rect">Storage for `bounds` and `set_bounds`. An embedding widget can read it directly as `this.rect`.</ResponseField>
 
@@ -99,7 +109,7 @@ println w.bounds().width // 12: both copies share the widget
 ```
 
 <Warning>
-  Salam has no downcast from `dyn` back to the concrete type, and `dyn` values cannot be compared with `==`. Once a widget is stored as `dyn basalam.Widget`, you reach it only through the five interface methods.
+  Salam has no downcast from `dyn` back to the concrete type, and `dyn` values cannot be compared with `==`. Once a widget is stored as `dyn basalam.Widget`, you reach it only through the six interface methods.
 </Warning>
 
 ## Example

@@ -72,7 +72,7 @@ Every `ret` from that function, including early error returns, then restores the
 
 ## Resize
 
-When the terminal size changes, the input thread sends a `ResizeEvent` with the new `width` and `height`. `dispatch` resizes the buffer and gives the root widget the full rect before any widget sees the event. Widgets below the root keep their bounds; recompute them in your loop, as the demo does:
+When the terminal size changes, the input thread sends a `ResizeEvent` with the new `width` and `height`. `dispatch` resizes the buffer and gives the root widget the full rect before any widget sees the event. When the root is a [layout container](/reference/layout), that `set_bounds` call propagates down the tree, so a resize re-lays out every child in one pass. Hand-placed widgets keep their bounds; recompute those in your loop, as the demo does:
 
 ```salam
 consumed := screen.dispatch(ev)
@@ -82,7 +82,7 @@ end
 ```
 
 <Note>
-  The layout engine planned for a later release will do this recomputation for you. Until then the core gives you exactly one layout rule: the root fills the screen.
+  A container root re-lays out the tree on resize: `fit_root` gives the root its new bounds through `set_bounds`, which recurses through the containers. Hand-placed widgets are still your loop's job.
 </Note>
 
 ## Mouse routing

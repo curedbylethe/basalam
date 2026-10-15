@@ -128,7 +128,7 @@ Neither includes a border or padding, because the widget has none.
 
 ## Line functions
 
-`WrapText` and `MeasureText` are the pure rules `Text` draws through. They hold no state and know nothing about widgets; the layout engine will use the same two functions.
+`WrapText` and `MeasureText` are the pure rules `Text` draws through. They hold no state and know nothing about widgets; the [layout engine](/reference/layout) sizes text through them, by way of `Text.preferred_size`.
 
 ```salam
 pub func WrapText(text: str, width: int): Vector<str>
