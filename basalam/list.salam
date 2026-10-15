@@ -1,0 +1,214 @@
+/*
+ * basalam - a terminal user interface library for Salam (2026)
+ *
+ *   +-------------------+
+ *   |   B A S A L A M   |
+ *   +-------------------+
+ *
+ * Built on the Salam standard library's std/term package
+ * Salam: https://github.com/SalamLang/Salam
+ *
+ * Repository: https://github.com/curedbylethe/basalam
+ * License: GPL-3.0-or-later
+ *
+ */
+
+/*
+ * List: a single-selection, scrollable list widget.
+ *
+ * List holds a vector of strings, an index into it, and three style strings.
+ * It is focusable, so the screen routes keyboard events to it; its
+ * handle_event moves the selection down on j and up on k (clamped, no wrap)
+ * and invokes on_select with the selected index on enter. Every other key
+ * and every non-key event bubbles on.
+ *
+ * The selection is the state; the window is derived. Each frame render
+ * computes the minimal scroll window that keeps the selected row visible
+ * (_reveal), then draws one item per row, clipping each to the width with
+ * str.CharSubstr, so rows never wrap and never carry an ellipsis. The
+ * selected row is painted full width in the selection style: reverse video
+ * while the buffer reports focus, bright-on-black while it does not. An
+ * empty list draws blank cells in the base style.
+ *
+ * This file deliberately has no border or scrollbar, no arrow/Home/End or
+ * g/G keys, no wrap-around, no ellipsis or padding, no placeholder, no
+ * multi-select, and no mouse handling: the style is the opaque SGR string the
+ * caller builds with std/term, and placement in the parent's box belongs to
+ * whoever owns the layout.
+ */
+
+package basalam
+
+import str
+import term
+
+@en "List"
+/// A single-selection scrollable list of strings. It is focusable, so
+/// keyboard events reach it through the screen's focus dispatch: j moves the
+/// selection down and k up (clamped, no wrap), and enter calls on_select with
+/// the selected index. The selected row is drawn full width in the selection
+/// style, and the window scrolls by the minimum needed to keep it visible.
+pub struct List:
+    pub use BaseWidget
+
+    @en "style"
+    /// SGR escape sequence(s) for every row. "" means the terminal's
+    /// default style.
+    pub style: str = ""
+
+    @en "selected_style"
+    /// SGR escape sequence(s) for the selected row while focused.
+    /// "" means reverse video.
+    pub selected_style: str = ""
+
+    @en "selected_unfocused_style"
+    /// SGR escape sequence(s) for the selected row while unfocused.
+    /// "" means bright black on a black background.
+    pub selected_unfocused_style: str = ""
+
+    @en "on_select"
+    /// Called with the selected index when enter is pressed on a non-empty
+    /// list. The default does nothing.
+    pub on_select: func (int) = (i: int): end
+
+    items: Vector<str> = Vector {}
+    selected: int = 0
+    window_start: int = 0
+
+    @en "focusable"
+    /// Returns true: List is interactive, so the screen's focus dispatch
+    /// routes keyboard events to it.
+    pub func focusable(): bool:
+        ret true
+    end
+
+    @en "handle_event"
+    /// Reacts to a key press. j moves the selection down and k up, each
+    /// clamped to the ends (no wrap) and each always consumed even when the
+    /// list is empty. Enter is consumed and, on a non-empty list, calls
+    /// on_select with the selected index. Other events and keys are not
+    /// consumed, so they bubble on.
+    pub func handle_event(event: Event): bool:
+        if event.kind != KeyEvent:
+            ret false
+        end
+        if event.is_char("j"):
+            if this.items.len() > 0 and this.selected + 1 < this.items.len():
+                this.selected = this.selected + 1
+            end
+            this._reveal(this.bounds().height)
+            ret true
+        end
+        if event.is_char("k"):
+            if this.selected > 0:
+                this.selected = this.selected - 1
+            end
+            this._reveal(this.bounds().height)
+            ret true
+        end
+        if event.is_key(term.KeyEnter):
+            if this.items.len() > 0:
+                this.on_select(this.selected)
+            end
+            ret true
+        end
+        ret false
+    end
+
+    @en "selected_index"
+    /// The selected index, or -1 when the list is empty.
+    pub func selected_index(): int:
+        ret this.selected
+    end
+
+    @en "selected_item"
+    /// The selected string, or "" when the list is empty.
+    pub func selected_item(): str:
+        if this.selected < 0 or this.selected >= this.items.len():
+            ret ""
+        end
+        ret this.items.get(this.selected)
+    end
+
+    @en "render"
+    /// Draws the visible window into bounds: each row is filled full width
+    /// with the base style and then the item that occupies it is written,
+    /// clipped to the width, with the selected row in the selection style
+    /// (reverse video focused, bright-on-black unfocused). A degenerate box
+    /// draws nothing and never panics.
+    pub func render(buf: Buffer, bounds: Rect):
+        if bounds.is_empty():
+            ret
+        end
+        base := this.style
+        mut sel := this.selected_style
+        if sel == "":
+            sel = term.Sgr(term.StyleReverse)
+        end
+        mut unsel := this.selected_unfocused_style
+        if unsel == "":
+            unsel = term.Sgr(term.BgBlack + term.FgBright)
+        end
+        this._reveal(bounds.height)
+        n := this.items.len()
+        repeat bounds.height in y:
+            idx := this.window_start + y
+            mut rowStyle := base
+            if idx < n and idx == this.selected:
+                if buf.focused:
+                    rowStyle = sel
+                else:
+                    rowStyle = unsel
+                end
+            end
+            row := Rect { x = bounds.x, y = bounds.y + y, width = bounds.width, height = 1 }
+            buf.fill(row, " ", rowStyle)
+            if idx < n:
+                buf.put_str(bounds.x, bounds.y + y, str.CharSubstr(this.items.get(idx), 0, bounds.width), rowStyle)
+            end
+        end
+    end
+
+    func _reveal(h: int):
+        n := this.items.len()
+        if n == 0:
+            this.window_start = 0
+            ret
+        end
+        mut hh := h
+        if hh < 1:
+            hh = 1
+        end
+        mut s := this.window_start
+        if this.selected < s:
+            s = this.selected
+        end
+        low := this.selected - hh + 1
+        if low > s:
+            s = low
+        end
+        if s < 0:
+            s = 0
+        end
+        mut mx := n - hh
+        if mx < 0:
+            mx = 0
+        end
+        if s > mx:
+            s = mx
+        end
+        this.window_start = s
+    end
+end
+
+@en "NewList"
+/// Creates a List over items with the selection on the first item (or on
+/// nothing when items is empty) and the window at the top, using default
+/// styles and a no-op on_select.
+pub func NewList(items: Vector<str>): List:
+    mut sel := -1
+    if items.len() > 0:
+        sel = 0
+    end
+    ret List { items = items, selected = sel }
+end
