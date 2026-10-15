@@ -1,0 +1,186 @@
+/*
+ * basalam - a terminal user interface library for Salam (2026)
+ *
+ *   +-------------------+
+ *   |   B A S A L A M   |
+ *   +-------------------+
+ *
+ * Built on the Salam standard library's std/term package
+ * Salam: https://github.com/SalamLang/Salam
+ *
+ * Repository: https://github.com/curedbylethe/basalam
+ * License: GPL-3.0-or-later
+ *
+ */
+
+/*
+ * Input: a single-line text-entry widget.
+ *
+ * Input holds a value, a caret index into that value, and three style
+ * strings. It is focusable, so the screen routes keyboard events to it; its
+ * handle_event appends printable characters and spaces, drops the codepoint
+ * before the caret on backspace, and consumes enter without changing
+ * anything (submitting belongs to the host, which reads value()).
+ *
+ * Cells, not bytes. The value and the caret are counted in codepoints, using
+ * str.Chars/CharCount/CharSubstr, so a multibyte glyph is one cell and one
+ * caret step.
+ *
+ * Rendering is tail-anchored and stateless: each frame it shows the last
+ * cells that fit, reserving the final cell for the cursor while focused, and
+ * recomputes that window from scratch. There is no stored scroll offset. The
+ * cursor is drawn as one reverse-video cell over whatever glyph the row
+ * already has at the caret column, and only while the buffer reports focus.
+ * An empty value shows the placeholder, styled dim, whether focused or not.
+ *
+ * This file deliberately has no layout measurement, no arrows/Home/End, no
+ * selection or paste, no submit callback, and no Buffer cursor API: the style
+ * is the opaque SGR string the caller builds with std/term, and placement in
+ * the parent's box belongs to whoever owns the layout.
+ */
+
+package basalam
+
+import str
+import term
+
+@en "Input"
+/// A single-line text input: value, caret, optional placeholder, and styles
+/// for the value, the cursor cell, and the placeholder. It is focusable, so
+/// keyboard events reach it through the screen's focus dispatch. Set the
+/// value with the field or set_value, read it with value, and set the
+/// placeholder with the field or set_placeholder.
+pub struct Input:
+    pub use BaseWidget
+
+    @en "placeholder"
+    /// Text shown (dim) while the value is empty. "" means no placeholder.
+    pub placeholder: str = ""
+
+    @en "style"
+    /// SGR escape sequence(s) for the value and the blank background.
+    /// "" means the terminal's default style.
+    pub style: str = ""
+
+    @en "cursor_style"
+    /// SGR escape sequence(s) added to `style` for the cursor cell.
+    /// "" means reverse video.
+    pub cursor_style: str = ""
+
+    @en "placeholder_style"
+    /// SGR escape sequence(s) added to `style` for the placeholder.
+    /// "" means bright black.
+    pub placeholder_style: str = ""
+
+    content: str = ""
+    caret: int = 0
+
+    @en "focusable"
+    /// Returns true: Input is interactive, so the screen's focus dispatch
+    /// routes keyboard events to it.
+    pub func focusable(): bool:
+        ret true
+    end
+
+    @en "handle_event"
+    /// Reacts to a key press. A printable character or space is appended at
+    /// the caret; backspace drops the codepoint before the caret (nothing
+    /// when it is at the start); enter is consumed without changing
+    /// anything. Other events and keys are not consumed, so they bubble on.
+    pub func handle_event(event: Event): bool:
+        if event.kind != KeyEvent:
+            ret false
+        end
+        code := event.key.code
+        if code == term.KeyChar and not event.key.ctrl and not event.key.alt:
+            this.content = this.content + event.key.ch
+            this.caret = this.caret + 1
+            ret true
+        end
+        if code == term.KeySpace:
+            this.content = this.content + " "
+            this.caret = this.caret + 1
+            ret true
+        end
+        if code == term.KeyBackspace:
+            if this.caret > 0:
+                total := str.CharCount(this.content)
+                this.content = str.CharSubstr(this.content, 0, this.caret - 1) + str.CharSubstr(this.content, this.caret, total - this.caret)
+                this.caret = this.caret - 1
+            end
+            ret true
+        end
+        if code == term.KeyEnter:
+            ret true
+        end
+        ret false
+    end
+
+    @en "value"
+    /// The current text, without styles.
+    pub func value(): str:
+        ret this.content
+    end
+
+    @en "set_value"
+    /// Replaces the value; the caret moves to its end.
+    pub func set_value(v: str):
+        this.content = v
+        this.caret = str.CharCount(v)
+    end
+
+    @en "set_placeholder"
+    /// Sets the text shown while the value is empty.
+    pub func set_placeholder(p: str):
+        this.placeholder = p
+    end
+
+    @en "render"
+    /// Draws the value into bounds: the box is painted with `style`, the
+    /// last cells that fit are written (the placeholder, dim, when the value
+    /// is empty), and — while the buffer reports focus — one reverse-video
+    /// cell marks the caret column. A degenerate box draws nothing and never
+    /// panics.
+    pub func render(buf: Buffer, bounds: Rect):
+        if bounds.is_empty():
+            ret
+        end
+        buf.fill(bounds, " ", this.style)
+        w := bounds.width
+        count := str.CharCount(this.content)
+        mut f := 0
+        if buf.focused:
+            f = 1
+        end
+        avail := w - f
+        mut start := 0
+        if count > avail:
+            start = count - avail
+        end
+        if count == 0 and this.placeholder != "":
+            mut ps := this.placeholder_style
+            if ps == "":
+                ps = term.Sgr(term.FgBlack + term.FgBright)
+            end
+            buf.put_str(bounds.x, bounds.y, str.CharSubstr(this.placeholder, 0, w), this.style + ps)
+        else:
+            buf.put_str(bounds.x, bounds.y, str.CharSubstr(this.content, start, count - start), this.style)
+        end
+        if buf.focused:
+            mut cs := this.cursor_style
+            if cs == "":
+                cs = term.Sgr(term.StyleReverse)
+            end
+            col := count - start
+            c := buf.get(bounds.x + col, bounds.y)
+            buf.set(bounds.x + col, bounds.y, Cell { ch = c.ch, style = this.style + cs })
+        end
+    end
+end
+
+@en "NewInput"
+/// Creates an empty Input with no placeholder, unstyled values, and the
+/// default cursor and placeholder styles.
+pub func NewInput(): Input:
+    ret Input {}
+end
