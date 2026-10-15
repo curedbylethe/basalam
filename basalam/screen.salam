@@ -60,9 +60,11 @@
  * and application decision, and it can call focus() itself.
  *
  * Resizing. On a ResizeEvent the screen resizes its buffer and gives the
- * root widget the full terminal rect (fit_root). That is the only layout
- * the core does: every other widget gets its bounds from the application,
- * or from a layout container (basalam/layout.salam), via set_bounds.
+ * root widget the full terminal rect (fit_root). A resize reallocates the
+ * buffer's grids and forces the next present() to repaint the whole frame
+ * (see buffer.salam). That is the only layout the core does: every other
+ * widget gets its bounds from the application, or from a layout container
+ * (basalam/layout.salam), via set_bounds.
  *
  * Resize detection polls term.Size() on the input thread. Salam's stdlib
  * does not expose a signal API (no sigaction, no SIGWINCH), so polling is
@@ -74,7 +76,7 @@
  *
  * Deliberate gaps: no key bindings (the application decides what Tab or q
  * mean; a keymap is a later epic), no vim-style modes (an application
- * concern), no output diffing (see buffer.salam).
+ * concern).
  *
  * Compiler workaround. The issue specifies `events: chan Event`. Salam
  * 0.4.9 and the 0.5.0 nightly cannot spell chan.Chan<Event> inside the
@@ -379,8 +381,8 @@ pub struct Screen:
     end
 
     @en "present"
-    /// Draws and, once start() has attached the terminal, writes the frame
-    /// out. Clears `dirty`.
+    /// Draws and, once start() has attached the terminal, writes the changed
+    /// cells out. Clears `dirty`.
     pub func present():
         this.draw()
         if this.attached:
