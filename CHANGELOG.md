@@ -59,6 +59,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   in the `screen.salam` module comment and the event-loop concept page.
 - The event-loop, `Event`, and `Screen` pages cover mouse routing, mouse
   coordinates, and the decision to ship no key bindings.
+- Key repeat is documented: a held key arrives as repeated discrete
+  `KeyEvent`s through the input loop; the library coalesces and drops
+  nothing.
 
 ## [0.1.0] - 2026-10-06
 
