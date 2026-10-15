@@ -16,7 +16,8 @@
 // Headless tests for mouse routing: a MouseEvent goes to the widget under
 // the cursor (the topmost one by paint order) and bubbles from there, falls
 // back to the focused widget when nothing is under the cursor, and leaves
-// every other event kind on the focused-first path.
+// every other event kind on the focused-first path. Routing never moves the
+// focus: a click does not focus what it hits.
 //
 // Layout on a 20 x 10 screen (root is widget 0 and fills it):
 //
@@ -157,6 +158,21 @@ func test_child_consumes_and_parent_never_sees():
     testing.AssertTrue(s.dirty)
 end
 
+func test_click_never_moves_focus():
+    mut s := basalam.NewScreen(Recorder { name = "root" }, 20, 10)
+    defer s.close()
+    one := s.add(basalam.RootId, Recorder { name = "one", can_focus = true })
+    two := s.add(basalam.RootId, Recorder { name = "two", can_focus = true })
+    s.widget(one).set_bounds(rect(0, 0, 10, 5))
+    s.widget(two).set_bounds(rect(10, 0, 10, 5))
+    // The first focusable widget added takes the focus.
+    testing.AssertEqInt(s.focused_id(), one)
+    // The click lands on two, but hit-test routing must not focus it.
+    testing.AssertFalse(s.dispatch(click(12, 2)))
+    testing.AssertEqStr(trail(), "two>root")
+    testing.AssertEqInt(s.focused_id(), one)
+end
+
 func test_click_outside_children_goes_to_root():
     mut s := basalam.NewScreen(Recorder { name = "root", takes_mouse = true }, 20, 10)
     defer s.close()
@@ -219,6 +235,7 @@ func main:
     test_hit_test_skips_empty_bounds()
     test_click_on_child_reaches_child_first()
     test_child_consumes_and_parent_never_sees()
+    test_click_never_moves_focus()
     test_click_outside_children_goes_to_root()
     test_click_with_nothing_under_cursor_falls_back_to_focus()
     test_overlapping_siblings_later_wins()
