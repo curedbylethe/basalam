@@ -24,6 +24,13 @@ import term
 
 include "../basalam/basalam.salam"
 
+// A minimal root widget: the repeat test posts events and drains them through
+// the channel without dispatching, so the root only has to satisfy the Widget
+// interface (BaseWidget's defaults are enough).
+struct Root:
+    pub use basalam.BaseWidget
+end
+
 func key(seq: str): basalam.Event:
     ret basalam.Event { kind = basalam.KeyEvent, key = term.Decode(seq) }
 end
@@ -85,6 +92,35 @@ func test_space_and_backspace():
     testing.AssertEqInt(key("\x08").key.code, term.KeyBackspace)
 end
 
+func test_repeated_keys_deliver_discrete_events():
+    mut s := basalam.NewScreen(Root {}, 8, 2)
+    defer s.close()
+    // A termlike key repeat arrives as repeated byte sequences. Post five
+    // identical decoded keys, then close the channel (the screen is never
+    // start()ed) so the drain loop terminates instead of blocking.
+    testing.AssertTrue(s.post(key("\x1b[A")))
+    testing.AssertTrue(s.post(key("\x1b[A")))
+    testing.AssertTrue(s.post(key("\x1b[A")))
+    testing.AssertTrue(s.post(key("\x1b[A")))
+    testing.AssertTrue(s.post(key("\x1b[A")))
+    s.stop()
+
+    mut ev := basalam.Event {}
+    mut codes := Vector {} as Vector<int>
+    defer codes.free()
+    until s.next_event(ev):
+        testing.AssertEqInt(ev.kind, basalam.KeyEvent)
+        codes.push(ev.key.code)
+    end
+    // Five discrete events, nothing coalesced, each the posted key, in order.
+    testing.AssertEqInt(codes.len(), 5)
+    repeat codes.len() in i:
+        testing.AssertEqInt(codes.get(i), term.KeyUp)
+    end
+    // Nothing left after the drain.
+    testing.AssertFalse(s.next_event(ev))
+end
+
 func main:
     test_escape_and_arrows()
     test_navigation()
@@ -92,5 +128,6 @@ func main:
     test_modifiers()
     test_alt_char()
     test_space_and_backspace()
+    test_repeated_keys_deliver_discrete_events()
     ret testing.Summary()
 end
