@@ -23,10 +23,47 @@
 // track vectors, and the placement tables for Start/Center/End/Stretch plus
 // the non-positive-avail edge (which behaves like Stretch). Rect normal form
 // (never a negative dimension) is asserted directly on FitRect.
+//
+// The container smoke exercises the R1 recursion (a Column containing a Row
+// is moved by one set_bounds), R5 packing, R10 grid cells including an
+// out-of-range cell, R11 stack overlap, R8 Pref through Text and through a
+// child container (which cannot measure and fills the axis), R12 empty
+// propagation, and R13 idempotence. The full per-AC matrix is a later stage.
 
 import testing
 
 include "../basalam/basalam.salam"
+
+// Leaf is an invisible child widget: it satisfies Widget with the BaseWidget
+// defaults (so it cannot measure and preferred_size returns the sentinel) and
+// only stores the rect it is given. Sizer is the same but reports a fixed
+// preferred size, so Pref and cross-axis alignment can be tested without
+// depending on text wrapping.
+struct Leaf:
+    pub use basalam.BaseWidget
+
+    pub func render(buf: basalam.Buffer, b: basalam.Rect):
+        _ := buf
+        _ := b
+    end
+end
+
+struct Sizer:
+    pub use basalam.BaseWidget
+
+    pub w: int = 0
+    pub h: int = 0
+
+    pub func preferred_size(max_width: int): basalam.Rect:
+        _ := max_width
+        ret basalam.Rect { width = this.w, height = this.h }
+    end
+
+    pub func render(buf: basalam.Buffer, b: basalam.Rect):
+        _ := buf
+        _ := b
+    end
+end
 
 func rect(x: int, y: int, w: int, h: int): basalam.Rect:
     ret basalam.Rect { x = x, y = y, width = w, height = h }
@@ -48,6 +85,23 @@ end
 
 func fixedSize(n: int): basalam.LayoutSize:
     ret basalam.LayoutSize { kind = basalam.SizeKind.Fixed, cells = n }
+end
+
+// A fresh invisible child each call, boxed as dyn Widget so the test keeps a
+// reference to the same widget the container will move.
+func leaf(): dyn basalam.Widget:
+    ret Leaf {} as dyn basalam.Widget
+end
+
+func sizer(w: int, h: int): dyn basalam.Widget:
+    ret Sizer { w = w, h = h } as dyn basalam.Widget
+end
+
+func checkRect(r: basalam.Rect, x: int, y: int, w: int, h: int):
+    testing.AssertEqInt(r.x, x)
+    testing.AssertEqInt(r.y, y)
+    testing.AssertEqInt(r.width, w)
+    testing.AssertEqInt(r.height, h)
 end
 
 func test_inset_uniform():
@@ -306,6 +360,175 @@ func test_place_nonpositive():
     testing.AssertEqInt(basalam.PlaceAxisSize(-3, basalam.CrossAlign.Stretch, 3), 0)
 end
 
+func test_column_padding_recursion():
+    col := basalam.NewColumn()
+    col.set_padding(basalam.UniformInsets(1))
+    a := leaf()
+    b := leaf()
+    c := leaf()
+    _ := col.add(a)
+    _ := col.add(b)
+    _ := col.add(c)
+    col.set_bounds(rect(0, 0, 80, 24))
+    // content {1,1,78,22}; 22 = 3x7 + 1 -> 8, 7, 7.
+    checkRect(a.bounds(), 1, 1, 78, 8)
+    checkRect(b.bounds(), 1, 9, 78, 7)
+    checkRect(c.bounds(), 1, 16, 78, 7)
+end
+
+func test_row_fixed_and_fill():
+    row := basalam.NewRow()
+    a := leaf()
+    b := leaf()
+    c := leaf()
+    d := leaf()
+    e := leaf()
+    ia := row.add(a)
+    _ := row.add(b)
+    _ := row.add(c)
+    id := row.add(d)
+    _ := row.add(e)
+    row.set_width(ia, fixedSize(10))
+    row.set_width(id, fixedSize(5))
+    row.set_bounds(rect(0, 0, 43, 6))
+    // F=15, R=28, m=3 -> base 9, rem 1; packed with no gaps.
+    checkRect(a.bounds(), 0, 0, 10, 6)
+    checkRect(b.bounds(), 10, 0, 10, 6)
+    checkRect(c.bounds(), 20, 0, 9, 6)
+    checkRect(d.bounds(), 29, 0, 5, 6)
+    checkRect(e.bounds(), 34, 0, 9, 6)
+end
+
+func test_recursion_nested():
+    inner := basalam.NewRow()
+    r0 := leaf()
+    r1 := leaf()
+    _ := inner.add(r0)
+    _ := inner.add(r1)
+    innerd := inner as dyn basalam.Widget
+
+    outer := basalam.NewColumn()
+    outer.set_padding(basalam.UniformInsets(1))
+    top := leaf()
+    bottom := leaf()
+    _ := outer.add(top)
+    _ := outer.add(innerd)
+    _ := outer.add(bottom)
+    outer.set_bounds(rect(0, 0, 20, 10))
+    // One set_bounds drives the whole subtree; content {1,1,18,8} -> 3,3,2.
+    checkRect(top.bounds(), 1, 1, 18, 3)
+    checkRect(innerd.bounds(), 1, 4, 18, 3)
+    checkRect(bottom.bounds(), 1, 7, 18, 2)
+    // inner content {1,4,18,3}; two fills of 18 -> 9, 9.
+    checkRect(r0.bounds(), 1, 4, 9, 3)
+    checkRect(r1.bounds(), 10, 4, 9, 3)
+end
+
+func test_idempotent():
+    col := basalam.NewColumn()
+    col.set_padding(basalam.UniformInsets(1))
+    a := leaf()
+    b := leaf()
+    _ := col.add(a)
+    _ := col.add(b)
+    col.set_bounds(rect(0, 0, 11, 7))
+    a1 := a.bounds()
+    b1 := b.bounds()
+    col.set_bounds(rect(0, 0, 11, 7))
+    checkRect(a.bounds(), a1.x, a1.y, a1.width, a1.height)
+    checkRect(b.bounds(), b1.x, b1.y, b1.width, b1.height)
+end
+
+func test_grid_cells():
+    g := basalam.NewGrid(2, 3)
+    p := leaf()
+    q := leaf()
+    _ := g.add(p)
+    iq := g.add(q)
+    g.set_cell(iq, 1, 1)
+    g.set_bounds(rect(0, 0, 12, 6))
+    // cols 4,4,4; rows 3,3. p cell (0,0), q cell (1,1).
+    checkRect(p.bounds(), 0, 0, 4, 3)
+    checkRect(q.bounds(), 4, 3, 4, 3)
+end
+
+func test_grid_out_of_range():
+    g := basalam.NewGrid(2, 2)
+    p := leaf()
+    i := g.add(p)
+    g.set_cell(i, 5, 5)
+    g.set_bounds(rect(3, 4, 8, 6))
+    // Out of range -> 0x0 at the content origin; the child is still placed.
+    checkRect(p.bounds(), 3, 4, 0, 0)
+end
+
+func test_stack_overlap():
+    st := basalam.NewStack()
+    st.set_padding(ins(1, 2, 1, 2))
+    a := leaf()
+    b := leaf()
+    _ := st.add(a)
+    ib := st.add(b)
+    st.set_margin(ib, ins(1, 3, 2, 4))
+    st.set_bounds(rect(0, 0, 30, 10))
+    checkRect(a.bounds(), 2, 1, 26, 8)
+    checkRect(b.bounds(), 6, 2, 19, 5)
+end
+
+func test_pref_cross_axis():
+    row := basalam.NewRow()
+    ad := basalam.NewText("hi") as dyn basalam.Widget
+    i := row.add(ad)
+    row.set_width(i, fixedSize(6))
+    row.set_align(i, basalam.CrossAlign.Stretch, basalam.CrossAlign.Center)
+    row.set_bounds(rect(0, 0, 6, 9))
+    // Main x fixed 6 -> box {0,0,6,9}; natural height 1 at width 6;
+    // free 8 -> centre 4.
+    checkRect(ad.bounds(), 0, 4, 6, 1)
+end
+
+func test_pref_end_alignment():
+    row := basalam.NewRow()
+    a := sizer(3, 4)
+    i := row.add(a)
+    row.set_width(i, fixedSize(6))
+    row.set_align(i, basalam.CrossAlign.Stretch, basalam.CrossAlign.End)
+    row.set_bounds(rect(0, 0, 6, 9))
+    // natural height 4; free 5 -> End offset 5.
+    checkRect(a.bounds(), 0, 5, 6, 4)
+end
+
+func test_pref_container_yields_avail():
+    outer := basalam.NewRow()
+    innerd := basalam.NewRow() as dyn basalam.Widget
+    i := outer.add(innerd)
+    outer.set_align(i, basalam.CrossAlign.Stretch, basalam.CrossAlign.Center)
+    outer.set_bounds(rect(0, 0, 8, 5))
+    // A container cannot measure: the sentinel fills the axis (avail 5).
+    checkRect(innerd.bounds(), 0, 0, 8, 5)
+end
+
+func test_empty_content():
+    col := basalam.NewColumn()
+    col.set_padding(basalam.UniformInsets(1))
+    a := leaf()
+    _ := col.add(a)
+    col.set_bounds(rect(0, 0, 0, 0))
+    // R12: an empty content box gives every descendant an empty rect.
+    checkRect(a.bounds(), 0, 0, 0, 0)
+end
+
+func test_slot_bad_index_ignored():
+    row := basalam.NewRow()
+    a := leaf()
+    _ := row.add(a)
+    row.set_margin(5, basalam.UniformInsets(2))
+    row.set_width(-1, fixedSize(3))
+    row.set_align(9, basalam.CrossAlign.End, basalam.CrossAlign.End)
+    row.set_bounds(rect(0, 0, 4, 2))
+    checkRect(a.bounds(), 0, 0, 4, 2)
+end
+
 func main:
     test_inset_uniform()
     test_inset_margin()
@@ -329,5 +552,17 @@ func main:
     test_place_start_end_stretch()
     test_place_clamp()
     test_place_nonpositive()
+    test_column_padding_recursion()
+    test_row_fixed_and_fill()
+    test_recursion_nested()
+    test_idempotent()
+    test_grid_cells()
+    test_grid_out_of_range()
+    test_stack_overlap()
+    test_pref_cross_axis()
+    test_pref_end_alignment()
+    test_pref_container_yields_avail()
+    test_empty_content()
+    test_slot_bad_index_ignored()
     ret testing.Summary()
 end

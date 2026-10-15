@@ -14,35 +14,41 @@
  */
 
 /*
- * Layout: the pure box arithmetic behind the layout engine.
+ * Layout: the box arithmetic and the Row, Column, Grid and Stack containers.
  *
- * Widgets never compute their own position. A layout pass (a later stage)
- * walks the widget tree, hands each widget a finished rect through
- * Widget.set_bounds, and fills a container's content box from a list of child
- * slots. This file is the arithmetic that pass runs on: rectangle clipping,
- * padding and margin, the main-axis split, grid track sizes, and single-axis
- * alignment. Everything here is pure and static: the same inputs give the
- * same rects, no widget state is read, and no measurement hook is called.
- * Resolving a child's preferred size happens above this layer, so axis
- * placement receives the natural size as a plain int.
+ * Widgets never compute their own position. A container's set_bounds override
+ * is the entry point: it stores its own rect first, computes its content box,
+ * turns its ordered slot list into one rect per child, and calls each child's
+ * set_bounds in slot order. A child container recurses the same way, so a
+ * single set_bounds on the root drives the whole subtree (R1, pre-order DFS,
+ * every node visited exactly once). Every rect handed to a widget passes
+ * through FitRect, so it is non-empty or exactly 0x0, never negative (R2).
+ *
+ * Two structures, one tree. A container owns the ordered `items` list that
+ * defines layout; the Screen's registry is still what paints, dispatches
+ * events, and orders focus. A child handed to a container's add() must also
+ * be added to the Screen, or it is positioned but never drawn. Painting is
+ * registry id order, later on top, so a Stack overlaps and two children in
+ * one grid cell paint in registration order; layout order and paint order are
+ * independent.
+ *
+ * Measurement. Cross-axis Pref reads the child's Widget.preferred_size once,
+ * after the main-axis split, resolving x before y (R8). A child that cannot
+ * measure (a container, or any widget using the BaseWidget default) reports
+ * the negative sentinel, which fills the axis instead. max_width <= 0 is
+ * never forwarded; that axis resolves to 0 with no call. Pref on a main axis
+ * is reserved and acts as Fill.
  *
  * Neighbours. rect.salam is the geometry these helpers build on: Point, Rect,
- * and the half-open rule. widget.salam owns set_bounds, the contract every
- * rect below is destined for. screen.salam drives the pass. This module sits
- * between them and depends on none of them beyond Rect.
+ * and the half-open rule. widget.salam owns set_bounds and preferred_size,
+ * the contract every rect and measurement below serves. screen.salam drives
+ * the pass through its existing fit_root path. Nothing here changes Screen,
+ * Tree or Buffer.
  *
- * Rect normal form. Every rect handed to a widget is either non-empty
- * (width > 0 and height > 0) or exactly 0x0. FitRect clamps to a box and,
- * when the intersection is empty, returns a 0x0 rect at the nearest point
- * inside that box, so negative dimensions never escape this file. An empty
- * rect keeps a position, but the position carries no meaning; only the 0x0
- * size does.
- *
- * Deliberately absent. Containers and their widgets, the per-child slot type,
- * and the recursive pass belong to later stages; this file defines no Row,
- * Column, Grid or Stack. No preferred-size calls: Pref is resolved by the
- * caller and arrives here as an int. No flex weights or two-pass sizing, no
- * gap between slots, no grid spanning, no z-order or focus-to-topmost.
+ * Deliberately absent. No flex weights, no two-pass measure-then-position, no
+ * gap between slots. No grid row/column spanning. No stack z-order beyond
+ * registry id order, and no focus-to-topmost. Containers position; they never
+ * paint their children.
  */
 
 package basalam
@@ -121,6 +127,339 @@ pub struct Insets:
     pub left: int = 0
 end
 
+@en "LayoutSlot"
+/// One child's place in a container's ordered slot list. A slot is owned by
+/// the parent; a widget never sees it. margin insets the slot before the
+/// child is placed, width and height are the requested sizes on each axis,
+/// and align_x / align_y position a child that does not stretch. row and col
+/// are read by Grid only.
+pub struct LayoutSlot:
+    @en "child"
+    /// The child widget. It must be registered in the Screen's tree as well,
+    /// or the Screen never paints it.
+    pub child: dyn Widget
+
+    @en "margin"
+    /// Space reserved inside the slot, before alignment (R4). Zero by default.
+    pub margin: Insets = Insets {}
+
+    @en "width"
+    /// The requested size on the x axis. Fill by default.
+    pub width: LayoutSize = LayoutSize {}
+
+    @en "height"
+    /// The requested size on the y axis. Fill by default.
+    pub height: LayoutSize = LayoutSize {}
+
+    @en "align_x"
+    /// Cross-axis alignment on x. Stretch by default.
+    pub align_x: CrossAlign = CrossAlign.Stretch
+
+    @en "align_y"
+    /// Cross-axis alignment on y. Stretch by default.
+    pub align_y: CrossAlign = CrossAlign.Stretch
+
+    @en "row"
+    /// The Grid row this child occupies. 0 by default.
+    pub row: int = 0
+
+    @en "col"
+    /// The Grid column this child occupies. 0 by default.
+    pub col: int = 0
+end
+
+@en "Row"
+/// A container that lays its children left to right along the x axis. Slots
+/// are packed from the content start with no gaps; each takes a Fixed or Fill
+/// share of the content width (R5) and fills the content height unless its
+/// align_y places it otherwise. Set padding with set_padding; a child's
+/// margin, size and alignment with the slot methods. Children are positioned,
+/// not painted, so add them to the Screen's tree too.
+pub struct Row:
+    pub use BaseWidget
+
+    @en "pad"
+    /// The inset between the container's bounds and its content box (R3).
+    pub pad: Insets = Insets {}
+
+    @en "items"
+    /// The children in placement order, one slot each.
+    pub items: Vector<LayoutSlot> = Vector {}
+
+    @en "add"
+    /// Appends child as the last slot and returns its index. This only orders
+    /// the child for layout; add it to the Screen's tree to have it painted.
+    pub func add(child: dyn Widget): int:
+        ret _slotAdd(this.items, child)
+    end
+
+    @en "set_margin"
+    /// Sets the margin of the slot at i (R4). An out-of-range index is
+    /// ignored.
+    pub func set_margin(i: int, margin: Insets):
+        _slotMargin(this.items, i, margin)
+    end
+
+    @en "set_width"
+    /// Sets the x-axis size request of the slot at i (R5).
+    pub func set_width(i: int, size: LayoutSize):
+        _slotWidth(this.items, i, size)
+    end
+
+    @en "set_height"
+    /// Sets the y-axis size request of the slot at i (R7).
+    pub func set_height(i: int, size: LayoutSize):
+        _slotHeight(this.items, i, size)
+    end
+
+    @en "set_align"
+    /// Sets both cross-axis alignments of the slot at i (R7).
+    pub func set_align(i: int, align_x: CrossAlign, align_y: CrossAlign):
+        _slotAlign(this.items, i, align_x, align_y)
+    end
+
+    @en "set_padding"
+    /// Sets the container's padding (R3).
+    pub func set_padding(pad: Insets):
+        this.pad = pad
+    end
+
+    @en "set_bounds"
+    /// Stores the container's own rect (normalised), then lays out and moves
+    /// every child in slot order (R1). Overrides the BaseWidget default.
+    pub func set_bounds(bounds: Rect):
+        r := FitRect(bounds, bounds)
+        this.BaseWidget.set_bounds(r)
+        rects := _arrangeLinear(InsetRect(r, this.pad), this.items, true)
+        repeat this.items.len() in i:
+            this.items.get(i).child.set_bounds(rects.get(i))
+        end
+        rects.free()
+    end
+end
+
+@en "Column"
+/// A container that lays its children top to bottom along the y axis. The
+/// mirror of Row: each child takes a Fixed or Fill share of the content
+/// height (R5) and fills the content width unless its align_x places it
+/// otherwise. See Row for the slot and padding methods.
+pub struct Column:
+    pub use BaseWidget
+
+    @en "pad"
+    /// The inset between the container's bounds and its content box (R3).
+    pub pad: Insets = Insets {}
+
+    @en "items"
+    /// The children in placement order, one slot each.
+    pub items: Vector<LayoutSlot> = Vector {}
+
+    @en "add"
+    /// Appends child as the last slot and returns its index. This only orders
+    /// the child for layout; add it to the Screen's tree to have it painted.
+    pub func add(child: dyn Widget): int:
+        ret _slotAdd(this.items, child)
+    end
+
+    @en "set_margin"
+    /// Sets the margin of the slot at i (R4). An out-of-range index is
+    /// ignored.
+    pub func set_margin(i: int, margin: Insets):
+        _slotMargin(this.items, i, margin)
+    end
+
+    @en "set_width"
+    /// Sets the x-axis size request of the slot at i (R7).
+    pub func set_width(i: int, size: LayoutSize):
+        _slotWidth(this.items, i, size)
+    end
+
+    @en "set_height"
+    /// Sets the y-axis size request of the slot at i (R5).
+    pub func set_height(i: int, size: LayoutSize):
+        _slotHeight(this.items, i, size)
+    end
+
+    @en "set_align"
+    /// Sets both cross-axis alignments of the slot at i (R7).
+    pub func set_align(i: int, align_x: CrossAlign, align_y: CrossAlign):
+        _slotAlign(this.items, i, align_x, align_y)
+    end
+
+    @en "set_padding"
+    /// Sets the container's padding (R3).
+    pub func set_padding(pad: Insets):
+        this.pad = pad
+    end
+
+    @en "set_bounds"
+    /// Stores the container's own rect (normalised), then lays out and moves
+    /// every child in slot order (R1). Overrides the BaseWidget default.
+    pub func set_bounds(bounds: Rect):
+        r := FitRect(bounds, bounds)
+        this.BaseWidget.set_bounds(r)
+        rects := _arrangeLinear(InsetRect(r, this.pad), this.items, false)
+        repeat this.items.len() in i:
+            this.items.get(i).child.set_bounds(rects.get(i))
+        end
+        rects.free()
+    end
+end
+
+@en "Grid"
+/// A container that divides its content box into a fixed rows x cols grid
+/// (R9) and places each child by its explicit (row, col) (R10). Columns and
+/// rows share the space equally, the remainder to the earliest; an
+/// out-of-range or negative cell is a 0x0 slot at the content origin, and the
+/// child is still visited. Two children in one cell share it and overlap.
+pub struct Grid:
+    pub use BaseWidget
+
+    @en "pad"
+    /// The inset between the container's bounds and its content box (R3).
+    pub pad: Insets = Insets {}
+
+    @en "items"
+    /// The children in placement order, one slot each.
+    pub items: Vector<LayoutSlot> = Vector {}
+
+    @en "rows"
+    /// The number of grid rows. Set by NewGrid.
+    pub rows: int = 0
+
+    @en "cols"
+    /// The number of grid columns. Set by NewGrid.
+    pub cols: int = 0
+
+    @en "add"
+    /// Appends child as the last slot and returns its index. This only orders
+    /// the child for layout; add it to the Screen's tree to have it painted.
+    pub func add(child: dyn Widget): int:
+        ret _slotAdd(this.items, child)
+    end
+
+    @en "set_margin"
+    /// Sets the margin of the slot at i (R4). An out-of-range index is
+    /// ignored.
+    pub func set_margin(i: int, margin: Insets):
+        _slotMargin(this.items, i, margin)
+    end
+
+    @en "set_width"
+    /// Sets the x-axis size request of the slot at i (R7).
+    pub func set_width(i: int, size: LayoutSize):
+        _slotWidth(this.items, i, size)
+    end
+
+    @en "set_height"
+    /// Sets the y-axis size request of the slot at i (R7).
+    pub func set_height(i: int, size: LayoutSize):
+        _slotHeight(this.items, i, size)
+    end
+
+    @en "set_align"
+    /// Sets both cross-axis alignments of the slot at i (R7).
+    pub func set_align(i: int, align_x: CrossAlign, align_y: CrossAlign):
+        _slotAlign(this.items, i, align_x, align_y)
+    end
+
+    @en "set_cell"
+    /// Sets the slot's grid cell (R10).
+    pub func set_cell(i: int, row: int, col: int):
+        _slotCell(this.items, i, row, col)
+    end
+
+    @en "set_padding"
+    /// Sets the container's padding (R3).
+    pub func set_padding(pad: Insets):
+        this.pad = pad
+    end
+
+    @en "set_bounds"
+    /// Stores the container's own rect (normalised), then lays out and moves
+    /// every child in slot order (R1). Overrides the BaseWidget default.
+    pub func set_bounds(bounds: Rect):
+        r := FitRect(bounds, bounds)
+        this.BaseWidget.set_bounds(r)
+        rects := _arrangeGrid(InsetRect(r, this.pad), this.items, this.rows, this.cols)
+        repeat this.items.len() in i:
+            this.items.get(i).child.set_bounds(rects.get(i))
+        end
+        rects.free()
+    end
+end
+
+@en "Stack"
+/// A container that gives every child the content box minus its own margin
+/// (R11), so children overlap exactly. Size and alignment fields are ignored;
+/// later registry ids paint on top. A zero-margin child is exactly the
+/// content box.
+pub struct Stack:
+    pub use BaseWidget
+
+    @en "pad"
+    /// The inset between the container's bounds and its content box (R3).
+    pub pad: Insets = Insets {}
+
+    @en "items"
+    /// The children in placement order, one slot each.
+    pub items: Vector<LayoutSlot> = Vector {}
+
+    @en "add"
+    /// Appends child as the last slot and returns its index. This only orders
+    /// the child for layout; add it to the Screen's tree to have it painted.
+    pub func add(child: dyn Widget): int:
+        ret _slotAdd(this.items, child)
+    end
+
+    @en "set_margin"
+    /// Sets the margin of the slot at i (R4). An out-of-range index is
+    /// ignored.
+    pub func set_margin(i: int, margin: Insets):
+        _slotMargin(this.items, i, margin)
+    end
+
+    @en "set_width"
+    /// Sets the x-axis size request of the slot at i. Ignored by Stack, which
+    /// accepts it for API symmetry.
+    pub func set_width(i: int, size: LayoutSize):
+        _slotWidth(this.items, i, size)
+    end
+
+    @en "set_height"
+    /// Sets the y-axis size request of the slot at i. Ignored by Stack, which
+    /// accepts it for API symmetry.
+    pub func set_height(i: int, size: LayoutSize):
+        _slotHeight(this.items, i, size)
+    end
+
+    @en "set_align"
+    /// Sets both cross-axis alignments of the slot at i. Ignored by Stack,
+    /// which accepts it for API symmetry.
+    pub func set_align(i: int, align_x: CrossAlign, align_y: CrossAlign):
+        _slotAlign(this.items, i, align_x, align_y)
+    end
+
+    @en "set_padding"
+    /// Sets the container's padding (R3).
+    pub func set_padding(pad: Insets):
+        this.pad = pad
+    end
+
+    @en "set_bounds"
+    /// Stores the container's own rect (normalised), then lays out and moves
+    /// every child in slot order (R1). Overrides the BaseWidget default.
+    pub func set_bounds(bounds: Rect):
+        r := FitRect(bounds, bounds)
+        this.BaseWidget.set_bounds(r)
+        rects := _arrangeStack(InsetRect(r, this.pad), this.items)
+        repeat this.items.len() in i:
+            this.items.get(i).child.set_bounds(rects.get(i))
+        end
+        rects.free()
+    end
+end
+
 // Clamps v into [lo, hi]. When lo > hi the lower bound wins, matching the
 // nearest-point rule FitRect relies on.
 func _clamp(v: int, lo: int, hi: int): int:
@@ -140,6 +479,194 @@ func _clampNeg(v: int): int:
         ret 0
     end
     ret v
+end
+
+// R8 natural width of a child at max_width. A negative sentinel (the child
+// cannot measure) yields avail; max_width <= 0 yields 0 with no call.
+func _naturalWidth(child: dyn Widget, max_width: int, avail: int): int:
+    if max_width <= 0:
+        ret 0
+    end
+    p := child.preferred_size(max_width)
+    if p.width < 0:
+        ret avail
+    end
+    ret _clampNeg(p.width)
+end
+
+// R8 natural height of a child at max_width (the resolved width). A negative
+// sentinel yields avail; max_width <= 0 yields 0 with no call.
+func _naturalHeight(child: dyn Widget, max_width: int, avail: int): int:
+    if max_width <= 0:
+        ret 0
+    end
+    p := child.preferred_size(max_width)
+    if p.height < 0:
+        ret avail
+    end
+    ret _clampNeg(p.height)
+end
+
+// The prefix sum of lengths[0..index), offset by start.
+func _prefixTotal(lengths: Vector<int>, index: int, start: int): int:
+    mut acc := start
+    repeat index in k:
+        acc = acc + lengths.get(k)
+    end
+    ret acc
+end
+
+// The main-axis sizes of items: widths for a Row, heights for a Column.
+func _slotSizes(items: Vector<LayoutSlot>, width_axis: bool): Vector<LayoutSize>:
+    out := Vector {} as Vector<LayoutSize>
+    repeat items.len() in i:
+        s := items.get(i)
+        out.push(width_axis ? s.width : s.height)
+    end
+    ret out
+end
+
+// Appends a slot for child and returns its index. The shared body of every
+// container's add().
+func _slotAdd(items &: Vector<LayoutSlot>, child: dyn Widget): int:
+    items.push(LayoutSlot { child = child })
+    ret items.len() - 1
+end
+
+// Sets one slot's margin, ignoring an out-of-range index.
+func _slotMargin(items &: Vector<LayoutSlot>, i: int, margin: Insets):
+    if i < 0 or i >= items.len():
+        ret
+    end
+    mut s := items.get(i)
+    s.margin = margin
+    items.set(i, s)
+end
+
+// Sets one slot's x-axis size request.
+func _slotWidth(items &: Vector<LayoutSlot>, i: int, size: LayoutSize):
+    if i < 0 or i >= items.len():
+        ret
+    end
+    mut s := items.get(i)
+    s.width = size
+    items.set(i, s)
+end
+
+// Sets one slot's y-axis size request.
+func _slotHeight(items &: Vector<LayoutSlot>, i: int, size: LayoutSize):
+    if i < 0 or i >= items.len():
+        ret
+    end
+    mut s := items.get(i)
+    s.height = size
+    items.set(i, s)
+end
+
+// Sets one slot's cross-axis alignments.
+func _slotAlign(items &: Vector<LayoutSlot>, i: int, align_x: CrossAlign, align_y: CrossAlign):
+    if i < 0 or i >= items.len():
+        ret
+    end
+    mut s := items.get(i)
+    s.align_x = align_x
+    s.align_y = align_y
+    items.set(i, s)
+end
+
+// Sets one slot's grid cell.
+func _slotCell(items &: Vector<LayoutSlot>, i: int, row: int, col: int):
+    if i < 0 or i >= items.len():
+        ret
+    end
+    mut s := items.get(i)
+    s.row = row
+    s.col = col
+    items.set(i, s)
+end
+
+// R5/R6/R7: the shared Row and Column engine. Slots are packed along the main
+// axis from the content start with no gaps; each child fills its margin box
+// on the main axis and is placed on the cross axis by its alignment (Stretch
+// by default). main_is_width selects Row (true) or Column (false). Every
+// resulting rect is clipped to content last (R6).
+func _arrangeLinear(content: Rect, items: Vector<LayoutSlot>, main_is_width: bool): Vector<Rect>:
+    sizes := _slotSizes(items, main_is_width)
+    lengths := SplitMain(main_is_width ? content.width : content.height, sizes)
+    out := Vector {} as Vector<Rect>
+    mut pos := main_is_width ? content.x : content.y
+    repeat items.len() in i:
+        s := items.get(i)
+        length := lengths.get(i)
+        mut slot := Rect {}
+        if main_is_width:
+            slot = Rect { x = pos, y = content.y, width = length, height = content.height }
+        else:
+            slot = Rect { x = content.x, y = pos, width = content.width, height = length }
+        end
+        pos = pos + length
+        box := InsetRect(slot, s.margin)
+        mut n := 0
+        mut rect := Rect {}
+        if main_is_width:
+            if s.align_y != CrossAlign.Stretch:
+                n = _naturalHeight(s.child, box.width, box.height)
+            end
+            rect = Rect { x = box.x, y = box.y + PlaceAxisOffset(box.height, s.align_y, n), width = box.width, height = PlaceAxisSize(box.height, s.align_y, n) }
+        else:
+            if s.align_x != CrossAlign.Stretch:
+                n = _naturalWidth(s.child, box.width, box.width)
+            end
+            rect = Rect { x = box.x + PlaceAxisOffset(box.width, s.align_x, n), y = box.y, width = PlaceAxisSize(box.width, s.align_x, n), height = box.height }
+        end
+        out.push(FitRect(rect, content))
+    end
+    sizes.free()
+    lengths.free()
+    ret out
+end
+
+// R9/R10: grid tracks plus explicit (row, col) placement. An out-of-range or
+// negative cell is a 0x0 slot at the content origin, but the child is still
+// placed once. Each cell behaves like a slot: margin, then alignment on both
+// axes, then clip.
+func _arrangeGrid(content: Rect, items: Vector<LayoutSlot>, rows: int, cols: int): Vector<Rect>:
+    widths := TrackSizes(content.width, cols)
+    heights := TrackSizes(content.height, rows)
+    out := Vector {} as Vector<Rect>
+    repeat items.len() in i:
+        s := items.get(i)
+        if s.row < 0 or s.row >= rows or s.col < 0 or s.col >= cols:
+            out.push(FitRect(Rect { x = content.x, y = content.y }, content))
+        else:
+            slot := Rect { x = _prefixTotal(widths, s.col, content.x), y = _prefixTotal(heights, s.row, content.y), width = widths.get(s.col), height = heights.get(s.row) }
+            box := InsetRect(slot, s.margin)
+            mut nw := 0
+            if s.align_x != CrossAlign.Stretch:
+                nw = _naturalWidth(s.child, box.width, box.width)
+            end
+            resolved := PlaceAxisSize(box.width, s.align_x, nw)
+            mut nh := 0
+            if s.align_y != CrossAlign.Stretch:
+                nh = _naturalHeight(s.child, resolved, box.height)
+            end
+            rect := Rect { x = box.x + PlaceAxisOffset(box.width, s.align_x, nw), y = box.y + PlaceAxisOffset(box.height, s.align_y, nh), width = resolved, height = PlaceAxisSize(box.height, s.align_y, nh) }
+            out.push(FitRect(rect, content))
+        end
+    end
+    widths.free()
+    heights.free()
+    ret out
+end
+
+// R11: every child is the content box minus its own margin, clipped to
+// content. Size and alignment fields are ignored.
+func _arrangeStack(content: Rect, items: Vector<LayoutSlot>): Vector<Rect>:
+    out := Vector {} as Vector<Rect>
+    repeat items.len() in i:
+        out.push(FitRect(InsetRect(content, items.get(i).margin), content))
+    end
+    ret out
 end
 
 @en "NewInsets"
@@ -272,4 +799,29 @@ pub func PlaceAxisOffset(avail: int, align: CrossAlign, natural: int): int:
         ret free / 2
     end
     ret 0
+end
+
+@en "NewRow"
+/// Creates an empty Row with no padding.
+pub func NewRow(): Row:
+    ret Row {}
+end
+
+@en "NewColumn"
+/// Creates an empty Column with no padding.
+pub func NewColumn(): Column:
+    ret Column {}
+end
+
+@en "NewGrid"
+/// Creates an empty Grid with rows x cols cells and no padding. A
+/// non-positive count leaves every child without a cell.
+pub func NewGrid(rows: int, cols: int): Grid:
+    ret Grid { rows = rows, cols = cols }
+end
+
+@en "NewStack"
+/// Creates an empty Stack with no padding.
+pub func NewStack(): Stack:
+    ret Stack {}
 end
