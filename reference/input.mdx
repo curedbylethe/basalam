@@ -1,0 +1,148 @@
+---
+title: "Input"
+description: "The single-line text-entry widget: value, caret, placeholder, and a reverse-video cursor cell."
+keywords: ["input", "text entry", "caret", "cursor", "placeholder", "focus"]
+---
+
+`Input` draws a single-line text field into a [buffer](/reference/buffer). It holds a value, a caret into that value, an optional placeholder, and the styles for the value, the cursor cell, and the placeholder. It is focusable, so the [screen's focus dispatch](/concepts/focus) routes keyboard events to it while it is focused.
+
+```salam
+mut in := basalam.NewInput()
+in.set_placeholder("Search")
+in.set_bounds(basalam.Rect { width = 20, height = 1 })
+```
+
+## Input
+
+`Input` embeds [BaseWidget](/reference/widget), overrides the default `render`, and adds `focusable`, `handle_event`, `value`, `set_value`, and `set_placeholder`; it inherits `bounds` and `set_bounds` unchanged.
+
+```salam
+pub struct Input:
+    pub use BaseWidget
+
+    pub placeholder: str = ""
+    pub style: str = ""
+    pub cursor_style: str = ""
+    pub placeholder_style: str = ""
+end
+```
+
+<ResponseField name="placeholder" type="str">Text shown (dim) while the value is empty. `""` means no placeholder.</ResponseField>
+<ResponseField name="style" type="str">SGR escape sequence(s) for the value and the blank background. `""` means the terminal's default style.</ResponseField>
+<ResponseField name="cursor_style" type="str">SGR escape sequence(s) added to `style` for the cursor cell. `""` means reverse video.</ResponseField>
+<ResponseField name="placeholder_style" type="str">SGR escape sequence(s) added to `style` for the placeholder. `""` means bright black.</ResponseField>
+
+The value and the caret are counted in codepoints, so a multibyte glyph is one cell and one caret step. The caret is always an index between `0` and the value's length, and it stays after the last glyph.
+
+### Methods
+
+```salam
+pub func NewInput(): Input
+pub func value(): str
+pub func set_value(v: str)
+pub func set_placeholder(p: str)
+```
+
+| Method | Description |
+| --- | --- |
+| `NewInput(): Input` | Creates an empty input with no placeholder and the default cursor and placeholder styles. |
+| `value(): str` | The current text, without styles. |
+| `set_value(v: str)` | Replaces the value; the caret moves to its end. |
+| `set_placeholder(p: str)` | Sets the text shown while the value is empty. |
+
+## Keyboard
+
+`Input` is focusable, so key presses reach it through dispatch while it is focused. `handle_event` reacts as follows:
+
+| Key | Effect | Consumed |
+| --- | --- | --- |
+| A printable character | Appended at the caret; the caret moves after it. | Yes |
+| `Space` | Appends one space at the caret. | Yes |
+| `Backspace` | Deletes the codepoint before the caret. At the start, nothing changes. | Yes |
+| `Enter` | Nothing changes. | Yes |
+| Anything else (`Tab`, `Escape`, arrows, `Home`, `End`) | Nothing. | No — the event bubbles to ancestors |
+
+A character typed with `Ctrl` or `Alt` held is not a plain character, so it is not appended and bubbles like any other unhandled key. Mouse, resize, and tick events are ignored and bubble too.
+
+`Enter` is consumed without changing anything, so submitting is the host's job: run your action after dispatch and read `value()`.
+
+## Cursor
+
+While the buffer reports focus, `Input` marks the caret with one reverse-video cell (`ESC[7m`). The cell covers whatever the row already has at that column — the blank after the last glyph, or the first placeholder character when the value is empty. Its style is `style` plus `cursor_style`; the placeholder's grey is dropped from that one cell, so the cursor stays a solid reverse-video block over it.
+
+This is a cell style, not the terminal's own cursor. The screen keeps the real cursor hidden, so the field draws its own. Set `cursor_style` to replace the default `term.Sgr(term.StyleReverse)`:
+
+```salam
+in.cursor_style = term.Sgr(term.FgBlack) + term.Sgr(term.BgWhite)
+```
+
+An unfocused input draws no cursor cell.
+
+## Placeholder
+
+The placeholder is shown whenever the value is empty, focused or not. It is styled bright black by default (`ESC[90m`, that is `term.Sgr(term.FgBlack + term.FgBright)`) and hard-clipped at the field width: characters past `width` are not drawn.
+
+- The placeholder never becomes part of the value, so `value()` stays `""` while only the placeholder is visible.
+- Backspacing the last character brings the placeholder back.
+- Set `placeholder_style` to style it differently.
+
+```salam
+in.set_placeholder("Search")
+println in.value() // "" while the field is empty
+```
+
+## Focus
+
+`focusable()` returns `true`, so the screen's focus dispatch delivers key presses to the input while it is focused, and Tab-style and spatial navigation can move the focus onto it. An unfocused input receives no key events. When the input consumes a key, the screen marks itself dirty and redraws, so the caret and the value stay in step with the terminal.
+
+## Overflow
+
+Rendering is tail-anchored and stateless: each frame shows the last cells that fit and recomputes the window from scratch, with no stored scroll offset. The first drawn codepoint is
+
+```text
+start = max(0, count - (width - focused))
+```
+
+where `count` is the value's length, `width` is the field's width in cells, and `focused` is `1` while the input has focus — reserving the last cell for the cursor — and `0` otherwise. Focused, the caret lands at column `count - start`, always inside the field.
+
+Worked example, width `8`, value `"abcdefghij"`:
+
+| State | Shown | Cursor column |
+| --- | --- | --- |
+| Focused | `defghij` | `7` |
+| Unfocused | `cdefghij` | — |
+
+The window starts scrolling one cell earlier while focused: the first cell scrolls when `count` reaches `width`, and, unfocused, when it reaches `width + 1`.
+
+## Example
+
+A buffer is plain memory, so you can render and inspect an input without a terminal:
+
+```salam
+include "basalam/basalam.salam"
+
+func key(seq: str): basalam.Event:
+    ret basalam.Event { kind = basalam.KeyEvent, key = term.Decode(seq) }
+end
+
+func main:
+    mut in := basalam.NewInput()
+    in.set_placeholder("Name")
+    _ := in.handle_event(key("A"))
+    _ := in.handle_event(key("b"))
+    _ := in.handle_event(key("\x7f")) // backspace drops "b"
+    _ := in.handle_event(key("c"))
+    println in.value() // Ac
+
+    mut buf := basalam.NewBuffer(6, 1)
+    defer buf.free()
+    buf.focused = true
+    in.render(buf, basalam.Rect { width = 6, height = 1 })
+    println "[" + buf.row_text(0) + "]" // [Ac    ]
+    println buf.get(2, 0).style != "" // true: the cursor cell is styled
+end
+```
+
+<Note>
+  A `dyn basalam.Widget` cannot be downcast back to an `Input`. Keep a concrete `Input` reference — or a shared location such as a `mut` global — to call `value()`, `set_value`, and `set_placeholder`.
+</Note>

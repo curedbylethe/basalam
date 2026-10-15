@@ -17,6 +17,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `set_align`, `set_style`, `set_wrap`, `render`, `preferred_size`, and
   `preferred_width`, plus the pure line rules `WrapText` and
   `MeasureText`, the `Alignment` enum, and the `WrapMode` enum.
+- `Input`: a focusable single-line text-entry widget with `NewInput`,
+  `set_value`, `set_placeholder`, `value`, `focusable`, and `render`, a
+  reverse-video cursor cell drawn while focused, and a dim placeholder
+  shown while the value is empty.
 
 ### Changed
 

@@ -33,6 +33,8 @@
  *     event.salam    Event, the value input arrives as, and its kinds
  *     buffer.salam   Buffer and Cell, the grid widgets draw into
  *     widget.salam   the Widget interface and BaseWidget defaults
+ *     text.salam     the Text widget and the pure line rules it draws through
+ *     input.salam    the Input widget: single-line text entry with a caret
  *     tree.salam     the widget registry (IDs, parents) and event bubbling
  *     screen.salam   Screen: terminal session, input thread, event loop
  *     focus.salam    spatial focus search (Nearest) and the Dir* constants
