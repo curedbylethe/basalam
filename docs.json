@@ -37,6 +37,7 @@
           "reference/rect",
           "reference/widget",
           "reference/text",
+          "reference/input",
           "reference/event",
           "reference/tree",
           "reference/buffer",
