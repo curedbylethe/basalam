@@ -65,6 +65,23 @@ struct Sizer:
     end
 end
 
+// AssertMeasure measures normally but fails the test if the engine ever
+// forwards a non-positive max_width: R8 says that is never forwarded, the
+// axis resolves to 0 with no call.
+struct AssertMeasure:
+    pub use basalam.BaseWidget
+
+    pub func preferred_size(max_width: int): basalam.Rect:
+        testing.AssertTrue(max_width > 0)
+        ret basalam.Rect { width = 2, height = 1 }
+    end
+
+    pub func render(buf: basalam.Buffer, b: basalam.Rect):
+        _ := buf
+        _ := b
+    end
+end
+
 func rect(x: int, y: int, w: int, h: int): basalam.Rect:
     ret basalam.Rect { x = x, y = y, width = w, height = h }
 end
@@ -97,11 +114,24 @@ func sizer(w: int, h: int): dyn basalam.Widget:
     ret Sizer { w = w, h = h } as dyn basalam.Widget
 end
 
+func keyed(): dyn basalam.Widget:
+    ret AssertMeasure {} as dyn basalam.Widget
+end
+
+func text(s: str): dyn basalam.Widget:
+    ret basalam.NewText(s) as dyn basalam.Widget
+end
+
 func checkRect(r: basalam.Rect, x: int, y: int, w: int, h: int):
     testing.AssertEqInt(r.x, x)
     testing.AssertEqInt(r.y, y)
     testing.AssertEqInt(r.width, w)
     testing.AssertEqInt(r.height, h)
+end
+
+func checkEmpty(r: basalam.Rect):
+    testing.AssertEqInt(r.width, 0)
+    testing.AssertEqInt(r.height, 0)
 end
 
 func test_inset_uniform():
@@ -529,6 +559,469 @@ func test_slot_bad_index_ignored():
     checkRect(a.bounds(), 0, 0, 4, 2)
 end
 
+// ---- AC1: recursive layout tree ------------------------------------------
+
+func test_screen_fit_root_recursion():
+    root := basalam.NewColumn()
+    root.set_padding(basalam.UniformInsets(1))
+    a := leaf()
+    mid := basalam.NewRow()
+    midd := mid as dyn basalam.Widget
+    b := leaf()
+    _ := root.add(a)
+    _ := root.add(midd)
+    _ := root.add(b)
+
+    // A headless screen: NewScreen fits the root to the buffer, and the
+    // container override cascades to every registered child.
+    scr := basalam.NewScreen(root as dyn basalam.Widget, 20, 10)
+    _ := scr.add(basalam.RootId, a)
+    _ := scr.add(basalam.RootId, midd)
+    _ := scr.add(basalam.RootId, b)
+    checkRect(scr.widget(basalam.RootId).bounds(), 0, 0, 20, 10)
+    checkRect(a.bounds(), 1, 1, 18, 3)
+    checkRect(midd.bounds(), 1, 4, 18, 3)
+    checkRect(b.bounds(), 1, 7, 18, 2)
+
+    // resize refits the root and re-lays out: content {1,1,18,10} -> 4,3,3.
+    scr.resize(20, 12)
+    checkRect(scr.widget(basalam.RootId).bounds(), 0, 0, 20, 12)
+    checkRect(a.bounds(), 1, 1, 18, 4)
+    checkRect(midd.bounds(), 1, 5, 18, 3)
+    checkRect(b.bounds(), 1, 8, 18, 3)
+end
+
+func test_deep_column_row_grid_d():
+    grid := basalam.NewGrid(2, 3)
+    gc := leaf()
+    ga := leaf()
+    gd := leaf()
+    gb := leaf()
+    igc := grid.add(gc)
+    iga := grid.add(ga)
+    igd := grid.add(gd)
+    igb := grid.add(gb)
+    grid.set_cell(igc, 1, 2)
+    grid.set_margin(igc, basalam.UniformInsets(1))
+    grid.set_cell(iga, 0, 0)
+    grid.set_cell(igd, 1, 0)
+    grid.set_width(igd, fixedSize(5))
+    grid.set_height(igd, fixedSize(2))
+    grid.set_align(igd, basalam.CrossAlign.End, basalam.CrossAlign.Start)
+    grid.set_cell(igb, 0, 1)
+    grid.set_width(igb, fixedSize(6))
+    grid.set_height(igb, fixedSize(3))
+    grid.set_align(igb, basalam.CrossAlign.Center, basalam.CrossAlign.Center)
+    gridd := grid as dyn basalam.Widget
+
+    row := basalam.NewRow()
+    s := leaf()
+    is := row.add(s)
+    row.set_width(is, fixedSize(15))
+    ig := row.add(gridd)
+    row.set_margin(ig, basalam.UniformInsets(1))
+    rowd := row as dyn basalam.Widget
+
+    root := basalam.NewColumn()
+    root.set_padding(basalam.UniformInsets(1))
+    h := leaf()
+    f := leaf()
+    ih := root.add(h)
+    root.set_height(ih, fixedSize(3))
+    _ := root.add(rowd)
+    iff := root.add(f)
+    root.set_height(iff, fixedSize(1))
+    root.set_bounds(rect(0, 0, 60, 20))
+
+    checkRect(h.bounds(), 1, 1, 58, 3)
+    checkRect(rowd.bounds(), 1, 4, 58, 14)
+    checkRect(s.bounds(), 1, 4, 15, 14)
+    checkRect(gridd.bounds(), 17, 5, 41, 12)
+    checkRect(gc.bounds(), 46, 12, 11, 4)
+    checkRect(ga.bounds(), 17, 5, 14, 6)
+    checkRect(gd.bounds(), 26, 11, 5, 2)
+    checkRect(gb.bounds(), 35, 6, 6, 3)
+    checkRect(f.bounds(), 1, 18, 58, 1)
+end
+
+func test_recursion_empty_not_skipped_g1():
+    inner := basalam.NewRow()
+    b := leaf()
+    _ := inner.add(b)
+    innerd := inner as dyn basalam.Widget
+
+    col := basalam.NewColumn()
+    col.set_padding(basalam.UniformInsets(1))
+    a := leaf()
+    _ := col.add(a)
+    _ := col.add(innerd)
+    // Sentinel bounds: an unvisited leaf would keep them.
+    a.set_bounds(rect(9, 9, 9, 9))
+    b.set_bounds(rect(9, 9, 9, 9))
+    col.set_bounds(rect(0, 0, 0, 0))
+    checkEmpty(a.bounds())
+    checkEmpty(innerd.bounds())
+    checkEmpty(b.bounds())
+end
+
+// ---- AC2: row / column main-axis split -----------------------------------
+
+func test_column_equal_remainder_b2():
+    col := basalam.NewColumn()
+    a := leaf()
+    b := leaf()
+    c := leaf()
+    d := leaf()
+    e := leaf()
+    _ := col.add(a)
+    _ := col.add(b)
+    _ := col.add(c)
+    _ := col.add(d)
+    _ := col.add(e)
+    col.set_bounds(rect(0, 0, 7, 13))
+    // 13 = 5x2 + 3 -> first three get 3; Stretch fills the width.
+    checkRect(a.bounds(), 0, 0, 7, 3)
+    checkRect(b.bounds(), 0, 3, 7, 3)
+    checkRect(c.bounds(), 0, 6, 7, 3)
+    checkRect(d.bounds(), 0, 9, 7, 2)
+    checkRect(e.bounds(), 0, 11, 7, 2)
+end
+
+func test_row_overflow_f1():
+    row := basalam.NewRow()
+    a := leaf()
+    b := leaf()
+    c := leaf()
+    d := leaf()
+    ia := row.add(a)
+    ib := row.add(b)
+    _ := row.add(c)
+    id := row.add(d)
+    row.set_width(ia, fixedSize(12))
+    row.set_width(ib, fixedSize(12))
+    row.set_margin(ib, ins(0, 2, 0, 2))
+    row.set_width(id, fixedSize(6))
+    row.set_bounds(rect(0, 0, 20, 5))
+    // Fixed 24 > 20 -> R = 0. B is cut at the edge, C/D fall past it.
+    checkRect(a.bounds(), 0, 0, 12, 5)
+    checkRect(b.bounds(), 14, 0, 6, 5)
+    checkRect(c.bounds(), 20, 0, 0, 0)
+    checkRect(d.bounds(), 20, 0, 0, 0)
+    testing.AssertTrue(c.bounds().is_empty())
+end
+
+func test_column_negative_fixed_padding_f2():
+    col := basalam.NewColumn()
+    col.set_padding(ins(1, 0, 1, -5))
+    a := leaf()
+    b := leaf()
+    c := leaf()
+    ia := col.add(a)
+    ib := col.add(b)
+    _ := col.add(c)
+    col.set_height(ia, fixedSize(-3))
+    col.set_height(ib, fixedSize(4))
+    col.set_bounds(rect(0, 0, 10, 7))
+    // Padding left -5 clamps to 0; Fixed(-3) clamps to 0.
+    checkRect(a.bounds(), 0, 1, 0, 0)
+    checkRect(b.bounds(), 0, 1, 10, 4)
+    checkRect(c.bounds(), 0, 5, 10, 1)
+end
+
+// ---- AC3: grid -----------------------------------------------------------
+
+func test_grid_tracks_out_of_range_g5():
+    g := basalam.NewGrid(3, 3)
+    p := leaf()
+    q := leaf()
+    r := leaf()
+    z := leaf()
+    y := leaf()
+    ip := g.add(p)
+    iq := g.add(q)
+    ir := g.add(r)
+    iz := g.add(z)
+    iy := g.add(y)
+    g.set_cell(ip, 0, 0)
+    g.set_cell(iq, 1, 1)
+    g.set_cell(ir, 2, 2)
+    g.set_cell(iz, 3, 0)
+    g.set_cell(iy, 0, -1)
+    g.set_bounds(rect(0, 0, 2, 3))
+    // W=2,C=3 -> cols 1,1,0; H=3,R=3 -> rows 1,1,1.
+    checkRect(p.bounds(), 0, 0, 1, 1)
+    checkRect(q.bounds(), 1, 1, 1, 1)
+    checkRect(r.bounds(), 2, 2, 0, 0)
+    checkRect(z.bounds(), 0, 0, 0, 0)
+    checkRect(y.bounds(), 0, 0, 0, 0)
+end
+
+func test_grid_two_children_one_cell():
+    g := basalam.NewGrid(1, 1)
+    a := leaf()
+    b := leaf()
+    ia := g.add(a)
+    ib := g.add(b)
+    g.set_cell(ia, 0, 0)
+    g.set_cell(ib, 0, 0)
+    g.set_bounds(rect(0, 0, 8, 4))
+    checkRect(a.bounds(), 0, 0, 8, 4)
+    checkRect(b.bounds(), 0, 0, 8, 4)
+end
+
+func test_grid_cell_margin_alignment():
+    g := basalam.NewGrid(1, 2)
+    a := leaf()
+    b := leaf()
+    ia := g.add(a)
+    ib := g.add(b)
+    g.set_cell(ia, 0, 0)
+    g.set_cell(ib, 0, 1)
+    g.set_margin(ia, basalam.UniformInsets(1))
+    g.set_width(ib, fixedSize(2))
+    g.set_align(ib, basalam.CrossAlign.Center, basalam.CrossAlign.Stretch)
+    g.set_bounds(rect(0, 0, 10, 4))
+    // cols 5,5; cell0 margin 1 -> {1,1,3,2}; cell1 center of a 2-wide child.
+    checkRect(a.bounds(), 1, 1, 3, 2)
+    checkRect(b.bounds(), 6, 0, 2, 4)
+end
+
+// ---- AC4: stack ----------------------------------------------------------
+
+func test_stack_three_share_e2():
+    st := basalam.NewStack()
+    st.set_padding(basalam.UniformInsets(1))
+    a := leaf()
+    b := leaf()
+    c := leaf()
+    _ := st.add(a)
+    _ := st.add(b)
+    _ := st.add(c)
+    st.set_bounds(rect(0, 0, 9, 3))
+    checkRect(a.bounds(), 1, 1, 7, 1)
+    checkRect(b.bounds(), 1, 1, 7, 1)
+    checkRect(c.bounds(), 1, 1, 7, 1)
+end
+
+func test_stack_one_child():
+    st := basalam.NewStack()
+    st.set_padding(basalam.UniformInsets(1))
+    a := leaf()
+    _ := st.add(a)
+    st.set_bounds(rect(0, 0, 9, 3))
+    checkRect(a.bounds(), 1, 1, 7, 1)
+end
+
+func test_stack_zero_children():
+    st := basalam.NewStack()
+    st.set_padding(basalam.UniformInsets(1))
+    st.set_bounds(rect(0, 0, 9, 3))
+    testing.AssertEqInt(st.items.len(), 0)
+    checkRect(st.bounds(), 0, 0, 9, 3)
+end
+
+func test_stack_margin_over_budget_g4():
+    st := basalam.NewStack()
+    a := leaf()
+    b := leaf()
+    c := leaf()
+    ia := st.add(a)
+    _ := st.add(b)
+    ic := st.add(c)
+    st.set_margin(ia, ins(0, 6, 0, 6))
+    st.set_margin(ic, ins(0, 0, 0, 10))
+    st.set_bounds(rect(0, 0, 10, 4))
+    checkRect(a.bounds(), 6, 0, 0, 0)
+    checkRect(b.bounds(), 0, 0, 10, 4)
+    checkRect(c.bounds(), 10, 0, 0, 0)
+end
+
+// ---- AC5: padding, margin, alignment, Pref -------------------------------
+
+func test_row_margin_center_c():
+    row := basalam.NewRow()
+    a := leaf()
+    b := leaf()
+    c := leaf()
+    ia := row.add(a)
+    ib := row.add(b)
+    ic := row.add(c)
+    row.set_margin(ia, ins(1, 2, 1, 2))
+    row.set_height(ib, fixedSize(4))
+    row.set_align(ib, basalam.CrossAlign.Stretch, basalam.CrossAlign.Center)
+    row.set_width(ic, fixedSize(8))
+    row.set_bounds(rect(0, 0, 40, 9))
+    // R=32, m=2 -> 16, 16; C Fixed(8).
+    checkRect(a.bounds(), 2, 1, 12, 7)
+    checkRect(b.bounds(), 16, 2, 16, 4)
+    checkRect(c.bounds(), 32, 0, 8, 9)
+end
+
+func test_center_column_nine_h1():
+    col := basalam.NewColumn()
+    children := Vector {} as Vector<dyn basalam.Widget>
+    repeat 9 in i:
+        w := i + 1
+        l := leaf()
+        idx := col.add(l)
+        col.set_height(idx, fixedSize(1))
+        col.set_width(idx, fixedSize(w))
+        col.set_align(idx, basalam.CrossAlign.Center, basalam.CrossAlign.Stretch)
+        children.push(l)
+    end
+    col.set_bounds(rect(0, 0, 10, 9))
+    // free = 10 - w, offset floor(free / 2); the odd cell trails.
+    checkRect(children.get(0).bounds(), 4, 0, 1, 1)
+    checkRect(children.get(1).bounds(), 4, 1, 2, 1)
+    checkRect(children.get(2).bounds(), 3, 2, 3, 1)
+    checkRect(children.get(3).bounds(), 3, 3, 4, 1)
+    checkRect(children.get(4).bounds(), 2, 4, 5, 1)
+    checkRect(children.get(5).bounds(), 2, 5, 6, 1)
+    checkRect(children.get(6).bounds(), 1, 6, 7, 1)
+    checkRect(children.get(7).bounds(), 1, 7, 8, 1)
+    checkRect(children.get(8).bounds(), 0, 8, 9, 1)
+    children.free()
+end
+
+func test_center_row_four_h2():
+    row := basalam.NewRow()
+    v1 := leaf()
+    v2 := leaf()
+    v3 := leaf()
+    v4 := leaf()
+    i1 := row.add(v1)
+    i2 := row.add(v2)
+    i3 := row.add(v3)
+    i4 := row.add(v4)
+    row.set_height(i1, fixedSize(2))
+    row.set_align(i1, basalam.CrossAlign.Stretch, basalam.CrossAlign.Center)
+    row.set_height(i2, fixedSize(3))
+    row.set_align(i2, basalam.CrossAlign.Stretch, basalam.CrossAlign.Center)
+    row.set_height(i3, fixedSize(4))
+    row.set_align(i3, basalam.CrossAlign.Stretch, basalam.CrossAlign.Center)
+    row.set_height(i4, fixedSize(6))
+    row.set_align(i4, basalam.CrossAlign.Stretch, basalam.CrossAlign.Center)
+    row.set_bounds(rect(0, 0, 12, 7))
+    // Four Fill columns of 3; free = 7 - h.
+    checkRect(v1.bounds(), 0, 2, 3, 2)
+    checkRect(v2.bounds(), 3, 2, 3, 3)
+    checkRect(v3.bounds(), 6, 1, 3, 4)
+    checkRect(v4.bounds(), 9, 0, 3, 6)
+end
+
+func test_pref_column_text_i1():
+    col := basalam.NewColumn()
+    t1 := text("hello wide world")
+    t2 := text("hello wide world")
+    t3 := text("hi")
+    inner := basalam.NewRow()
+    rin := leaf()
+    _ := inner.add(rin)
+    t4 := inner as dyn basalam.Widget
+
+    i1 := col.add(t1)
+    i2 := col.add(t2)
+    i3 := col.add(t3)
+    i4 := col.add(t4)
+    col.set_height(i1, fixedSize(3))
+    col.set_align(i1, basalam.CrossAlign.Center, basalam.CrossAlign.Stretch)
+    col.set_height(i2, fixedSize(3))
+    col.set_align(i2, basalam.CrossAlign.End, basalam.CrossAlign.Stretch)
+    col.set_height(i3, fixedSize(1))
+    col.set_align(i3, basalam.CrossAlign.Start, basalam.CrossAlign.Stretch)
+    col.set_height(i4, fixedSize(2))
+    col.set_align(i4, basalam.CrossAlign.Center, basalam.CrossAlign.Stretch)
+    col.set_bounds(rect(0, 0, 12, 10))
+    // T1/T2 preferred_size(12): "hello wide" 10 / "world" 5 -> width 10.
+    checkRect(t1.bounds(), 1, 0, 10, 3)
+    checkRect(t2.bounds(), 2, 3, 10, 3)
+    checkRect(t3.bounds(), 0, 6, 2, 1)
+    // T4 is a container: it cannot measure, so it takes avail (12).
+    checkRect(t4.bounds(), 0, 7, 12, 2)
+    checkRect(rin.bounds(), 0, 7, 12, 2)
+end
+
+func test_pref_row_resolved_width_i2():
+    row := basalam.NewRow()
+    a := text("one two three")
+    b := text("x")
+    ia := row.add(a)
+    ib := row.add(b)
+    row.set_width(ia, fixedSize(8))
+    row.set_height(ia, prefSize())
+    row.set_align(ia, basalam.CrossAlign.Stretch, basalam.CrossAlign.Center)
+    row.set_align(ib, basalam.CrossAlign.Stretch, basalam.CrossAlign.End)
+    row.set_bounds(rect(0, 0, 20, 6))
+    // A height Pref resolves after the width: preferred_size(8) -> 2 lines.
+    checkRect(a.bounds(), 0, 2, 8, 2)
+    // B preferred_size(12) of "x" -> height 1, End -> 6 - 1 = 5.
+    checkRect(b.bounds(), 8, 5, 12, 1)
+end
+
+func test_pref_nonpositive_never_forwarded():
+    col := basalam.NewColumn()
+    a := keyed()
+    i := col.add(a)
+    col.set_align(i, basalam.CrossAlign.Start, basalam.CrossAlign.Stretch)
+    // width 0: max_width 0 must never reach preferred_size; the axis is 0.
+    col.set_bounds(rect(0, 0, 0, 5))
+    checkRect(a.bounds(), 0, 0, 0, 0)
+end
+
+func test_main_pref_acts_as_fill():
+    row := basalam.NewRow()
+    a := leaf()
+    i := row.add(a)
+    row.set_width(i, prefSize())
+    row.set_bounds(rect(0, 0, 10, 4))
+    // Pref on the main axis is reserved: it takes the share like Fill.
+    checkRect(a.bounds(), 0, 0, 10, 4)
+end
+
+func test_cross_fill_means_pref():
+    row := basalam.NewRow()
+    a := sizer(4, 2)
+    i := row.add(a)
+    // Fill on a non-stretch cross axis means Pref: preferred_size(8).height.
+    row.set_align(i, basalam.CrossAlign.Stretch, basalam.CrossAlign.Start)
+    row.set_bounds(rect(0, 0, 8, 4))
+    checkRect(a.bounds(), 0, 0, 8, 2)
+end
+
+// ---- AC6: set_bounds contract and paint smoke ----------------------------
+
+func test_normal_form_outputs():
+    row := basalam.NewRow()
+    a := leaf()
+    b := leaf()
+    ia := row.add(a)
+    ib := row.add(b)
+    row.set_width(ia, fixedSize(30))
+    row.set_margin(ib, basalam.UniformInsets(5))
+    row.set_bounds(rect(0, 0, 10, 4))
+    ra := a.bounds()
+    rb := b.bounds()
+    testing.AssertTrue(ra.width >= 0 and ra.height >= 0)
+    testing.AssertTrue(rb.width >= 0 and rb.height >= 0)
+    testing.AssertTrue((ra.width > 0 and ra.height > 0) or (ra.width == 0 and ra.height == 0))
+    testing.AssertTrue((rb.width > 0 and rb.height > 0) or (rb.width == 0 and rb.height == 0))
+end
+
+func test_draw_containers_smoke():
+    root := basalam.NewColumn()
+    root.set_padding(basalam.UniformInsets(1))
+    t := text("hi")
+    _ := root.add(t)
+    scr := basalam.NewScreen(root as dyn basalam.Widget, 6, 3)
+    _ := scr.add(basalam.RootId, t)
+    scr.draw()
+    // Containers paint nothing; the Text child drew at its bounds (1,1).
+    testing.AssertEqStr(scr.buffer.get(1, 1).ch, "h")
+    testing.AssertEqStr(scr.buffer.get(2, 1).ch, "i")
+    // The container's padding row stayed blank.
+    testing.AssertEqStr(scr.buffer.row_text(0), "      ")
+end
+
 func main:
     test_inset_uniform()
     test_inset_margin()
@@ -564,5 +1057,28 @@ func main:
     test_pref_container_yields_avail()
     test_empty_content()
     test_slot_bad_index_ignored()
+    test_screen_fit_root_recursion()
+    test_deep_column_row_grid_d()
+    test_recursion_empty_not_skipped_g1()
+    test_column_equal_remainder_b2()
+    test_row_overflow_f1()
+    test_column_negative_fixed_padding_f2()
+    test_grid_tracks_out_of_range_g5()
+    test_grid_two_children_one_cell()
+    test_grid_cell_margin_alignment()
+    test_stack_three_share_e2()
+    test_stack_one_child()
+    test_stack_zero_children()
+    test_stack_margin_over_budget_g4()
+    test_row_margin_center_c()
+    test_center_column_nine_h1()
+    test_center_row_four_h2()
+    test_pref_column_text_i1()
+    test_pref_row_resolved_width_i2()
+    test_pref_nonpositive_never_forwarded()
+    test_main_pref_acts_as_fill()
+    test_cross_fill_means_pref()
+    test_normal_form_outputs()
+    test_draw_containers_smoke()
     ret testing.Summary()
 end
