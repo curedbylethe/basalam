@@ -22,7 +22,7 @@
 // with term.Decode or synthetic kinds; frames are asserted per cell, or as
 // whole-grid bytes via Buffer.ansi(), never with diff() (a fresh buffer's
 // diff equals ansi, and a headless present() does not commit the front
-// grid). Keys follow the artifact vectors K01-K21, frames F01-F18, and
+// grid). Keys follow the artifact vectors K01-K23, frames F01-F18, and
 // sequences S01-S05.
 
 import testing
@@ -145,7 +145,7 @@ func test_defaults_empty():
     testing.AssertEqStr(e.selected_item(), "")
 end
 
-// ---- Navigation (AC2) — K01-K07 ---------------------------------------
+// ---- Navigation (AC2) — K01-K07, K22-K23 ------------------------------
 
 func test_nav_k01_j_inside_window():
     mut l := basalam.NewList(items10())
@@ -230,6 +230,28 @@ func test_nav_k07_j_then_k_roundtrip():
     mut b := frame(l, 10, 3, true)
     defer b.free()
     testing.AssertEqStr(b.row_text(0), "inbox     ")
+    testing.AssertEqStr(b.get(0, 0).style, term.Sgr(term.StyleReverse))
+end
+
+// K22/K23: on a single-item list both j and k are consumed but neither
+// moves the selection nor calls on_select.
+func test_nav_k22_k23_single_item():
+    picks.clear()
+    mut v := Vector {} as Vector<str>
+    v.push("only")
+    mut l := basalam.NewList(v)
+    l.set_bounds(rect(0, 0, 10, 3))
+    l.on_select = (i: int): picks.push(i) end
+    testing.AssertTrue(l.handle_event(key("j")))
+    testing.AssertEqInt(l.selected_index(), 0)
+    testing.AssertEqStr(l.selected_item(), "only")
+    testing.AssertTrue(l.handle_event(key("k")))
+    testing.AssertEqInt(l.selected_index(), 0)
+    testing.AssertEqStr(l.selected_item(), "only")
+    testing.AssertEqInt(picks.len(), 0)
+    mut b := frame(l, 10, 3, true)
+    defer b.free()
+    testing.AssertEqStr(b.row_text(0), "only      ")
     testing.AssertEqStr(b.get(0, 0).style, term.Sgr(term.StyleReverse))
 end
 
@@ -701,6 +723,7 @@ func main:
     test_nav_k05_k_inside_window()
     test_nav_k06_k_crosses_top()
     test_nav_k07_j_then_k_roundtrip()
+    test_nav_k22_k23_single_item()
     test_seq_s01_five_j()
     test_seq_s02_twelve_j()
     test_seq_s03_three_k()
