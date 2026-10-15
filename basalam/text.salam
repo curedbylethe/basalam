@@ -170,7 +170,13 @@ pub struct Text:
         end
         repeat n in i:
             line := lines.get(i)
-            slack := bounds.width - term.Width(line)
+            mut slack := bounds.width - term.Width(line)
+            // The artifact: a line at least as wide as the box shows its
+            // first cells for every alignment (len >= W puts offset = 0), so
+            // right and center never reveal the tail of an over-long line.
+            if slack < 0:
+                slack = 0
+            end
             mut offset := 0
             if this.align == Alignment.Right:
                 offset = slack
