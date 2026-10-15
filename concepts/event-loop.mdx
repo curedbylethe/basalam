@@ -35,6 +35,10 @@ sequenceDiagram
 
 The input thread never touches widgets, the tree, or the buffer. Its only shared state is the channel, which `std/chan` already synchronizes.
 
+<Note>
+  Key repeat is not a special event. Holding a key makes the terminal send the same bytes again and again, and each one becomes its own `KeyEvent` through the input loop. basalam coalesces nothing and drops nothing. Whether a repeat means "hold" or "one more step" is your application's decision.
+</Note>
+
 **The main thread** owns everything else. Each turn of the loop takes one event, dispatches it, and draws.
 
 ## The loop you write
