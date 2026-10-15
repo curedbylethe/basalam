@@ -24,7 +24,7 @@ sequenceDiagram
     C-->>M: ev
     M->>W: dispatch(ev): first widget, then ancestors
     M->>W: present(): render every widget into the buffer
-    M->>T: one write per frame
+    M->>T: one write of the changed cells
 ```
 
 **The input thread** starts in `screen.start()`. It loops over three sources:
@@ -51,9 +51,9 @@ end
 ```
 
 - `next_event` blocks until an event arrives. It returns `false` when the screen was stopped and the queue is empty.
-- `dispatch` handles a resize (the buffer and root are resized first), then offers the event to a starting widget and [bubbles it up](/reference/event#dispatch-and-bubbling). The starting widget is the focused one, except for mouse events (see [Mouse routing](#mouse-routing)). It returns whether a widget consumed it.
+- `dispatch` handles a resize (the buffer is reallocated and the root refitted first, forcing a full repaint), then offers the event to a starting widget and [bubbles it up](/reference/event#dispatch-and-bubbling). The starting widget is the focused one, except for mouse events (see [Mouse routing](#mouse-routing)). It returns whether a widget consumed it.
 - Anything no widget consumed is yours: keymaps, modes, and quitting are application decisions, not library ones.
-- `present` draws every widget into the buffer and writes the frame.
+- `present` draws every widget into the buffer and writes only the cells that changed since the last frame.
 
 `run()` and `run_with_tick(on_tick)` are this loop with two additions: they redraw only when something changed (`screen.dirty`), and an unconsumed Ctrl+C stops them. In raw mode, Ctrl+C is an ordinary key, so without this a program that forgets to handle it could not be left.
 
@@ -72,7 +72,7 @@ Every `ret` from that function, including early error returns, then restores the
 
 ## Resize
 
-When the terminal size changes, the input thread sends a `ResizeEvent` with the new `width` and `height`. `dispatch` resizes the buffer and gives the root widget the full rect before any widget sees the event. When the root is a [layout container](/reference/layout), that `set_bounds` call propagates down the tree, so a resize re-lays out every child in one pass. Hand-placed widgets keep their bounds; recompute those in your loop, as the demo does:
+When the terminal size changes, the input thread sends a `ResizeEvent` with the new `width` and `height`. `dispatch` reallocates the buffer's two grids and gives the root widget the full rect before any widget sees the event; the next frame repaints in full. When the root is a [layout container](/reference/layout), that `set_bounds` call propagates down the tree, so a resize re-lays out every child in one pass. Hand-placed widgets keep their bounds; recompute those in your loop, as the demo does:
 
 ```salam
 consumed := screen.dispatch(ev)
