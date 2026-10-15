@@ -20,7 +20,10 @@
 // Also the ansi() serialization (a cursor move per row, styles emitted only
 // where they change, trailing reset), the styles put_str writes, off-grid
 // and edge starts, the clip-vs-grid split (set and fill obey clip; get,
-// clear and row_text do not), and the per-copy focused flag.
+// clear and row_text do not), and the per-copy focused flag. Finally the
+// front-buffer machinery: diff() is a whole frame while force_full and then
+// only the changed runs (one cursor move per run), commit() silences it, and
+// resize() reallocates both grids and forces a full repaint.
 
 import testing
 import term
@@ -231,6 +234,111 @@ func test_focused_is_per_copy():
     b.free()
 end
 
+func test_diff_full_on_new():
+    mut b := basalam.NewBuffer(2, 2)
+    bold := term.Sgr(term.StyleBold)
+    b.set(0, 0, basalam.Cell { ch = "a" })
+    b.set(1, 0, basalam.Cell { ch = "b", style = bold })
+    b.set(0, 1, basalam.Cell { ch = "c", style = bold })
+    b.set(1, 1, basalam.Cell { ch = "d" })
+    // A fresh buffer must repaint everything, byte for byte like ansi().
+    testing.AssertTrue(b.force_full)
+    testing.AssertEqStr(b.diff(), b.ansi())
+    b.free()
+end
+
+func test_commit_clears_diff():
+    mut b := basalam.NewBuffer(2, 1)
+    b.set(0, 0, basalam.Cell { ch = "x" })
+    b.commit()
+    // After a commit the front grid matches the back grid: nothing to draw.
+    testing.AssertFalse(b.force_full)
+    testing.AssertEqStr(b.diff(), "")
+    b.free()
+end
+
+func test_diff_single_cell():
+    mut b := basalam.NewBuffer(3, 1)
+    b.commit()
+    b.set(1, 0, basalam.Cell { ch = "x" })
+    // One run: a cursor move, the character, and the closing reset.
+    want := term.SeqMoveTo(1, 2) + "x" + term.Reset
+    testing.AssertEqStr(b.diff(), want)
+    b.free()
+end
+
+func test_diff_adjacent_run():
+    mut b := basalam.NewBuffer(4, 1)
+    b.commit()
+    b.set(1, 0, basalam.Cell { ch = "a" })
+    b.set(2, 0, basalam.Cell { ch = "b" })
+    // Adjacent changed cells share one cursor move and one run.
+    want := term.SeqMoveTo(1, 2) + "ab" + term.Reset
+    testing.AssertEqStr(b.diff(), want)
+    b.free()
+end
+
+func test_diff_two_runs():
+    mut b := basalam.NewBuffer(5, 1)
+    b.commit()
+    b.set(0, 0, basalam.Cell { ch = "a" })
+    b.set(3, 0, basalam.Cell { ch = "b" })
+    // A gap between changed cells splits the row into two runs.
+    want := term.SeqMoveTo(1, 1) + "a" + term.SeqMoveTo(1, 4) + "b" + term.Reset
+    testing.AssertEqStr(b.diff(), want)
+    b.free()
+end
+
+func test_diff_style_only():
+    mut b := basalam.NewBuffer(2, 1)
+    bold := term.Sgr(term.StyleBold)
+    b.set(0, 0, basalam.Cell { ch = "a" })
+    b.commit()
+    b.set(0, 0, basalam.Cell { ch = "a", style = bold })
+    // Same character, new style: reset into the style, then draw it again.
+    want := term.SeqMoveTo(1, 1) + term.Reset + bold + "a" + term.Reset
+    testing.AssertEqStr(b.diff(), want)
+    b.free()
+end
+
+func test_clear_redraw_is_empty():
+    mut b := basalam.NewBuffer(3, 1)
+    b.put_str(0, 0, "abc", "")
+    b.commit()
+    // Repainting the same content after a clear leaves nothing to draw.
+    b.clear()
+    b.put_str(0, 0, "abc", "")
+    testing.AssertEqStr(b.diff(), "")
+    b.free()
+end
+
+func test_resize_forces_full():
+    mut b := basalam.NewBuffer(2, 2)
+    b.set(0, 0, basalam.Cell { ch = "x" })
+    b.commit()
+    testing.AssertEqStr(b.diff(), "")
+    b.resize(3, 1)
+    // A resize reallocates both grids and forces a whole-frame repaint.
+    testing.AssertTrue(b.force_full)
+    testing.AssertEqInt(b.width, 3)
+    testing.AssertEqInt(b.height, 1)
+    testing.AssertEqStr(b.row_text(0), "   ")
+    testing.AssertEqStr(b.diff(), b.ansi())
+    b.free()
+end
+
+func test_front_shared_through_copies():
+    mut b := basalam.NewBuffer(2, 1)
+    b.commit()
+    mut view := b
+    view.set(0, 0, basalam.Cell { ch = "z" })
+    // The copy writes the shared back grid, so the original diffs the change.
+    want := term.SeqMoveTo(1, 1) + "z" + term.Reset
+    testing.AssertEqStr(b.diff(), want)
+    // free() releases both grids once; teardown exercises it here.
+    b.free()
+end
+
 func main:
     test_new_is_blank()
     test_set_get()
@@ -245,5 +353,14 @@ func main:
     test_fill_edges()
     test_clip_vs_grid()
     test_focused_is_per_copy()
+    test_diff_full_on_new()
+    test_commit_clears_diff()
+    test_diff_single_cell()
+    test_diff_adjacent_run()
+    test_diff_two_runs()
+    test_diff_style_only()
+    test_clear_redraw_is_empty()
+    test_resize_forces_full()
+    test_front_shared_through_copies()
     ret testing.Summary()
 end
