@@ -48,7 +48,7 @@ Each box has one job:
     One background thread reads input and produces events onto a channel. The main thread consumes them and calls widgets synchronously. Widgets never run concurrently with each other or with drawing, so they need no locks, and `handle_event` is plain code. The cost is that a slow handler delays the next frame; keep handlers short and do background work in your application.
   </Accordion>
   <Accordion title="Widgets are interfaces, identified by ID">
-    Any struct with the five `Widget` methods is a widget, stored as `dyn Widget`. Salam cannot compare or downcast `dyn` values, so the tree identifies widgets by integer ID: their index in the tree. IDs only grow, so a parent's ID is always smaller than its children's.
+    Any struct with the six `Widget` methods is a widget, stored as `dyn Widget`. Salam cannot compare or downcast `dyn` values, so the tree identifies widgets by integer ID: their index in the tree. IDs only grow, so a parent's ID is always smaller than its children's.
   </Accordion>
   <Accordion title="One order for everything">
     ID order is paint order (stack z-order: later widgets paint over earlier ones) and focus order. One rule instead of three keeps the core predictable.
@@ -60,7 +60,7 @@ Each box has one job:
     The screen keeps a focus stack; the top is the focused widget, so a dialog can take the focus and give it back. Linear (`focus_next`) and spatial (`focus_left` and friends) movement are methods. Which keys call them is your application's choice, so the library never fights an application's own keymap or modes.
   </Accordion>
   <Accordion title="Layout is not a widget's job">
-    Widgets receive their bounds through `set_bounds`. The core's only layout rule is that the root fills the screen. Everything else is set by your application until the layout engine arrives.
+    Widgets receive their bounds through `set_bounds`. Containers do the layout: [Row, Column, Grid, and Stack](/reference/layout) compute one rect per child and call its `set_bounds`, so one call on the root lays out the whole tree. The core still sizes the root to the screen; a widget you place by hand keeps the bounds you give it.
   </Accordion>
   <Accordion title="No keymaps or modes in the library">
     The library delivers events and reports whether a widget consumed them. What an unhandled key means, including vim-style modes, belongs to your application.
@@ -83,4 +83,4 @@ Each box has one job:
 </Warning>
 
 - The tree cannot remove or reparent widgets.
-- There is no layout engine; concrete widgets such as `Text` and `Input` draw strictly inside the bounds the screen gives them.
+- The layout engine lives in `basalam/layout.salam`: the [Row, Column, Grid, and Stack](/reference/layout) containers compute and assign their children's bounds, though they position children rather than paint them. Concrete widgets such as `Text` and `Input` draw strictly inside the bounds they receive.

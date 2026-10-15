@@ -36,6 +36,7 @@
         "pages": [
           "reference/rect",
           "reference/widget",
+          "reference/layout",
           "reference/text",
           "reference/input",
           "reference/event",

@@ -1,0 +1,375 @@
+---
+title: "Layout"
+description: "The Row, Column, Grid, and Stack containers, the slot API that sizes and places their children, and the box math behind them."
+keywords: ["layout", "row", "column", "grid", "stack", "container", "padding", "margin", "alignment", "preferred_size", "set_bounds"]
+---
+
+`Row`, `Column`, `Grid`, and `Stack` are containers. A container owns an ordered list of slots, one per child, and turns its own bounds into one [rect](/reference/rect) per slot. Widgets never compute their own position: a container's `set_bounds` stores its own rect, works out its content box, and calls `set_bounds` on each child in slot order, so a single call on the root lays out the whole tree. Containers position; they never paint. Register every child with the [screen's tree](/reference/tree) as well, or it is placed but never drawn.
+
+```salam
+mut row := basalam.NewRow()
+a := row.add(label) // the first slot
+row.set_width(a, basalam.LayoutSize { kind = basalam.SizeKind.Fixed, cells = 8 })
+b := row.add(list) // the second slot
+row.set_width(b, basalam.LayoutSize { kind = basalam.SizeKind.Fill })
+row.set_padding(basalam.UniformInsets(1))
+```
+
+## CrossAlign
+
+How a child is placed on a container's cross axis — the axis the container does not split: `y` for a [Row](#row), `x` for a [Column](#column). The default is `Stretch`.
+
+```salam
+pub enum CrossAlign:
+    Start
+    Center
+    End
+    Stretch
+end
+```
+
+<ResponseField name="Start" type="CrossAlign">The child starts at the box's leading edge, with the free space after it.</ResponseField>
+<ResponseField name="Center" type="CrossAlign">The child is centred in the free space. The offset is `floor(free / 2)`, so when the free space is odd the extra cell lands on the right (Row) or the bottom (Column).</ResponseField>
+<ResponseField name="End" type="CrossAlign">The child ends at the box's trailing edge, with the free space before it.</ResponseField>
+<ResponseField name="Stretch" type="CrossAlign">The child fills the whole axis. The default; any size request on that axis is ignored.</ResponseField>
+
+`free` is the box length minus the child's natural size, clamped into the box: `n = clamp(natural, 0, avail)` and `free = avail - n`. The natural size comes from the child's size request on that axis: `Fixed(n)` gives `n` cells, while `Fill` and `Pref` both mean the child's [`preferred_size`](/reference/widget#preferred_size). `Stretch` takes the whole axis instead. A child that cannot measure fills the axis.
+
+## SizeKind
+
+How a child resolves its size on one axis.
+
+```salam
+pub enum SizeKind:
+    Fill
+    Fixed
+    Pref
+end
+```
+
+<ResponseField name="Fill" type="SizeKind">An equal share of what is left after the `Fixed` children. On a main axis, `Fill` and `Pref` divide the remainder equally; on a cross axis, `Fill` behaves like `Pref`. The default.</ResponseField>
+<ResponseField name="Fixed" type="SizeKind">Exactly `cells` cells long. A negative value clamps to `0`.</ResponseField>
+<ResponseField name="Pref" type="SizeKind">The child's preferred size, as read by the cross axis. On a main axis it is reserved and behaves as `Fill`.</ResponseField>
+
+## LayoutSize
+
+A child's requested size on one axis.
+
+```salam
+pub struct LayoutSize:
+    pub kind: SizeKind = SizeKind.Fill
+    pub cells: int = 0
+end
+```
+
+<ResponseField name="kind" type="SizeKind">How the size is resolved. Defaults to `SizeKind.Fill`.</ResponseField>
+<ResponseField name="cells" type="int">The requested length. Read only when `kind` is `SizeKind.Fixed`. A negative value clamps to `0`.</ResponseField>
+
+## Insets
+
+Four side lengths in cells, written top, right, bottom, left. The same type is a container's padding and a child's margin.
+
+```salam
+pub struct Insets:
+    pub top: int = 0
+    pub right: int = 0
+    pub bottom: int = 0
+    pub left: int = 0
+end
+```
+
+<ResponseField name="top" type="int">Cells above the content (padding) or reserved above the child (margin).</ResponseField>
+<ResponseField name="right" type="int">Cells to the right of the content or reserved right of the child.</ResponseField>
+<ResponseField name="bottom" type="int">Cells below the content or reserved below the child.</ResponseField>
+<ResponseField name="left" type="int">Cells to the left of the content or reserved left of the child.</ResponseField>
+
+Two constructors clamp negative sides to `0`:
+
+```salam
+pub func NewInsets(top: int, right: int, bottom: int, left: int): Insets
+pub func UniformInsets(v: int): Insets
+```
+
+A negative side used directly, without a constructor, also clamps to `0` when the inset is applied, so padding and margin never grow a box.
+
+## LayoutSlot
+
+One child's entry in a container's ordered slot list. A slot belongs to the parent; a widget never sees it.
+
+```salam
+pub struct LayoutSlot:
+    pub child: dyn Widget
+    pub margin: Insets = Insets {}
+    pub width: LayoutSize = LayoutSize {}
+    pub height: LayoutSize = LayoutSize {}
+    pub align_x: CrossAlign = CrossAlign.Stretch
+    pub align_y: CrossAlign = CrossAlign.Stretch
+    pub row: int = 0
+    pub col: int = 0
+end
+```
+
+<ResponseField name="child" type="dyn Widget">The child widget. It must also be added to the [screen's tree](/reference/tree), or the screen never paints it.</ResponseField>
+<ResponseField name="margin" type="Insets">Space reserved inside the slot, before alignment. `Insets {}` by default.</ResponseField>
+<ResponseField name="width" type="LayoutSize">The requested size on the x axis. `Fill` by default.</ResponseField>
+<ResponseField name="height" type="LayoutSize">The requested size on the y axis. `Fill` by default.</ResponseField>
+<ResponseField name="align_x" type="CrossAlign">Cross-axis alignment on x. `Stretch` by default.</ResponseField>
+<ResponseField name="align_y" type="CrossAlign">Cross-axis alignment on y. `Stretch` by default.</ResponseField>
+<ResponseField name="row" type="int">The Grid row this child occupies. `0` by default.</ResponseField>
+<ResponseField name="col" type="int">The Grid column this child occupies. `0` by default.</ResponseField>
+
+A container reads the size request on its main axis: a [Row](#row) splits `width`, a [Column](#column) splits `height`. On the cross axis the alignment decides placement: `Stretch` fills the axis, `Fixed(n)` gives `n` cells, and `Fill` or `Pref` mean the child's preferred size. A [Grid](#grid) has no main axis and places children this way on both axes; a [Stack](#stack) ignores the size request entirely.
+
+## Row
+
+Lays its children left to right along the `x` axis.
+
+```salam
+pub struct Row:
+    pub use BaseWidget
+    pub pad: Insets = Insets {}
+    pub items: Vector<LayoutSlot> = Vector {}
+end
+```
+
+<ResponseField name="pad" type="Insets">The inset between the container's bounds and its content box. `Insets {}` by default.</ResponseField>
+<ResponseField name="items" type="Vector<LayoutSlot>">The children in placement order, one slot each. Manage it with `add` and the slot methods.</ResponseField>
+
+Row splits the content width. A `Fixed(n)` slot takes exactly `n` cells, and the `Fill` slots (and a main-axis `Pref`, which behaves as `Fill`) share what is left equally, the remainder going to the earliest of them one cell each. Slots are packed from the content start with no gaps. On the cross axis the child fills the content height unless `align_y` places it otherwise, and a non-`Stretch` child takes its cross-axis request: `Fixed(n)` cells, or its preferred height for `Fill` or `Pref`.
+
+### add
+
+```salam
+pub func add(child: dyn Widget): int
+```
+
+Appends `child` as the last slot and returns its index. This orders the child for layout only; add it to the [screen's tree](/reference/tree) too, or it is positioned but never drawn.
+
+### Slots
+
+```salam
+pub func set_margin(i: int, margin: Insets)
+pub func set_width(i: int, size: LayoutSize)
+pub func set_height(i: int, size: LayoutSize)
+pub func set_align(i: int, align_x: CrossAlign, align_y: CrossAlign)
+```
+
+Pass the index `add` returned. `set_margin` reserves space inside the slot before the child is placed. `set_width` sets the `x` size request — the share Row splits. `set_height` sets the `y` size request. `set_align` sets both cross-axis alignments. An out-of-range index is ignored, so a bad index leaves the slot unchanged.
+
+### Padding
+
+```salam
+pub func set_padding(pad: Insets)
+```
+
+Sets the padding between the container's bounds and its content box. The content box is the bounds inset by `pad`; children are laid out inside it and clipped to it.
+
+## Column
+
+Lays its children top to bottom along the `y` axis. It is the mirror of Row: each slot takes a `Fixed` or `Fill` share of the content height, and fills the content width unless `align_x` places it otherwise. The method signatures are identical to Row's, with `height` as the split axis.
+
+```salam
+pub struct Column:
+    pub use BaseWidget
+    pub pad: Insets = Insets {}
+    pub items: Vector<LayoutSlot> = Vector {}
+end
+```
+
+<ResponseField name="pad" type="Insets">The inset between the container's bounds and its content box. `Insets {}` by default.</ResponseField>
+<ResponseField name="items" type="Vector<LayoutSlot>">The children in placement order, one slot each.</ResponseField>
+
+### add
+
+```salam
+pub func add(child: dyn Widget): int
+```
+
+Appends `child` as the last slot and returns its index; add it to the [screen's tree](/reference/tree) too.
+
+### Slots
+
+```salam
+pub func set_margin(i: int, margin: Insets)
+pub func set_width(i: int, size: LayoutSize)
+pub func set_height(i: int, size: LayoutSize)
+pub func set_align(i: int, align_x: CrossAlign, align_y: CrossAlign)
+```
+
+`set_height` sets the axis Column splits; `set_width` sets the `x` request; `set_align` sets the cross-axis alignments. `set_margin` reserves space inside the slot. An out-of-range index is ignored.
+
+### Padding
+
+```salam
+pub func set_padding(pad: Insets)
+```
+
+Sets the padding between the container's bounds and its content box.
+
+## Grid
+
+Divides its content box into a fixed `rows` x `cols` grid and places each child in an explicit cell.
+
+```salam
+pub struct Grid:
+    pub use BaseWidget
+    pub pad: Insets = Insets {}
+    pub items: Vector<LayoutSlot> = Vector {}
+    pub rows: int = 0
+    pub cols: int = 0
+end
+```
+
+<ResponseField name="pad" type="Insets">The inset between the container's bounds and its content box. `Insets {}` by default.</ResponseField>
+<ResponseField name="items" type="Vector<LayoutSlot>">The children in placement order, one slot each.</ResponseField>
+<ResponseField name="rows" type="int">The number of grid rows. Set by `NewGrid`.</ResponseField>
+<ResponseField name="cols" type="int">The number of grid columns. Set by `NewGrid`.</ResponseField>
+
+Columns share the content width equally and rows share the content height equally, the remainder going to the earliest track, so the tracks sum to the content box exactly. Each cell behaves like a slot: the child's margin insets it, then `align_x` and `align_y` place the child — a `Stretch` axis fills the cell, and a non-`Stretch` axis takes the child's size request on that axis (`Fixed(n)` cells, or its preferred size for `Fill` or `Pref`). An out-of-range or negative cell is a `0x0` slot at the content origin, and the child is still visited. Two children in one cell share it and overlap; registry order decides what paints on top.
+
+`NewGrid(rows, cols)` creates an empty grid; a non-positive count leaves every child without a cell.
+
+### add
+
+```salam
+pub func add(child: dyn Widget): int
+```
+
+Appends `child` as the last slot and returns its index; add it to the [screen's tree](/reference/tree) too.
+
+### Slots
+
+```salam
+pub func set_margin(i: int, margin: Insets)
+pub func set_width(i: int, size: LayoutSize)
+pub func set_height(i: int, size: LayoutSize)
+pub func set_align(i: int, align_x: CrossAlign, align_y: CrossAlign)
+```
+
+`set_margin` reserves space inside the cell before the child is placed, and `set_align` positions the child within it. An out-of-range index is ignored.
+
+### Cell placement
+
+```salam
+pub func set_cell(i: int, row: int, col: int)
+```
+
+Sets the slot's grid cell, 0-based, `row` then `col`. Every child carries its own cell; a child left at the default `(0, 0)` sits in the top-left cell. An out-of-range or negative cell gives the child an empty rect at the content origin, and the child is still laid out once.
+
+### Padding
+
+```salam
+pub func set_padding(pad: Insets)
+```
+
+Sets the padding between the container's bounds and its content box.
+
+## Stack
+
+Gives every child the content box minus its own margin, so children overlap exactly.
+
+```salam
+pub struct Stack:
+    pub use BaseWidget
+    pub pad: Insets = Insets {}
+    pub items: Vector<LayoutSlot> = Vector {}
+end
+```
+
+<ResponseField name="pad" type="Insets">The inset between the container's bounds and its content box. `Insets {}` by default.</ResponseField>
+<ResponseField name="items" type="Vector<LayoutSlot>">The children in placement order, one slot each.</ResponseField>
+
+A zero-margin child is exactly the content box. Size and alignment fields are ignored. With no children nothing is placed; the stack still receives its own bounds. Later registry ids paint on top, so the last child added draws over the others.
+
+### add
+
+```salam
+pub func add(child: dyn Widget): int
+```
+
+Appends `child` as the last slot and returns its index; add it to the [screen's tree](/reference/tree) too.
+
+### Slots
+
+```salam
+pub func set_margin(i: int, margin: Insets)
+pub func set_width(i: int, size: LayoutSize)
+pub func set_height(i: int, size: LayoutSize)
+pub func set_align(i: int, align_x: CrossAlign, align_y: CrossAlign)
+```
+
+`set_margin` is the only field a Stack reads: it insets each child inside the content box. `set_width`, `set_height`, and `set_align` are accepted for API symmetry and ignored.
+
+### Padding
+
+```salam
+pub func set_padding(pad: Insets)
+```
+
+Sets the padding between the container's bounds and its content box.
+
+## Recursion
+
+A layout pass starts at a node with an assigned rect. The node's own `set_bounds` runs first, then its content box is computed, then its children are laid out in slot order. Every node is visited exactly once, in pre-order depth-first; a leaf only stores its rect. Layout runs against the nominal slot and clips last, so a child that starts beyond the content box is empty and a partially visible child is cut at the edge.
+
+The screen enters the pass through `fit_root`: it gives the root the whole buffer with one `set_bounds` call, and a container root recurses from there. A widget you place by hand keeps whatever bounds you gave it.
+
+An empty rect or an empty content box gives every descendant an empty rect, but the recursion still visits them all. Two passes over the same tree with the same root rect give identical rects: layout depends only on the tree, the root rect, and the children's size requests and preferred sizes, never on previous bounds.
+
+## Box math
+
+The pure helpers behind the containers. They hold no state and are useful when you build rects yourself.
+
+```salam
+pub func FitRect(r: Rect, box: Rect): Rect
+pub func InsetRect(r: Rect, i: Insets): Rect
+pub func SplitMain(length: int, sizes: Vector<LayoutSize>): Vector<int>
+pub func TrackSizes(total: int, n: int): Vector<int>
+pub func PlaceAxisSize(avail: int, align: CrossAlign, natural: int): int
+pub func PlaceAxisOffset(avail: int, align: CrossAlign, natural: int): int
+```
+
+| Function | Result |
+| --- | --- |
+| `FitRect(r, box)` | The cells `r` and `box` share. When they do not meet, a `0x0` rect at the nearest point of `box` to `r`, so a rect leaving this function is non-empty or exactly `0x0`, never negative. |
+| `InsetRect(r, i)` | `r` inset by `i`, clipped back inside `r`. Each side clamps to `0` first; padding larger than `r` gives an empty content box inside it. |
+| `SplitMain(length, sizes)` | One length per size. `Fixed` takes `max(0, cells)`; `Fill` and `Pref` share the rest equally, the remainder to the earliest. With no shares, the leftover stays unused. |
+| `TrackSizes(total, n)` | `n` tracks that sum to `total`: `floor(total / n)` each, plus one for the earliest `total mod n`. A non-positive `n` gives an empty vector. |
+| `PlaceAxisSize(avail, align, natural)` | The length a child takes on one axis. `Stretch` (or a non-positive `avail`) gives `max(0, avail)`; otherwise `natural` clamped into `[0, avail]`. |
+| `PlaceAxisOffset(avail, align, natural)` | The child's offset from the box start. `Stretch` (or a non-positive `avail`) gives `0`; otherwise `Start` is `0`, `Center` is `floor(free / 2)`, and `End` is `free`. |
+
+## Example
+
+A Column with a fixed header and a Row. The Row's second child stretches in `x` and centres in `y`, so it takes its preferred height — the cross-axis `Pref` path:
+
+```salam
+include "basalam/basalam.salam"
+
+func main:
+    header := basalam.NewText("basalam") as dyn basalam.Widget
+    left := basalam.NewText("left") as dyn basalam.Widget
+    right := basalam.NewText("right") as dyn basalam.Widget
+
+    row := basalam.NewRow()
+    li := row.add(left)
+    ri := row.add(right)
+    row.set_width(li, basalam.LayoutSize { kind = basalam.SizeKind.Fixed, cells = 10 })
+    row.set_align(ri, basalam.CrossAlign.Stretch, basalam.CrossAlign.Center)
+
+    column := basalam.NewColumn()
+    hi := column.add(header)
+    _ := column.add(row as dyn basalam.Widget)
+    column.set_height(hi, basalam.LayoutSize { kind = basalam.SizeKind.Fixed, cells = 1 })
+    column.set_padding(basalam.UniformInsets(1))
+
+    mut screen := basalam.NewScreen(column, 40, 10)
+    defer screen.close()
+    _ := screen.add(basalam.RootId, header)
+    _ := screen.add(basalam.RootId, left)
+    _ := screen.add(basalam.RootId, right)
+
+    screen.fit_root() // one set_bounds lays out the whole tree
+    println screen.widget(1).bounds().height // 1: the fixed header row
+    println screen.widget(3).bounds().y      // 5: "right" centred in the row
+end
+```

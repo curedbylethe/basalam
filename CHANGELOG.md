@@ -21,6 +21,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `set_value`, `set_placeholder`, `value`, `focusable`, and `render`, a
   reverse-video cursor cell drawn while focused, and a dim placeholder
   shown while the value is empty.
+- `Widget.preferred_size`: the measurement hook a widget reports its wanted
+  size through, with a cannot-measure default on `BaseWidget` that fills
+  the available axis instead.
+- `Row`, `Column`, `Grid`, and `Stack` containers with `NewRow`,
+  `NewColumn`, `NewGrid`, and `NewStack`, the slot API (`add`,
+  `set_margin`, `set_width`, `set_height`, `set_align`, `set_padding`, and
+  Grid's `set_cell`), the `LayoutSlot`, `CrossAlign`, `SizeKind`,
+  `LayoutSize`, and `Insets` types, and the box math `FitRect`,
+  `InsetRect`, `SplitMain`, `TrackSizes`, `PlaceAxisSize`,
+  `PlaceAxisOffset`, `NewInsets`, and `UniformInsets`. One `set_bounds` on
+  a container lays out its whole subtree in slot order.
 
 ### Changed
 
