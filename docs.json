@@ -39,6 +39,7 @@
           "reference/layout",
           "reference/text",
           "reference/input",
+          "reference/list",
           "reference/event",
           "reference/tree",
           "reference/buffer",

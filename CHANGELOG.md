@@ -21,6 +21,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `set_value`, `set_placeholder`, `value`, `focusable`, and `render`, a
   reverse-video cursor cell drawn while focused, and a dim placeholder
   shown while the value is empty.
+- `List`: a focusable, single-selection scrollable list widget with
+  `NewList`, `selected_index`, `selected_item`, `on_select`, `focusable`, and
+  `render`, a full-width highlighted selected row (reverse video while
+  focused, bright black on a black background while not), vim `j`/`k`
+  navigation clamped at the ends, and minimal scrolling that keeps the
+  selection visible.
 - `Widget.preferred_size`: the measurement hook a widget reports its wanted
   size through, with a cannot-measure default on `BaseWidget` that fills
   the available axis instead.
