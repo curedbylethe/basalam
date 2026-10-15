@@ -16,6 +16,15 @@
 // Unit tests for Rect and Point: containment, intersection and
 // centering, with the edge cases that the half-open rule decides: zero-size
 // rects, rects that touch without overlapping, and negative coordinates.
+// The intersection helper is covered through its variants: a fully contained
+// rect (the result equals the contained rect), swapped-order symmetry,
+// negative-coordinate overlap, and the explicit empty result (an origin rect
+// with zero width and height, not merely is_empty). The half-open boundary is
+// pinned at right()-1/bottom()-1 (inside) versus right()/bottom() (outside)
+// for a rect with a negative origin, for both contains and intersects.
+// right()/bottom() are checked with negative origins and zero or negative
+// sizes, and is_empty covers width 0, negative width, height 0, negative
+// height, both nonpositive, and a non-empty control.
 
 import testing
 
@@ -118,6 +127,83 @@ func test_edges():
     testing.AssertEqInt(r.bottom(), 8)
 end
 
+func test_intersection_contained():
+    inner := rect(2, 3, 4, 2)
+    i := rect(0, 0, 10, 10).intersection(inner)
+    testing.AssertEqInt(i.x, 2)
+    testing.AssertEqInt(i.y, 3)
+    testing.AssertEqInt(i.width, 4)
+    testing.AssertEqInt(i.height, 2)
+end
+
+func test_intersection_symmetry():
+    a := rect(0, 0, 4, 4)
+    b := rect(2, 1, 5, 2)
+    ab := a.intersection(b)
+    ba := b.intersection(a)
+    testing.AssertEqInt(ab.x, 2)
+    testing.AssertEqInt(ab.y, 1)
+    testing.AssertEqInt(ab.width, 2)
+    testing.AssertEqInt(ab.height, 2)
+    testing.AssertEqInt(ab.x, ba.x)
+    testing.AssertEqInt(ab.y, ba.y)
+    testing.AssertEqInt(ab.width, ba.width)
+    testing.AssertEqInt(ab.height, ba.height)
+end
+
+func test_intersection_negative():
+    i := rect(-5, -3, 4, 5).intersection(rect(-3, -1, 4, 4))
+    testing.AssertEqInt(i.x, -3)
+    testing.AssertEqInt(i.y, -1)
+    testing.AssertEqInt(i.width, 2)
+    testing.AssertEqInt(i.height, 3)
+end
+
+func test_intersection_no_overlap():
+    none := rect(0, 0, 4, 4).intersection(rect(4, 0, 2, 2))
+    testing.AssertEqInt(none.x, 0)
+    testing.AssertEqInt(none.y, 0)
+    testing.AssertEqInt(none.width, 0)
+    testing.AssertEqInt(none.height, 0)
+    testing.AssertTrue(none.is_empty())
+end
+
+func test_edges_edge_inputs():
+    n := rect(-3, -4, 5, 2)
+    testing.AssertEqInt(n.right(), 2)
+    testing.AssertEqInt(n.bottom(), -2)
+    z := rect(0, 0, 0, 0)
+    testing.AssertEqInt(z.right(), 0)
+    testing.AssertEqInt(z.bottom(), 0)
+    d := rect(2, 3, -1, -2)
+    testing.AssertEqInt(d.right(), 1)
+    testing.AssertEqInt(d.bottom(), 1)
+    w := rect(-5, -6, 0, 3)
+    testing.AssertEqInt(w.right(), -5)
+    testing.AssertEqInt(w.bottom(), -3)
+end
+
+func test_is_empty():
+    testing.AssertTrue(rect(0, 0, 0, 5).is_empty())
+    testing.AssertTrue(rect(0, 0, -1, 5).is_empty())
+    testing.AssertTrue(rect(0, 0, 5, 0).is_empty())
+    testing.AssertTrue(rect(0, 0, 5, -1).is_empty())
+    testing.AssertTrue(rect(0, 0, -2, -2).is_empty())
+    testing.AssertFalse(rect(0, 0, 1, 1).is_empty())
+end
+
+func test_boundary_negative():
+    r := rect(-5, -2, 3, 3)
+    testing.AssertTrue(r.contains(pt(-3, -2)))
+    testing.AssertFalse(r.contains(pt(-2, -2)))
+    testing.AssertTrue(r.contains(pt(-5, 0)))
+    testing.AssertFalse(r.contains(pt(-5, 1)))
+    testing.AssertTrue(r.intersects(rect(-3, 0, 1, 1)))
+    testing.AssertFalse(r.intersects(rect(-2, 0, 1, 1)))
+    testing.AssertTrue(r.intersects(rect(-5, 0, 1, 1)))
+    testing.AssertFalse(r.intersects(rect(-5, 1, 1, 1)))
+end
+
 func main:
     test_contains()
     test_contains_empty()
@@ -129,5 +215,12 @@ func main:
     test_intersection()
     test_center()
     test_edges()
+    test_intersection_contained()
+    test_intersection_symmetry()
+    test_intersection_negative()
+    test_intersection_no_overlap()
+    test_edges_edge_inputs()
+    test_is_empty()
+    test_boundary_negative()
     ret testing.Summary()
 end
