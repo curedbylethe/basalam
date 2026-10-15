@@ -15,7 +15,8 @@
 
 // Unit tests for the minimal Buffer: cell access, clipping (writes outside
 // the grid or the clip rect are dropped, never errors), multi-byte text,
-// and the shared-storage behavior that lets widgets draw through a copy.
+// the shared-storage behavior that lets widgets draw through a copy, and
+// resize (new dimensions, blank grid, whole-grid clip, negatives to zero).
 
 import testing
 import term
@@ -97,6 +98,39 @@ func test_fill_and_clear():
     b.free()
 end
 
+func test_resize():
+    mut b := basalam.NewBuffer(2, 2)
+    b.set(0, 0, basalam.Cell { ch = "x", style = term.Sgr(term.StyleBold) })
+    b.resize(4, 3)
+    testing.AssertEqInt(b.width, 4)
+    testing.AssertEqInt(b.height, 3)
+    // Fresh blank grid: the pre-resize content is gone.
+    testing.AssertEqStr(b.row_text(0), "    ")
+    testing.AssertEqStr(b.row_text(2), "    ")
+    testing.AssertEqStr(b.row_text(3), "")
+    testing.AssertEqStr(b.get(0, 0).ch, " ")
+    testing.AssertEqStr(b.get(0, 0).style, "")
+    // Storage is width * height: the last cell is addressable, one past is not.
+    b.set(3, 2, basalam.Cell { ch = "z" })
+    testing.AssertEqStr(b.row_text(2), "   z")
+    b.set(4, 2, basalam.Cell { ch = "!" })
+    testing.AssertEqStr(b.get(4, 2).ch, " ")
+    testing.AssertEqStr(b.get(3, 2).ch, "z")
+    // clip covers the whole new grid.
+    testing.AssertEqInt(b.clip.width, 4)
+    testing.AssertEqInt(b.clip.height, 3)
+    // Negative and zero sizes clamp to zero, as in NewBuffer.
+    b.resize(-2, 1)
+    testing.AssertEqInt(b.width, 0)
+    testing.AssertEqInt(b.height, 1)
+    testing.AssertEqStr(b.row_text(0), "")
+    b.resize(0, 0)
+    testing.AssertEqInt(b.width, 0)
+    testing.AssertEqInt(b.height, 0)
+    testing.AssertEqStr(b.row_text(0), "")
+    b.free()
+end
+
 func main:
     test_new_is_blank()
     test_set_get()
@@ -104,5 +138,6 @@ func main:
     test_clip()
     test_put_str_codepoints()
     test_fill_and_clear()
+    test_resize()
     ret testing.Summary()
 end
