@@ -32,9 +32,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `InsetRect`, `SplitMain`, `TrackSizes`, `PlaceAxisSize`,
   `PlaceAxisOffset`, `NewInsets`, and `UniformInsets`. One `set_bounds` on
   a container lays out its whole subtree in slot order.
+- `Buffer.front` and `Buffer.force_full`: the front grid (what the
+  terminal currently shows) alongside the back grid widgets draw into, and
+  the flag that makes the next `diff()` serialize the whole frame instead of
+  the changed cells.
+- `Buffer.diff()`: the bytes `flush()` writes — the whole frame while
+  `force_full`, otherwise only the cells that differ from `front`.
+- `Buffer.commit()`: copies the back grid into the front grid and clears
+  `force_full`, so the next `diff()` reports only later changes.
+- `Buffer.flush()`: now diff-based; writes only the changed cells (nothing
+  when the grids already match) and then commits.
 
 ### Changed
 
+- `Buffer.resize()` and `Screen.resize`: now reallocate both buffer grids
+  and force a full repaint.
 - `Screen.dispatch` routes a decoded `MouseEvent` to the widget under the
   cursor and bubbles from there. With no widget under the cursor it falls
   back to the focused widget. Every other event kind still starts at the
