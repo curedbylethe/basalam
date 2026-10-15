@@ -16,12 +16,18 @@
 // Tests for the focus system: the spatial search (Nearest) on
 // plain rects, including the overlap rule and every tie-break, then the
 // screen's focus stack, linear order, spatial moves, auto-focus, dispatch
-// to the focused widget, and the focus indicator reaching the buffer.
+// to the focused widget (with an empty stack it starts at the root, and a
+// pushed widget takes the keys until it is popped), and the focus
+// indicator reaching the buffer.
 
 import testing
 import term
 
 include "../basalam/basalam.salam"
+
+// Records the name of every Tile that receives an event, so the dispatch
+// tests can assert the exact visiting order.
+mut visits := Vector {} as Vector<str>
 
 // A focusable tile that shows "*" when it has focus and counts the keys it
 // consumes ("k").
@@ -35,6 +41,7 @@ struct Tile:
     end
 
     pub func handle_event(event: basalam.Event): bool:
+        visits.push(this.name)
         if event.is_char("k"):
             this.hits += 1
             ret true
@@ -53,6 +60,18 @@ end
 
 func rect(x: int, y: int, w: int, h: int): basalam.Rect:
     ret basalam.Rect { x = x, y = y, width = w, height = h }
+end
+
+func trail(): str:
+    mut out := ""
+    each i, v in visits:
+        if i > 0:
+            out = out + ">"
+        end
+        out = out + v
+    end
+    visits.clear()
+    ret out
 end
 
 // ---- Nearest, on plain rects ------------------------------------------
@@ -302,6 +321,35 @@ func test_dispatch_goes_to_focused_widget():
     testing.AssertEqStr(s.buffer.row_text(1), "*c1  d2 ")
 end
 
+func test_dispatch_with_empty_stack_starts_at_root():
+    mut s := grid()
+    defer s.close()
+    // Drop the auto-focus so nothing is focused: dispatch then starts at
+    // the root, which consumes nothing, and no tile is visited.
+    testing.AssertTrue(s.pop_focus())
+    testing.AssertEqInt(s.focused_id(), basalam.NoWidget)
+    visits.clear()
+    k := basalam.Event { kind = basalam.KeyEvent, key = term.Decode("k") }
+    testing.AssertFalse(s.dispatch(k))
+    testing.AssertEqStr(trail(), "")
+end
+
+func test_dispatch_routes_through_focus_stack():
+    mut s := grid()
+    defer s.close()
+    k := basalam.Event { kind = basalam.KeyEvent, key = term.Decode("k") }
+    testing.AssertEqInt(s.focused_id(), 1)
+    // A pushed widget takes the keys, replacing the previous focus.
+    testing.AssertTrue(s.push_focus(2))
+    visits.clear()
+    testing.AssertTrue(s.dispatch(k))
+    testing.AssertEqStr(trail(), "b")
+    // Popping gives the keys back to the widget underneath.
+    testing.AssertTrue(s.pop_focus())
+    testing.AssertTrue(s.dispatch(k))
+    testing.AssertEqStr(trail(), "a")
+end
+
 func test_indicator_follows_focus():
     mut s := grid()
     defer s.close()
@@ -330,6 +378,9 @@ func main:
     test_explicit_focus_and_stack()
     test_focus_change_marks_dirty_and_updates_field()
     test_dispatch_goes_to_focused_widget()
+    test_dispatch_with_empty_stack_starts_at_root()
+    test_dispatch_routes_through_focus_stack()
     test_indicator_follows_focus()
+    visits.free()
     ret testing.Summary()
 end
