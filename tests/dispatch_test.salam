@@ -16,7 +16,8 @@
 // Unit tests for the widget tree and event dispatch: an event
 // reaches the starting widget first, bubbles to each ancestor while
 // unconsumed, stops at the first widget that consumes it, and never visits
-// siblings.
+// siblings. The starting widget need not be focusable: dispatch walks the
+// tree by parent links and never consults focusable().
 //
 // Tree used throughout:
 //
@@ -151,6 +152,19 @@ func test_invalid_start_is_root():
     t.free()
 end
 
+func test_unfocusable_start_is_visited_and_bubbles():
+    mut t := build()
+    // Every Recorder here is unfocusable (BaseWidget's default), yet
+    // dispatch never consults focusable(): the start sees the event first.
+    testing.AssertFalse(t.get(2).focusable())
+    testing.AssertEqInt(t.dispatch(2, key("l")), 2)
+    testing.AssertEqStr(trail(), "left")
+    // Left unconsumed there, it walks to the root, whose "r" consumes it.
+    testing.AssertEqInt(t.dispatch(2, key("r")), 0)
+    testing.AssertEqStr(trail(), "left>panel>root")
+    t.free()
+end
+
 func test_invalid_parent_attaches_to_root():
     mut t := build()
     id := t.add(77, Recorder { name = "stray" })
@@ -179,6 +193,7 @@ func main:
     test_siblings_never_see_it()
     test_non_key_events_bubble_too()
     test_invalid_start_is_root()
+    test_unfocusable_start_is_visited_and_bubbles()
     test_invalid_parent_attaches_to_root()
     test_get_shares_widget()
     visits.free()
