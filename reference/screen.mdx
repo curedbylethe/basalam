@@ -1,10 +1,10 @@
 ---
 title: "Screen"
-description: "The terminal session: widget tree, back buffer, input thread, and the event loop."
+description: "The terminal session: widget tree, buffer, input thread, and the event loop."
 keywords: ["screen", "event loop", "next_event", "run", "run_with_tick", "start", "close", "dispatch", "hit_test", "mouse"]
 ---
 
-A `Screen` owns the terminal session. It holds the widget [tree](/reference/tree), the back [buffer](/reference/buffer), and the channel the input thread sends [events](/reference/event) on. You create one per program.
+A `Screen` owns the terminal session. It holds the widget [tree](/reference/tree), the [buffer](/reference/buffer), and the channel the input thread sends [events](/reference/event) on. You create one per program.
 
 ```salam
 mut screen := basalam.NewTerminalScreen(MyRoot {})
@@ -32,7 +32,7 @@ pub func NewTerminalScreen(root: dyn Widget): Screen
 <ResponseField name="events" type="Channel<Event>">The channel the input thread sends on. `events.ch` is the underlying `std/chan` channel. See [why the wrapper exists](#the-channel-wrapper).</ResponseField>
 <ResponseField name="root" type="dyn Widget">The root widget (ID `0`). It always covers the whole screen.</ResponseField>
 <ResponseField name="focused" type="dyn Widget">The widget that receives events first.</ResponseField>
-<ResponseField name="buffer" type="Buffer">The back buffer widgets draw into.</ResponseField>
+<ResponseField name="buffer" type="Buffer">The one [buffer](/reference/buffer) the screen owns: widgets draw into its back grid, and `present` diffs that against its front grid.</ResponseField>
 <ResponseField name="running" type="bool">`true` from `start()` (or the start of `run`) until `stop()`.</ResponseField>
 <ResponseField name="tree" type="Tree">The widget registry. Prefer `add` and `widget`.</ResponseField>
 <ResponseField name="tick_ms" type="int" default="0">Interval of `TickEvent`s in milliseconds. `0` sends none. Set it before `start()`.</ResponseField>
@@ -49,7 +49,7 @@ pub func NewTerminalScreen(root: dyn Widget): Screen
 | `focused_id(): int` | The ID of the focused widget, or `NoWidget` when nothing has focus (events then start at the root). |
 | `hit_test(x: int, y: int): int` | The ID of the widget drawn at cell (`x`, `y`), or `NoWidget`. See [Hit testing](#hit-testing). |
 | `fit_root()` | Gives the root the whole buffer. |
-| `resize(width: int, height: int)` | Resizes the buffer and refits the root. |
+| `resize(width: int, height: int)` | Reallocates both buffer grids and refits the root, forcing a full repaint on the next frame. |
 
 ## Focus
 
@@ -80,8 +80,8 @@ Each returns `true` when the focus moved, and every change marks the screen dirt
 | --- | --- |
 | `next_event(event &: Event): bool` | Waits for the next event. Returns `false` once the screen is stopped and every queued event was delivered. |
 | `dispatch(event: Event): bool` | Handles one event synchronously. A `ResizeEvent` first resizes the screen. Then the event goes to a starting widget and bubbles up: the widget under the cursor for a mouse event, the focused widget for everything else. Returns `true` if a widget consumed it. See [Hit testing](#hit-testing). |
-| `draw()` | Renders every widget into the buffer, in ID order, each clipped to its visible bounds. |
-| `present()` | `draw()`, then writes the frame to the terminal once attached. Clears `dirty`. |
+| `draw()` | Renders every widget into the buffer's back grid, in ID order, each clipped to its visible bounds. |
+| `present()` | `draw()`, then, once attached, writes only the cells that changed since the last frame. Clears `dirty`. |
 | `post(event: Event): bool` | Queues an event as if the input thread had produced it. Safe from any thread. |
 | `run()` | Runs the loop until `stop()`. Redraws only when something changed. An unconsumed Ctrl+C stops it. |
 | `run_with_tick(on_tick: func ())` | Like `run`, and also calls `on_tick` on the main thread for every `TickEvent`. |

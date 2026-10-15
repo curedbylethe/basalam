@@ -34,7 +34,7 @@ It sits on top of Salam's standard `term` package. `term` already handles raw mo
 | Widget tree with integer IDs | Available |
 | `Screen`: event loop, input thread, resize, ticks | Available |
 | Focus: stack, linear, and spatial navigation | Available |
-| `Buffer` (minimal) | Available; diffing and dirty regions come later |
+| `Buffer` (double-buffered) | Available; double-buffered with diffing; dirty-region tracking comes later |
 
 <Columns cols={2}>
   <Card title="Quickstart" icon="rocket" href="/quickstart">
