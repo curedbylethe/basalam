@@ -19,7 +19,9 @@
 // channel (post / next_event / run_with_tick), the real dispatch path, and
 // the real draw path, and the tests assert on the resulting buffer. The
 // dirty flag is set only by consumed events: a consumed key marks the screen
-// for redraw, an unconsumed one leaves it as it was.
+// for redraw, an unconsumed one leaves it as it was. The resize path is
+// covered here too: a ResizeEvent reallocates the buffer, so the next frame
+// is a forced full repaint (diff() equals the whole-frame ansi()).
 
 import testing
 import term
@@ -207,6 +209,31 @@ func test_close_is_idempotent():
     testing.AssertFalse(s.running)
 end
 
+func test_resize_forces_full_repaint():
+    mut s := basalam.NewScreen(Frame { title = "g" }, 8, 2)
+    defer s.close()
+    // A resize reallocates both grids and refits the root to the new area.
+    big := basalam.Event { kind = basalam.ResizeEvent, width = 12, height = 3 }
+    testing.AssertFalse(s.dispatch(big))
+    testing.AssertEqInt(s.buffer.width, 12)
+    testing.AssertEqInt(s.buffer.height, 3)
+    testing.AssertEqInt(s.root.bounds().width, 12)
+    testing.AssertEqInt(s.root.bounds().height, 3)
+    // The fresh grid is blank and the next frame is the whole grid.
+    testing.AssertEqStr(s.buffer.row_text(2), "            ")
+    testing.AssertTrue(s.buffer.force_full)
+    testing.AssertEqStr(s.buffer.diff(), s.buffer.ansi())
+    // Simulate the flush an attached present() would do: front catches up.
+    s.buffer.commit()
+    testing.AssertFalse(s.buffer.force_full)
+    testing.AssertEqStr(s.buffer.diff(), "")
+    // A same-size resize still reallocates, so it repaints in full again.
+    again := basalam.Event { kind = basalam.ResizeEvent, width = 12, height = 3 }
+    testing.AssertFalse(s.dispatch(again))
+    testing.AssertTrue(s.buffer.force_full)
+    testing.AssertEqStr(s.buffer.diff(), s.buffer.ansi())
+end
+
 func main:
     test_new_screen_fits_root()
     test_events_flow_through_channel()
@@ -218,5 +245,6 @@ func main:
     test_run_with_tick()
     test_ansi_frame()
     test_close_is_idempotent()
+    test_resize_forces_full_repaint()
     ret testing.Summary()
 end
