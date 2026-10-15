@@ -61,8 +61,8 @@
  *
  * Resizing. On a ResizeEvent the screen resizes its buffer and gives the
  * root widget the full terminal rect (fit_root). That is the only layout
- * the core does: every other widget gets its bounds from the application
- * via set_bounds until the layout engine (a later epic) exists.
+ * the core does: every other widget gets its bounds from the application,
+ * or from a layout container (basalam/layout.salam), via set_bounds.
  *
  * Resize detection polls term.Size() on the input thread. Salam's stdlib
  * does not expose a signal API (no sigaction, no SIGWINCH), so polling is

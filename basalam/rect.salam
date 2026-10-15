@@ -35,8 +35,8 @@
  * off-screen; drawing clips it, geometry does not reject it.
  *
  * This file deliberately has no notion of layout (splitting, padding,
- * alignment). That is the layout engine's job (a later epic); widgets
- * receive finished rects through Widget.set_bounds.
+ * alignment). That is the layout engine's job (basalam/layout.salam);
+ * widgets receive finished rects through Widget.set_bounds.
  */
 
 package basalam

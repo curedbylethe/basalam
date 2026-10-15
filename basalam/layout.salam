@@ -735,9 +735,9 @@ end
 /// Splits a main-axis length of `length` cells between sizes, in order (R5).
 /// A Fixed size takes max(0, cells); the rest is shared equally among the
 /// Fill and Pref entries, with the remainder going to the earliest of them,
-/// one cell each. When there are no Fill or Pref entries the leftover stays
-/// unused; the returned vector always has one entry per input size and sums
-/// to at most max(0, length).
+/// one cell each. The leftover stays unused when there are no Fill or Pref
+/// entries, or when Fixed sizes alone overflow length (Fixed requests are
+/// kept); the vector always has one entry per input size.
 pub func SplitMain(length: int, sizes: Vector<LayoutSize>): Vector<int>:
     mut fixed := 0
     mut fills := 0
@@ -772,9 +772,12 @@ pub func SplitMain(length: int, sizes: Vector<LayoutSize>): Vector<int>:
 end
 
 @en "TrackSizes"
-/// Divides a total length into n grid tracks (R9). Track k is floor(total/n)
-/// plus one for each of the earliest total mod n tracks, so the tracks sum to
-/// total exactly. A non-positive n gives an empty vector.
+/// Divides a total length into n grid tracks (R9). Assumes total >= 0
+/// (content lengths are never negative; on a negative total the division
+/// truncates toward zero and the exact-sum claim below does not hold).
+/// Track k is floor(total/n) plus one for each of the earliest total mod n
+/// tracks, so the tracks sum to total exactly. A non-positive n gives an
+/// empty vector.
 pub func TrackSizes(total: int, n: int): Vector<int>:
     out := Vector {} as Vector<int>
     if n <= 0:
