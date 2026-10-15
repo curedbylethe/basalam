@@ -13,6 +13,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   contain a 0-based cell, or `NoWidget`.
 - `Event.mouse_point()`: the 0-based cell of a `MouseEvent`, converted from
   the terminal's 1-based `mouse.col` and `mouse.row`.
+- `Text`: the first concrete widget, with `NewText`, `set_text`,
+  `set_align`, `set_style`, `set_wrap`, `render`, `preferred_size`, and
+  `preferred_width`, plus the pure line rules `WrapText` and
+  `MeasureText`, the `Alignment` enum, and the `WrapMode` enum.
 
 ### Changed
 

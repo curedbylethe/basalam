@@ -1,0 +1,162 @@
+---
+title: "Text"
+description: "The string-drawing widget, and the pure line rules it wraps and measures with."
+keywords: ["text", "wrap", "alignment", "wraptext", "measuretext", "clip"]
+---
+
+`Text` draws a string into a [buffer](/reference/buffer). It is the first concrete widget: give it content, align it, wrap it to its box, and paint it in one style. A string set once and a string updated every frame are the same widget.
+
+```salam
+mut t := basalam.NewText("Hello, terminal")
+t.set_align(basalam.Alignment.Center)
+t.set_style(term.Sgr(term.FgGreen))
+```
+
+## Text
+
+`Text` embeds [BaseWidget](/reference/widget), overrides the default `render`, and adds `preferred_size` and `preferred_width`; it inherits the rest of the `Widget` interface unchanged.
+
+```salam
+pub struct Text:
+    pub use BaseWidget
+
+    pub content: str = ""
+    pub align: Alignment = Alignment.Left
+    pub style: str = ""
+    pub wrap: WrapMode = WrapMode.Word
+end
+```
+
+<ResponseField name="content" type="str">The text to draw. An explicit `"\n"` starts a new line.</ResponseField>
+<ResponseField name="align" type="Alignment">Horizontal placement of each line. Defaults to `Alignment.Left`.</ResponseField>
+<ResponseField name="style" type="str">SGR escape sequence(s) applied to the whole box. `""` means the terminal's default style.</ResponseField>
+<ResponseField name="wrap" type="WrapMode">How the content becomes lines at render time. Defaults to `WrapMode.Word`.</ResponseField>
+
+## Content
+
+```salam
+pub func NewText(content: str): Text
+pub func set_text(content: str)
+```
+
+`NewText` creates a widget with the content already set: left-aligned, unstyled, and word-wrapped. `set_text` replaces the content on an existing widget, and the next `render` draws the new value. There is no separate type for dynamic text; you call `set_text` or you do not.
+
+## Alignment
+
+```salam
+pub enum Alignment:
+    Left
+    Center
+    Right
+end
+```
+
+| Value | Effect |
+| --- | --- |
+| `Left` | Lines start at the box's left edge. The default. |
+| `Center` | Lines are centred. |
+| `Right` | Lines end at the box's right edge. |
+
+Alignment places each wrapped line on its own. For `Center`, a line's offset is `floor(free / 2)` cells, where `free` is the box width minus the line width, so when the slack is odd the extra cell lands on the **right**:
+
+- Box width `11`, line `"abc"` (3 cells), free `8` → offset `4`.
+- Box width `10`, line `"abc"` (3 cells), free `7` → offset `3`, one cell of slack on the right.
+
+`set_align` changes the alignment.
+
+## Wrapping
+
+```salam
+pub enum WrapMode:
+    Word
+    None
+end
+```
+
+| Value | Effect |
+| --- | --- |
+| `Word` | Greedy word-boundary wrapping at the box width. The default. |
+| `None` | Each explicit line is drawn as-is; the box edge clips it. |
+
+Under `WrapMode.Word`:
+
+- The widget walks the words of a paragraph. When the next word would cross the width, it starts a new line and the space at the break is consumed.
+- A word longer than the width is cut on the character grid, so no emitted line is ever wider than the width.
+- An explicit `"\n"` starts a new paragraph, and each paragraph wraps on its own.
+
+`set_wrap` changes the mode. A box width of `0` or less means unbounded, so every paragraph is returned unwrapped.
+
+## Clipping
+
+Drawing is a hard clip: a line keeps its first `W` cells and the box keeps its first `H` lines. There is no ellipsis, no scroll, and no overflow marker.
+
+- Vertical: at most `height` lines are drawn.
+- Horizontal: reachable only under `WrapMode.None`, because `WrapMode.Word` never emits a line wider than the box. A `None` line longer than the box is cut at the right edge.
+
+A box with `width <= 0` or `height <= 0` draws nothing and never panics.
+
+## Style
+
+`style` is a raw SGR string built with `std/term`:
+
+```salam
+t.set_style(term.Sgr(term.FgCyan) + term.Sgr(term.BgBlack) + term.Sgr(term.StyleBold))
+```
+
+The widget fills the whole box with the style first, so a background colour reads full-bleed across the widget's area. The foreground and bold attributes apply to the glyph cells. An empty style is the terminal's default.
+
+<Note>
+  There is no `basalam.Style` type yet. Until the style work lands, a style is the SGR string you assemble with `std/term`.
+</Note>
+
+## Preferred size
+
+```salam
+pub func preferred_size(max_width: int): Rect
+pub func preferred_width(): int
+```
+
+`preferred_size` returns the size the content wants at `max_width`, as a `Rect` at `(0, 0)`: wrap at `max_width`, then width is the longest resulting line and height is the number of resulting lines. `max_width <= 0` means unbounded, so width is the longest explicit line and height is the explicit line count.
+
+`preferred_width` is the longest explicit line of the content, in cells — the unbounded width.
+
+Neither includes a border or padding, because the widget has none.
+
+<Note>
+  Preferred size always measures with the wrap rules above, whatever `wrap` is set to.
+</Note>
+
+## Line functions
+
+`WrapText` and `MeasureText` are the pure rules `Text` draws through. They hold no state and know nothing about widgets; the layout engine will use the same two functions.
+
+```salam
+pub func WrapText(text: str, width: int): Vector<str>
+pub func MeasureText(text: str, max_width: int): Rect
+```
+
+`WrapText` splits `text` into display lines of at most `width` cells, top to bottom, using the wrapping rules above. `width <= 0` means unbounded, so each paragraph is returned unwrapped.
+
+`MeasureText` returns the preferred size of `text` wrapped at `max_width`, as a `Rect` at `(0, 0)`.
+
+## Example
+
+A buffer is plain memory, so you can render and inspect a widget without a terminal:
+
+```salam
+include "basalam/basalam.salam"
+
+func main:
+    mut t := basalam.NewText("the quick brown fox")
+    t.set_align(basalam.Alignment.Center)
+    mut buf := basalam.NewBuffer(11, 2)
+    defer buf.free()
+    t.render(buf, basalam.Rect { width = 11, height = 2 })
+    println "[" + buf.row_text(0) + "]" // [ the quick ]
+    println t.preferred_size(11).width, t.preferred_size(11).height // 9 2
+end
+```
+
+<Warning>
+  A cell is one codepoint, so every character counts as one column. Wide (CJK), combining, and zero-width characters are out of scope and render as ordinary one-cell glyphs, which shifts their columns.
+</Warning>
