@@ -18,10 +18,15 @@
  *
  * basalam is retained mode: a widget is a long-lived value that holds its
  * own state, and the screen asks it to draw itself and to react to events.
- * The Widget interface is the whole contract; anything that has these five
+ * The Widget interface is the whole contract; anything that has these six
  * methods is a widget (Salam interfaces are structural: there is no
  * `implements`). A list, a button, and a panel are all Widgets, so the
  * screen stores them side by side as `dyn Widget`.
+ *
+ * preferred_size is the measurement hook the layout engine reads to size a
+ * child by preference. It is separate from drawing and reports a size at a
+ * given maximum width; a widget that cannot measure reports so with a
+ * negative sentinel, and the engine fills the available space instead.
  *
  * BaseWidget supplies a default for every method. Embed it with `use` and
  * override only what your widget needs:
@@ -80,6 +85,13 @@ pub interface Widget:
     @en "set_bounds"
     /// Moves and resizes the widget. Called by whoever owns the layout.
     func set_bounds(bounds: Rect)
+
+    @en "preferred_size"
+    /// The size the widget wants at max_width, as a rect at (0, 0).
+    /// max_width <= 0 means unbounded. A widget that cannot measure returns
+    /// a rect with negative width and height as a sentinel; the layout
+    /// engine reads that as "no preference" and fills the axis instead.
+    func preferred_size(max_width: int): Rect
 end
 
 @en "BaseWidget"
@@ -124,5 +136,14 @@ pub struct BaseWidget:
     /// Stores the rect.
     pub func set_bounds(bounds: Rect):
         this.rect = bounds
+    end
+
+    @en "preferred_size"
+    /// Cannot measure: returns the negative sentinel (width and height -1),
+    /// which the layout engine maps to the available length. Override it to
+    /// report a real size.
+    pub func preferred_size(max_width: int): Rect:
+        _ := max_width
+        ret Rect { width = -1, height = -1 }
     end
 end
