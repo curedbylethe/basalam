@@ -1,0 +1,160 @@
+---
+title: "List"
+description: "The single-selection scrollable list widget: vim navigation, a highlighted row, and minimal scrolling."
+keywords: ["list", "selection", "scroll", "vim", "focus", "highlight"]
+---
+
+`List` draws a single-selection, scrollable list of strings into a [buffer](/reference/buffer). It holds items, a selection, and the styles for the rows and the selected row. It is focusable, so the [screen's focus dispatch](/concepts/focus) routes keyboard events to it while it is focused. It is the third concrete widget, after [Text](/reference/text) and [Input](/reference/input).
+
+```salam
+mut picked := -1
+
+mut items := Vector {} as Vector<str>
+items.push("alpha")
+items.push("beta")
+mut li := basalam.NewList(items)
+li.on_select = (i: int): picked = i end
+_ := screen.add(basalam.RootId, li)
+```
+
+While focused, `j` and `k` move the selection and `Enter` calls `on_select` with the selected index.
+
+## List
+
+`List` embeds [BaseWidget](/reference/widget), overrides the default `render`, and adds `focusable`, `handle_event`, `selected_index`, and `selected_item`; it inherits `bounds` and `set_bounds` unchanged.
+
+```salam
+pub struct List:
+    pub use BaseWidget
+
+    pub style: str = ""
+    pub selected_style: str = ""
+    pub selected_unfocused_style: str = ""
+    pub on_select: func (int) = (i: int): end
+end
+```
+
+<ResponseField name="style" type="str">SGR escape sequence(s) for every row. `""` means the terminal's default style.</ResponseField>
+<ResponseField name="selected_style" type="str">SGR escape sequence(s) for the selected row while focused. `""` means reverse video.</ResponseField>
+<ResponseField name="selected_unfocused_style" type="str">SGR escape sequence(s) for the selected row while unfocused. `""` means bright black on a black background.</ResponseField>
+<ResponseField name="on_select" type="func (int)">Called with the selected index when `Enter` is pressed on a non-empty list. The default does nothing.</ResponseField>
+
+The items and the selected index are private; create the list with `NewList` and read the selection back through the getters below.
+
+### Methods
+
+```salam
+pub func NewList(items: Vector<str>): List
+pub func selected_index(): int
+pub func selected_item(): str
+```
+
+| Method | Description |
+| --- | --- |
+| `NewList(items: Vector<str>): List` | Creates a list over `items` with the selection on the first item (or on nothing when `items` is empty) and the window at the top. |
+| `selected_index(): int` | The selected index, or `-1` when the list is empty. |
+| `selected_item(): str` | The selected string, or `""` when the list is empty. |
+
+## Keyboard
+
+`List` is focusable, so key presses reach it through dispatch while it is focused. `handle_event` reacts as follows:
+
+| Key | Effect | Consumed |
+| --- | --- | --- |
+| `j` | Moves the selection down one row. At the last row, nothing changes (no wrap). | Yes |
+| `k` | Moves the selection up one row. At the first row, nothing changes (no wrap). | Yes |
+| `Enter` | Calls `on_select` with the selected index on a non-empty list. On an empty list, nothing changes. | Yes |
+| Anything else (`K`, arrows, `Home`, `End`, `g`/`G`, `Tab`, `Space`, mouse) | Nothing. | No — the event bubbles to ancestors |
+
+Only the lowercase `j` and `k` are handled; `K`, the arrow keys, and `g`/`G` are not. `j` and `k` are always consumed, even on an empty list, so they act as no-ops rather than bubbling. `Enter` is consumed too, whether or not the list is empty. Every other key and every non-key event (mouse, resize, tick) is ignored and bubbles.
+
+## Rows
+
+One item occupies one row, left-aligned at the box's left edge. Each row is filled full width with the row `style` and then the item is written over it, clipped to the width with a character substr — so a row never wraps and never carries an ellipsis. Rows past the last item are blank. A box with a non-positive width or height draws nothing and never panics.
+
+## Selection
+
+Exactly one row is highlighted whenever the list is non-empty. The highlight covers the full row width (the item text plus the blank cells after it), and the row keeps the same geometry whether focused or not:
+
+- Focused: reverse video, `term.Sgr(term.StyleReverse)` (`ESC[7m`).
+- Unfocused: bright black on a black background, `term.Sgr(term.BgBlack + term.FgBright)`.
+
+Set `selected_style` and `selected_unfocused_style` to replace them:
+
+```salam
+li.selected_style = term.Sgr(term.FgBlack) + term.Sgr(term.BgCyan)
+```
+
+## Focus
+
+`focusable()` returns `true`, so the screen's focus dispatch delivers key presses to the list while it is focused, and Tab-style and spatial navigation can move the focus onto it. An unfocused list receives no key events. When the list consumes a key, the screen marks itself dirty and redraws.
+
+The focus indicator is the selection-row style itself: the selected row switches between the focused and unfocused style pair. `List` draws no border and no scrollbar — no core widget draws a border, so a bordered list stays out of scope. Place the list inside a container such as [Row or Column](/reference/layout) to give it a frame.
+
+## Scrolling
+
+The window is derived, not stored: each frame `render` recomputes the minimal window that keeps the selected row visible, so the window moves only when the selection would leave it. The window start is
+
+```text
+start = clamp(max(min(start, sel), sel - H + 1), 0, max(0, N - H))
+```
+
+where `sel` is the selected index, `N` is the item count, and `H = max(height, 1)` is the number of visible rows.
+
+Worked example, width `10`, height `3`, `10` items:
+
+| Selection | Window start |
+| --- | --- |
+| `0` | `0` |
+| `2` | `0` |
+| `3` | `1` |
+| `5` | `3` |
+| `9` | `7` |
+
+## Empty list
+
+An empty list draws a blank area in the row `style` — there is no placeholder. `j`, `k`, and `Enter` are consumed as no-ops, `on_select` is not called, `selected_index()` returns `-1`, and `selected_item()` returns `""`.
+
+## Callback
+
+`on_select` is called synchronously from `handle_event` when `Enter` is pressed on a non-empty list, with the selected index; its return value is ignored. The default does nothing. Assign a lambda to react to a selection:
+
+```salam
+li.on_select = (i: int): picked = i end
+```
+
+Salam lambdas capture by value, so a lambda cannot write back to a local through its closure. Keep the shared value in a `mut` global, as in the quick-start example above.
+
+## Example
+
+A buffer is plain memory, so you can render and inspect a list without a terminal:
+
+```salam
+include "basalam/basalam.salam"
+
+func key(seq: str): basalam.Event:
+    ret basalam.Event { kind = basalam.KeyEvent, key = term.Decode(seq) }
+end
+
+func main:
+    mut items := Vector {} as Vector<str>
+    items.push("alpha")
+    items.push("beta")
+    items.push("gamma")
+    mut li := basalam.NewList(items)
+    _ := li.handle_event(key("j")) // selection moves to "beta"
+    println li.selected_index() // 1
+    println li.selected_item()  // beta
+
+    mut buf := basalam.NewBuffer(6, 3)
+    defer buf.free()
+    buf.focused = true
+    li.render(buf, basalam.Rect { width = 6, height = 3 })
+    println "[" + buf.row_text(1) + "]" // [beta  ]
+    println buf.get(0, 1).style != "" // true: the selected row is styled
+end
+```
+
+<Note>
+  A `dyn basalam.Widget` cannot be downcast back to a `List`. Keep a concrete `List` reference — or a shared value such as a `mut` global — to set `on_select` and call `selected_index()` and `selected_item()`.
+</Note>

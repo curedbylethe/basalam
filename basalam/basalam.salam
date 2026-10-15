@@ -36,6 +36,7 @@
  *     layout.salam   the Row, Column, Grid and Stack containers
  *     text.salam     the Text widget and the pure line rules it draws through
  *     input.salam    the Input widget: single-line text entry with a caret
+ *     list.salam     the List widget: single-selection scrollable list
  *     tree.salam     the widget registry (IDs, parents) and event bubbling
  *     screen.salam   Screen: terminal session, input thread, event loop
  *     focus.salam    spatial focus search (Nearest) and the Dir* constants
