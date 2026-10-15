@@ -98,6 +98,10 @@ func test_wrap_unbounded():
     testing.AssertEqStr(neg.get(0), "x y z")
 end
 
+func rect(x: int, y: int, w: int, h: int): basalam.Rect:
+    ret basalam.Rect { x = x, y = y, width = w, height = h }
+end
+
 // ---- MeasureText ------------------------------------------------------
 
 func test_measure_single_line():
@@ -132,6 +136,107 @@ func test_measure_unbounded():
     testing.AssertEqInt(neg.height, 2)
 end
 
+// ---- Text widget ------------------------------------------------------
+
+func test_text_render_row():
+    mut b := basalam.NewBuffer(12, 1)
+    defer b.free()
+    mut t := basalam.NewText("hello")
+    t.render(b, rect(0, 0, 12, 1))
+    testing.AssertEqStr(b.row_text(0), "hello       ")
+end
+
+func test_text_set_text_rerenders():
+    mut b := basalam.NewBuffer(10, 1)
+    defer b.free()
+    mut t := basalam.NewText("aaaa")
+    t.render(b, rect(0, 0, 10, 1))
+    testing.AssertEqStr(b.row_text(0), "aaaa      ")
+    t.set_text("bb")
+    t.render(b, rect(0, 0, 10, 1))
+    testing.AssertEqStr(b.row_text(0), "bb        ")
+end
+
+func test_text_alignment():
+    mut b := basalam.NewBuffer(9, 1)
+    defer b.free()
+    mut t := basalam.NewText("abc")
+    t.render(b, rect(0, 0, 9, 1))
+    testing.AssertEqStr(b.row_text(0), "abc      ")
+    t.set_align(basalam.Alignment.Right)
+    t.render(b, rect(0, 0, 9, 1))
+    testing.AssertEqStr(b.row_text(0), "      abc")
+    t.set_align(basalam.Alignment.Center)
+    t.render(b, rect(0, 0, 9, 1))
+    testing.AssertEqStr(b.row_text(0), "   abc   ")
+end
+
+func test_text_center_odd_slack_goes_right():
+    mut b := basalam.NewBuffer(8, 1)
+    defer b.free()
+    mut t := basalam.NewText("abc")
+    t.set_align(basalam.Alignment.Center)
+    // free = 8 - 3 = 5, floor 5 / 2 = 2, so the extra cell lands on the right.
+    t.render(b, rect(0, 0, 8, 1))
+    testing.AssertEqStr(b.row_text(0), "  abc   ")
+end
+
+func test_text_style_covers_box():
+    mut b := basalam.NewBuffer(6, 1)
+    defer b.free()
+    bold := term.Sgr(term.StyleBold)
+    mut t := basalam.NewText("hi")
+    t.set_style(bold)
+    t.render(b, rect(0, 0, 6, 1))
+    testing.AssertEqStr(b.get(0, 0).ch, "h")
+    testing.AssertEqStr(b.get(0, 0).style, bold)
+    testing.AssertEqStr(b.get(1, 0).style, bold)
+    // A padding cell past the glyphs still carries the style.
+    testing.AssertEqStr(b.get(5, 0).style, bold)
+end
+
+func test_text_wrap_none_clips_at_edge():
+    mut b := basalam.NewBuffer(4, 2)
+    defer b.free()
+    mut t := basalam.NewText("ab\ncdefgh")
+    t.set_wrap(basalam.WrapMode.None)
+    t.render(b, rect(0, 0, 4, 2))
+    testing.AssertEqStr(b.row_text(0), "ab  ")
+    testing.AssertEqStr(b.row_text(1), "cdef")
+end
+
+func test_text_clips_lines_taller_than_box():
+    mut b := basalam.NewBuffer(3, 1)
+    defer b.free()
+    mut t := basalam.NewText("one two three")
+    // Wrapped at 3: one / two / three, but the box is one row tall.
+    t.render(b, rect(0, 0, 3, 1))
+    testing.AssertEqStr(b.row_text(0), "one")
+end
+
+func test_text_preferred_size_and_width():
+    mut t := basalam.NewText("hello world")
+    r := t.preferred_size(5)
+    testing.AssertEqInt(r.x, 0)
+    testing.AssertEqInt(r.y, 0)
+    testing.AssertEqInt(r.width, 5)
+    testing.AssertEqInt(r.height, 2)
+    testing.AssertEqInt(t.preferred_width(), 11)
+    t.set_text("ab")
+    testing.AssertEqInt(t.preferred_width(), 2)
+    testing.AssertEqInt(t.preferred_size(0).height, 1)
+end
+
+func test_text_degenerate_bounds_do_not_panic():
+    mut b := basalam.NewBuffer(4, 1)
+    defer b.free()
+    mut t := basalam.NewText("hello")
+    t.render(b, rect(0, 0, 0, 0))
+    t.render(b, rect(0, 0, -3, -1))
+    testing.AssertEqStr(b.row_text(0), "    ")
+    testing.AssertFalse(t.focusable())
+end
+
 func main:
     test_wrap_word_boundary()
     test_wrap_consumes_break_space()
@@ -145,5 +250,14 @@ func main:
     test_measure_wrapped_longest_line()
     test_measure_explicit_newlines()
     test_measure_unbounded()
+    test_text_render_row()
+    test_text_set_text_rerenders()
+    test_text_alignment()
+    test_text_center_odd_slack_goes_right()
+    test_text_style_covers_box()
+    test_text_wrap_none_clips_at_edge()
+    test_text_clips_lines_taller_than_box()
+    test_text_preferred_size_and_width()
+    test_text_degenerate_bounds_do_not_panic()
     ret testing.Summary()
 end

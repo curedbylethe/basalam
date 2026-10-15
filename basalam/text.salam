@@ -14,13 +14,14 @@
  */
 
 /*
- * Text: the pure rules for turning a string into laid-out lines.
+ * Text: the pure line rules and the Text widget that draws through them.
  *
- * A Text widget and, later, the layout engine both need the same two answers:
- * which lines a string occupies at a given width, and how big the block those
- * lines make is. This file computes both and nothing else, so no widget,
- * screen, or terminal state is involved and the rules can be tested on their
- * own.
+ * Two layers live here. WrapText and MeasureText turn a string into display
+ * lines and a preferred size; they hold no state and know nothing about
+ * widgets. Text is the first concrete widget: it stores content, alignment,
+ * wrap mode, and a style, and draws itself with those rules. A Text widget
+ * and, later, the layout engine both consume the same two functions, so the
+ * arithmetic exists once.
  *
  * Cell model. A cell is one codepoint, so every character counts as one
  * column; the count always comes from term.Width, the package's single
@@ -35,22 +36,151 @@
  * hard-split onto the character grid, so no emitted line is ever wider than
  * the requested width. Plain cell-width cutting and clip-only were both
  * rejected: the first splits words that would have fit, the second loses
- * cells a hard clip cannot show.
+ * cells a hard clip cannot show. WrapMode.None opts a widget out of wrapping:
+ * each explicit line is drawn as-is and the box edge clips it.
  *
  * An explicit "\n" is a hard break: it ends the paragraph, and each paragraph
  * wraps independently. A width of zero or less means unbounded (the
  * artifact's M = infinity): every paragraph is returned unwrapped.
  *
  * This file deliberately has no notion of display width beyond one codepoint
- * per cell, no alignment, and no layout pass; alignment and placement belong
- * to the Text widget and the layout engine, which consume WrapText and
- * MeasureText.
+ * per cell, no layout pass, and no style/colour type: the style is the opaque
+ * SGR string the caller builds with std/term, and placement in the parent's
+ * box belongs to the layout engine.
  */
 
 package basalam
 
 import str
 import term
+
+@en "Alignment"
+/// Where each rendered line sits horizontally inside the widget's box.
+pub enum Alignment:
+    @en "Left"
+    /// Lines start at the box's left edge (the default).
+    Left
+    @en "Center"
+    /// Lines are centred; when the slack is odd the extra cell is on the
+    /// right.
+    Center
+    @en "Right"
+    /// Lines end at the box's right edge.
+    Right
+end
+
+@en "WrapMode"
+/// How Text turns its content into lines at render time.
+pub enum WrapMode:
+    @en "Word"
+    /// Greedy word-boundary wrapping at the box width (the default).
+    Word
+    @en "None"
+    /// Each explicit line is drawn as-is; the box edge clips it.
+    None
+end
+
+@en "Text"
+/// A widget that draws a string: set once or updated later, aligned left,
+/// centre, or right, wrapped to its box (or clipped), in one style. Its
+/// preferred size comes from the content. Embed it or construct it with
+/// NewText.
+pub struct Text:
+    pub use BaseWidget
+
+    @en "content"
+    /// The text to draw. An explicit "\n" starts a new line (see WrapText).
+    pub content: str = ""
+
+    @en "align"
+    /// Horizontal placement of each line. Defaults to Alignment.Left.
+    pub align: Alignment = Alignment.Left
+
+    @en "style"
+    /// SGR escape sequence(s) applied to the whole box: the background is
+    /// painted across the box and the glyph runs carry the same style. ""
+    /// means the terminal's default style.
+    pub style: str = ""
+
+    @en "wrap"
+    /// How the content becomes lines at render time. Defaults to
+    /// WrapMode.Word.
+    pub wrap: WrapMode = WrapMode.Word
+
+    @en "set_text"
+    /// Replaces the content; the next render draws it.
+    pub func set_text(content: str):
+        this.content = content
+    end
+
+    @en "set_align"
+    /// Sets the horizontal alignment.
+    pub func set_align(align: Alignment):
+        this.align = align
+    end
+
+    @en "set_style"
+    /// Sets the SGR style string applied to the whole box.
+    pub func set_style(style: str):
+        this.style = style
+    end
+
+    @en "set_wrap"
+    /// Sets the wrap mode.
+    pub func set_wrap(wrap: WrapMode):
+        this.wrap = wrap
+    end
+
+    @en "preferred_size"
+    /// The size the content wants at max_width, as a rect at (0, 0): width is
+    /// the longest wrapped line in cells, height the number of wrapped lines.
+    /// max_width <= 0 means unbounded, so the explicit lines are measured.
+    pub func preferred_size(max_width: int): Rect:
+        ret MeasureText(this.content, max_width)
+    end
+
+    @en "preferred_width"
+    /// The longest explicit line of the content, in cells (the unbounded
+    /// width).
+    pub func preferred_width(): int:
+        ret MeasureText(this.content, 0).width
+    end
+
+    @en "render"
+    /// Draws the content into bounds. The whole box is first painted with the
+    /// style (so a background colour reads full-bleed), then each line is
+    /// placed with the alignment offset and written as one run; at most
+    /// bounds.height lines are drawn. A degenerate box draws nothing and
+    /// never panics.
+    pub func render(buf: Buffer, bounds: Rect):
+        buf.fill(bounds, " ", this.style)
+        mut lines := Vector {} as Vector<str>
+        if this.wrap == WrapMode.None:
+            lines = WrapText(this.content, 0)
+        else:
+            lines = WrapText(this.content, bounds.width)
+        end
+        defer lines.free()
+        mut n := lines.len()
+        if n > bounds.height:
+            n = bounds.height
+        end
+        if n < 0:
+            n = 0
+        end
+        repeat n in i:
+            line := lines.get(i)
+            slack := bounds.width - term.Width(line)
+            mut offset := 0
+            if this.align == Alignment.Right:
+                offset = slack
+            else this.align == Alignment.Center:
+                offset = slack / 2
+            end
+            buf.put_str(bounds.x + offset, bounds.y + i, line, this.style)
+        end
+    end
+end
 
 // Appends the wrapped lines of one paragraph to out. Assumes width > 0; the
 // lines are pushed in top-to-bottom order and the break space is consumed.
@@ -149,4 +279,11 @@ pub func MeasureText(text: str, max_width: int): Rect:
         end
     end
     ret Rect { width = w, height = lines.len() }
+end
+
+@en "NewText"
+/// Creates a Text widget with the given content: left-aligned, unstyled, and
+/// word-wrapped.
+pub func NewText(content: str): Text:
+    ret Text { content = content }
 end
