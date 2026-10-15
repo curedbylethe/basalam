@@ -17,7 +17,9 @@
 // the screen is never start()ed, so present() draws into the buffer without
 // writing to the terminal. Synthetic events go through the real events
 // channel (post / next_event / run_with_tick), the real dispatch path, and
-// the real draw path, and the tests assert on the resulting buffer.
+// the real draw path, and the tests assert on the resulting buffer. The
+// dirty flag is set only by consumed events: a consumed key marks the screen
+// for redraw, an unconsumed one leaves it as it was.
 
 import testing
 import term
@@ -151,6 +153,20 @@ func test_resize_event():
     testing.AssertEqStr(s.buffer.row_text(6), "                              ")
 end
 
+func test_dirty_only_after_consumed_key():
+    mut s := basalam.NewScreen(Frame { title = "d" }, 10, 2)
+    defer s.close()
+    s.present()
+    // A clean frame: present() cleared the initial dirty flag.
+    testing.AssertFalse(s.dirty)
+    // Frame ignores "x", so the event is unconsumed and nothing is dirty.
+    testing.AssertFalse(s.dispatch(key("x")))
+    testing.AssertFalse(s.dirty)
+    // Frame consumes "r": the screen must redraw.
+    testing.AssertTrue(s.dispatch(key("r")))
+    testing.AssertTrue(s.dirty)
+end
+
 func test_run_with_tick():
     mut s := basalam.NewScreen(Frame { title = "run" }, 10, 2)
     defer s.close()
@@ -198,6 +214,7 @@ func main:
     test_widget_clipped_to_own_bounds()
     test_zero_size_widget_is_skipped()
     test_resize_event()
+    test_dirty_only_after_consumed_key()
     test_run_with_tick()
     test_ansi_frame()
     test_close_is_idempotent()
