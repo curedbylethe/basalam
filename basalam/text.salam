@@ -1,0 +1,152 @@
+/*
+ * basalam - a terminal user interface library for Salam (2026)
+ *
+ *   +-------------------+
+ *   |   B A S A L A M   |
+ *   +-------------------+
+ *
+ * Built on the Salam standard library's std/term package
+ * Salam: https://github.com/SalamLang/Salam
+ *
+ * Repository: https://github.com/curedbylethe/basalam
+ * License: GPL-3.0-or-later
+ *
+ */
+
+/*
+ * Text: the pure rules for turning a string into laid-out lines.
+ *
+ * A Text widget and, later, the layout engine both need the same two answers:
+ * which lines a string occupies at a given width, and how big the block those
+ * lines make is. This file computes both and nothing else, so no widget,
+ * screen, or terminal state is involved and the rules can be tested on their
+ * own.
+ *
+ * Cell model. A cell is one codepoint, so every character counts as one
+ * column; the count always comes from term.Width, the package's single
+ * cell-counting function (ANSI-aware, because it skips escape sequences), and
+ * never from str.Len or a counter of our own. Wide (CJK), combining, and
+ * zero-width characters are deliberately out of scope: they render as
+ * ordinary one-cell glyphs here.
+ *
+ * Wrap policy. Greedy word-boundary wrapping: walk the words of a paragraph
+ * and, when the next word would cross the width, start a new line and drop
+ * the space at the break. A word that does not fit on a line of its own is
+ * hard-split onto the character grid, so no emitted line is ever wider than
+ * the requested width. Plain cell-width cutting and clip-only were both
+ * rejected: the first splits words that would have fit, the second loses
+ * cells a hard clip cannot show.
+ *
+ * An explicit "\n" is a hard break: it ends the paragraph, and each paragraph
+ * wraps independently. A width of zero or less means unbounded (the
+ * artifact's M = infinity): every paragraph is returned unwrapped.
+ *
+ * This file deliberately has no notion of display width beyond one codepoint
+ * per cell, no alignment, and no layout pass; alignment and placement belong
+ * to the Text widget and the layout engine, which consume WrapText and
+ * MeasureText.
+ */
+
+package basalam
+
+import str
+import term
+
+// Appends the wrapped lines of one paragraph to out. Assumes width > 0; the
+// lines are pushed in top-to-bottom order and the break space is consumed.
+func _wrapInto(para: str, width: int, out &: Vector<str>):
+    if width <= 0:
+        out.push(para)
+        ret
+    end
+    mut words := str.Fields(para)
+    defer words.free()
+    mut line := ""
+    repeat words.len() in i:
+        w := words.get(i)
+        if term.Width(w) > width:
+            if term.Width(line) > 0:
+                out.push(line)
+                line = ""
+            end
+            mut chunks := _splitWord(w, width)
+            repeat chunks.len() in c:
+                if c + 1 < chunks.len():
+                    out.push(chunks.get(c))
+                else:
+                    line = chunks.get(c)
+                end
+            end
+            chunks.free()
+        else:
+            if term.Width(line) == 0:
+                line = w
+            else:
+                candidate := line + " " + w
+                if term.Width(candidate) <= width:
+                    line = candidate
+                else:
+                    out.push(line)
+                    line = w
+                end
+            end
+        end
+    end
+    out.push(line)
+end
+
+// Cuts a word wider than width onto the character grid: consecutive chunks of
+// at most width cells, in order. Assumes width > 0.
+func _splitWord(word: str, width: int): Vector<str>:
+    out := Vector {} as Vector<str>
+    mut chars := str.Chars(word)
+    defer chars.free()
+    mut chunk := ""
+    repeat chars.len() in i:
+        ch := chars.get(i)
+        if term.Width(chunk) > 0 and term.Width(chunk) + term.Width(ch) > width:
+            out.push(chunk)
+            chunk = ""
+        end
+        chunk = chunk + ch
+    end
+    if term.Width(chunk) > 0:
+        out.push(chunk)
+    end
+    ret out
+end
+
+@en "WrapText"
+/// Splits text into display lines of at most width cells, top to bottom. An
+/// explicit "\n" starts a new paragraph, each wrapped on its own; the space
+/// at a break is consumed. A word longer than width is cut on the character
+/// grid. width <= 0 means unbounded, so each paragraph is returned
+/// unwrapped. No line is wider than width when width > 0.
+pub func WrapText(text: str, width: int): Vector<str>:
+    out := Vector {} as Vector<str>
+    paras := str.Split(text, "\n")
+    defer paras.free()
+    repeat paras.len() in i:
+        _wrapInto(paras.get(i), width, out)
+    end
+    ret out
+end
+
+@en "MeasureText"
+/// The preferred size of text wrapped at max_width, as a rect at (0, 0):
+/// width is the longest wrapped line in cells, height the number of wrapped
+/// lines. max_width <= 0 means unbounded, so width is the longest explicit
+/// line and height is the explicit line count. Cells are counted with
+/// term.Width (see the module comment).
+pub func MeasureText(text: str, max_width: int): Rect:
+    mut lines := WrapText(text, max_width)
+    defer lines.free()
+    mut w := 0
+    repeat lines.len() in i:
+        lw := term.Width(lines.get(i))
+        if lw > w:
+            w = lw
+        end
+    end
+    ret Rect { width = w, height = lines.len() }
+end
