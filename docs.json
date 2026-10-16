@@ -43,6 +43,7 @@
           "reference/event",
           "reference/tree",
           "reference/buffer",
+          "reference/keymap",
           "reference/screen"
         ]
       }
