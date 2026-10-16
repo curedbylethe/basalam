@@ -106,7 +106,7 @@ t.set_style(term.Sgr(term.FgCyan) + term.Sgr(term.BgBlack) + term.Sgr(term.Style
 The widget fills the whole box with the style first, so a background colour reads full-bleed across the widget's area. The foreground and bold attributes apply to the glyph cells. An empty style is the terminal's default.
 
 <Note>
-  There is no `basalam.Style` type yet. Until the style work lands, a style is the SGR string you assemble with `std/term`.
+  There is no `basalam.Style` type yet. The [Color](/reference/color) value type now exists as the first piece of the style work, but until the rest lands, a style here is still the SGR string you assemble with `std/term`.
 </Note>
 
 ## Preferred size
