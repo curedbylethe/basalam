@@ -52,6 +52,16 @@ struct Grab:
     end
 end
 
+// TabGrab consumes Tab and nothing else, so a widget can beat the default
+// Tab -> focus_next binding.
+struct TabGrab:
+    pub use basalam.BaseWidget
+
+    pub func handle_event(event: basalam.Event): bool:
+        ret event.is_key(term.KeyTab)
+    end
+end
+
 // A headless screen the keymap can be pointed at. handle takes a
 // basalam.Screen*; a free function cannot take `&screen` and Vector.ref is
 // the only way to address a value in Salam, so the screen lives in a
@@ -136,6 +146,30 @@ end
 func swap_decline(screen: basalam.Screen*, id: int): bool:
     screen[0].set_keymap(new_focus_map(id))
     ret false
+end
+
+func rect(x: int, y: int, w: int, h: int): basalam.Rect:
+    ret basalam.Rect { x = x, y = y, width = w, height = h }
+end
+
+// grid builds the 2x2 focusable layout the default-binding tests use, so the
+// arrows have real geometry:
+//
+//     a(1) b(2)          ids 1, 2 on row 0
+//     c(3) d(4)          ids 3, 4 on row 1
+//
+// Tab cycles 1->2->3->4; right is 1->2, down is 2->4, left is 4->3, up is 3->1.
+func grid(): basalam.Screen:
+    mut s := basalam.NewScreen(Root {}, 8, 3)
+    a := s.add(basalam.RootId, Field {})
+    b := s.add(basalam.RootId, Field {})
+    c := s.add(basalam.RootId, Field {})
+    d := s.add(basalam.RootId, Field {})
+    s.widget(a).set_bounds(rect(0, 0, 4, 1))
+    s.widget(b).set_bounds(rect(4, 0, 4, 1))
+    s.widget(c).set_bounds(rect(0, 1, 4, 1))
+    s.widget(d).set_bounds(rect(4, 1, 4, 1))
+    ret s
 end
 
 func test_single_hit_and_miss():
@@ -591,6 +625,123 @@ func test_run_with_tick_uses_keymap():
     testing.AssertEqInt(s.focused_id(), w2)
 end
 
+func test_default_keymap_tab_moves_next():
+    mut s := grid()
+    defer s.close()
+    s.set_keymap(basalam.NewDefaultKeymap())
+
+    testing.AssertEqInt(s.focused_id(), 1)
+    testing.AssertTrue(s.dispatch(key("\t")))
+    testing.AssertEqInt(s.focused_id(), 2)
+    testing.AssertTrue(s.dispatch(key("\t")))
+    testing.AssertEqInt(s.focused_id(), 3)
+end
+
+func test_default_keymap_arrows_move_spatially():
+    mut s := grid()
+    defer s.close()
+    s.set_keymap(basalam.NewDefaultKeymap())
+
+    testing.AssertEqInt(s.focused_id(), 1)
+    testing.AssertTrue(s.dispatch(key("\x1b[B"))) // Down: a(1) -> c(3)
+    testing.AssertEqInt(s.focused_id(), 3)
+    testing.AssertTrue(s.dispatch(key("\x1b[C"))) // Right: c(3) -> d(4)
+    testing.AssertEqInt(s.focused_id(), 4)
+    testing.AssertTrue(s.dispatch(key("\x1b[A"))) // Up: d(4) -> b(2)
+    testing.AssertEqInt(s.focused_id(), 2)
+    testing.AssertTrue(s.dispatch(key("\x1b[D"))) // Left: b(2) -> a(1)
+    testing.AssertEqInt(s.focused_id(), 1)
+end
+
+func test_default_keymap_not_installed_is_inert():
+    mut s := grid()
+    defer s.close()
+
+    // Nothing is installed automatically: the default bindings do nothing
+    // until an app installs the map.
+    testing.AssertEqInt(s.focused_id(), 1)
+    testing.AssertFalse(s.dispatch(key("\t")))
+    testing.AssertFalse(s.dispatch(key("\x1b[B")))
+    testing.AssertEqInt(s.focused_id(), 1)
+end
+
+func test_default_keymap_widget_consumes_tab():
+    mut s := basalam.NewScreen(TabGrab {}, 8, 3)
+    defer s.close()
+    w1 := s.add(basalam.RootId, Field {})
+    _ := s.add(basalam.RootId, Field {})
+    s.set_keymap(basalam.NewDefaultKeymap())
+
+    // The root TabGrab consumes Tab, so the default focus_next never runs and
+    // the focus stays where it was.
+    testing.AssertTrue(s.dispatch(key("\t")))
+    testing.AssertEqInt(s.focused_id(), w1)
+end
+
+func test_default_keymap_only_five_bindings():
+    mut s := grid()
+    defer s.close()
+    s.set_keymap(basalam.NewDefaultKeymap())
+
+    // Unrelated keys pass through untouched (q stays free for the quit
+    // pattern).
+    testing.AssertFalse(s.dispatch(key("q")))
+    testing.AssertFalse(s.dispatch(key("z")))
+    // Shift+Tab is not one of the five: 0.4.9 decodes backtab to KeyUnknown,
+    // which is why the library cannot bind it without an escape literal.
+    testing.AssertEqInt(term.Decode("\x1b[Z").code, term.KeyUnknown)
+    testing.AssertFalse(s.dispatch(key("\x1b[Z")))
+    testing.AssertEqInt(s.focused_id(), 1)
+end
+
+func test_default_keymap_fresh_per_call():
+    mut r := Rig {}
+    defer r.release()
+    r.open(20, 5)
+    w1 := r.add(basalam.RootId, true)
+    w2 := r.add(basalam.RootId, true)
+    w3 := r.add(basalam.RootId, true)
+    mut a := basalam.NewDefaultKeymap()
+    defer a.free()
+    mut b := basalam.NewDefaultKeymap()
+    defer b.free()
+    // Rebinding one map must not touch another: each call is independent.
+    a.bind(term.Decode("\t"), action_focus(w3))
+
+    testing.AssertEqInt(r.focused(), w1)
+    // b is still the default: Tab moves to the next widget.
+    testing.AssertTrue(b.handle(r.ptr(), key("\t")))
+    testing.AssertEqInt(r.focused(), w2)
+    // a's rebound Tab goes where it was told.
+    testing.AssertTrue(r.focus(w1))
+    testing.AssertTrue(a.handle(r.ptr(), key("\t")))
+    testing.AssertEqInt(r.focused(), w3)
+end
+
+func test_default_keymap_set_keymap_and_replace():
+    mut s := grid()
+    defer s.close()
+    // Installing the default map makes its Tab binding live.
+    s.set_keymap(basalam.NewDefaultKeymap())
+    testing.AssertTrue(s.dispatch(key("\t")))
+    testing.AssertEqInt(s.focused_id(), 2)
+    // Replacing it with an empty map makes Tab unconsumed again.
+    s.set_keymap(basalam.NewKeymap())
+    testing.AssertFalse(s.dispatch(key("\t")))
+end
+
+func test_default_keymap_extend_rebind():
+    mut s := grid()
+    defer s.close()
+    s.set_keymap(basalam.NewDefaultKeymap())
+    // Extending the installed map: rebinding Tab (last write wins) replaces
+    // the default focus_next with a jump to d(4).
+    s.keymap.bind(term.Decode("\t"), action_focus(4))
+
+    testing.AssertTrue(s.dispatch(key("\t")))
+    testing.AssertEqInt(s.focused_id(), 4)
+end
+
 func main:
     test_single_hit_and_miss()
     test_rebind_last_write_wins()
@@ -617,5 +768,13 @@ func main:
     test_mode_switch_in_action_consumes()
     test_mode_switch_in_action_declines()
     test_run_with_tick_uses_keymap()
+    test_default_keymap_tab_moves_next()
+    test_default_keymap_arrows_move_spatially()
+    test_default_keymap_not_installed_is_inert()
+    test_default_keymap_widget_consumes_tab()
+    test_default_keymap_only_five_bindings()
+    test_default_keymap_fresh_per_call()
+    test_default_keymap_set_keymap_and_replace()
+    test_default_keymap_extend_rebind()
     ret testing.Summary()
 end
