@@ -45,12 +45,14 @@
  *
  * Sequences and deferral. `pending` is -1 (no prefix in progress) or a node
  * index. A node that has both bindings and children defers: it fires only
- * when the next key breaks the path (there is no timeout in v1, so avoid
- * binding both a key and a longer sequence that starts with it). A key that
- * does not continue a pending prefix resets `pending` and is reprocessed
- * from the root. Esc and Ctrl+C fall out of this path: if nothing matches
- * they leave `pending` reset and return false, so the loop's auto-stop is
- * unaffected.
+ * when the next key breaks the path (so avoid binding both a key and a longer
+ * sequence that starts with it). A pending prefix expires only when
+ * pending_timeout_ms is set and the next KeyEvent arrives later than that;
+ * non-key events never evaluate the timeout, but the time they take counts.
+ * A key that does not continue a pending prefix resets `pending` and is
+ * reprocessed from the root. Esc and Ctrl+C fall out of this path: if nothing
+ * matches they leave `pending` reset and return false, so the loop's
+ * auto-stop is unaffected.
  *
  * Scope. A binding carries a widget ID; NoWidget means global. At a
  * terminal node the focused widget and its ancestors are checked first
@@ -88,6 +90,7 @@
 package basalam
 
 import str
+import sync
 import term
 
 // Sep is the field separator of the canonical key identity. US (0x1F)
@@ -120,6 +123,21 @@ pub struct Keymap:
     nodes: Vector<KeyNode> = Vector {}
     // pending is the node index a sequence is parked on, or -1 for none.
     pending: int = -1
+
+    @en "pending_timeout_ms"
+    /// How long a pending key sequence may wait for its next key, in
+    /// milliseconds. 0 (the default) never expires a prefix, which is the
+    /// behavior without a timeout. The timeout is evaluated lazily, on the
+    /// next KeyEvent only; non-key events never expire a prefix. Set it
+    /// directly (keymap.pending_timeout_ms = 700); there is no constructor.
+    pub pending_timeout_ms: int = 0
+
+    @en "pending_since_ms"
+    /// The clock reading, in milliseconds, when the current pending sequence
+    /// started waiting; it is refreshed on every prefix step and is 0 when
+    /// nothing is pending. handle maintains it; an application sets
+    /// pending_timeout_ms instead.
+    pub pending_since_ms: int = 0
 
     @en "bind"
     /// Binds one key to an action in the global scope. A later bind of the
@@ -194,14 +212,29 @@ pub struct Keymap:
         end
         id := key_id(event.key)
 
+        // Lazy sequence timeout. A pending prefix is abandoned only here, on
+        // the next KeyEvent, when it has waited longer than pending_timeout_ms.
+        // Time taken by non-key events in between still counts, but they never
+        // expire a prefix themselves, and nothing fires from the timeout alone:
+        // the arriving key is simply processed as a fresh start.
+        if this.pending >= 0 and this.pending_timeout_ms > 0:
+            now := sync.NowMs() as int
+            if now - this.pending_since_ms > this.pending_timeout_ms:
+                this.pending = -1
+                this.pending_since_ms = 0
+            end
+        end
+
         if this.pending >= 0:
             p := this.pending
             this.pending = -1
+            this.pending_since_ms = 0
             next := this.nodes.ref(p)[0].children.get_or(id, -1)
             if next >= 0:
                 // A node with children defers, even when it has a binding.
                 if this.nodes.ref(next)[0].children.size() > 0:
                     this.pending = next
+                    this.pending_since_ms = sync.NowMs() as int
                     ret false
                 end
                 // The sequence ends here: resolve, then invoke and return
@@ -233,6 +266,7 @@ pub struct Keymap:
         end
         if this.nodes.ref(root_child)[0].children.size() > 0:
             this.pending = root_child
+            this.pending_since_ms = sync.NowMs() as int
             ret false
         end
         e_root := this.resolve(root_child, screen)

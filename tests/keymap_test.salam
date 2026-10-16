@@ -21,10 +21,16 @@
 // write a captured local (closures capture by value), so focused_id is the
 // observable effect of an action running.
 
+import sync
 import testing
 import term
 
 include "../basalam/basalam.salam"
+
+// Number of times the timeout tests' counter action has run. The action is a
+// lambda (closures capture by value, so a captured local would be useless), so
+// a global is the observable shared by those tests.
+mut seq_hits := 0
 
 // The screen root: an unfocusable placeholder so each test controls which
 // widget holds the focus.
@@ -122,6 +128,19 @@ end
 // act_next_consume returns an action that advances the focus and returns true.
 func act_next_consume(): func (basalam.Screen*, basalam.Event) bool:
     ret (screen: basalam.Screen*, event: basalam.Event): ret screen[0].focus_next() end
+end
+
+// bump_seq is the body of the timeout tests' action: it counts one run and
+// consumes the key. The screen and event are ignored.
+func bump_seq(_screen: basalam.Screen*, _event: basalam.Event): bool:
+    seq_hits += 1
+    ret true
+end
+
+// count_action returns an action that increments the global seq_hits counter,
+// so a test can assert how many times a binding fired.
+func count_action(): func (basalam.Screen*, basalam.Event) bool:
+    ret (screen: basalam.Screen*, event: basalam.Event): ret bump_seq(screen, event) end
 end
 
 // new_focus_map returns a fresh keymap that binds b to moving the focus to id;
@@ -742,6 +761,91 @@ func test_default_keymap_extend_rebind():
     testing.AssertEqInt(s.focused_id(), 4)
 end
 
+func test_sequence_timeout_blocks_completion():
+    mut r := Rig {}
+    defer r.release()
+    r.open(20, 5)
+    r.add(basalam.RootId, true)
+    mut km := basalam.NewKeymap()
+    defer km.free()
+    km.pending_timeout_ms = 50
+    km.bind_seq("gg", count_action())
+    seq_hits = 0
+
+    testing.AssertFalse(km.handle(r.ptr(), key("g")))
+    testing.AssertEqInt(seq_hits, 0)
+    // Simulate a long gap between the two g presses: the pending prefix is
+    // older than the timeout, so the second g is a fresh start, not a
+    // completion (without the timeout it would fire "gg" here).
+    km.pending_since_ms = (sync.NowMs() - 5000) as int
+    testing.AssertFalse(km.handle(r.ptr(), key("g")))
+    testing.AssertEqInt(seq_hits, 0)
+    // That fresh g began a new prefix, so an immediate third g completes it.
+    testing.AssertTrue(km.handle(r.ptr(), key("g")))
+    testing.AssertEqInt(seq_hits, 1)
+end
+
+func test_sequence_timeout_fresh_start_fires_single():
+    mut r := Rig {}
+    defer r.release()
+    r.open(20, 5)
+    r.add(basalam.RootId, true)
+    mut km := basalam.NewKeymap()
+    defer km.free()
+    km.pending_timeout_ms = 50
+    km.bind_seq("gg", count_action())
+    km.bind(term.Decode("x"), count_action())
+    seq_hits = 0
+
+    testing.AssertFalse(km.handle(r.ptr(), key("g")))
+    km.pending_since_ms = (sync.NowMs() - 5000) as int
+    // The expired prefix is abandoned and x is processed as a fresh key, so
+    // its single binding fires.
+    testing.AssertTrue(km.handle(r.ptr(), key("x")))
+    testing.AssertEqInt(seq_hits, 1)
+end
+
+func test_sequence_timeout_zero_never_expires():
+    mut r := Rig {}
+    defer r.release()
+    r.open(20, 5)
+    r.add(basalam.RootId, true)
+    mut km := basalam.NewKeymap()
+    defer km.free()
+    km.bind_seq("gg", count_action())
+    seq_hits = 0
+
+    testing.AssertFalse(km.handle(r.ptr(), key("g")))
+    // The default timeout is 0, so even a stale timestamp must not expire the
+    // prefix: the same behavior as before the timeout existed.
+    km.pending_since_ms = (sync.NowMs() - 5000) as int
+    testing.AssertTrue(km.handle(r.ptr(), key("g")))
+    testing.AssertEqInt(seq_hits, 1)
+end
+
+func test_sequence_timeout_ignores_non_key_events():
+    mut r := Rig {}
+    defer r.release()
+    r.open(20, 5)
+    r.add(basalam.RootId, true)
+    mut km := basalam.NewKeymap()
+    defer km.free()
+    km.pending_timeout_ms = 50
+    km.bind_seq("gg", count_action())
+    seq_hits = 0
+
+    testing.AssertFalse(km.handle(r.ptr(), key("g")))
+    km.pending_since_ms = (sync.NowMs() - 5000) as int
+    // Non-key events never evaluate the timeout nor clear the prefix.
+    testing.AssertFalse(km.handle(r.ptr(), basalam.Event { kind = basalam.TickEvent }))
+    testing.AssertFalse(km.handle(r.ptr(), basalam.Event { kind = basalam.ResizeEvent, width = 21, height = 6 }))
+    testing.AssertFalse(km.handle(r.ptr(), basalam.Event { kind = basalam.MouseEvent }))
+    // The prefix survived, so a fresh timestamp lets the completion fire.
+    km.pending_since_ms = sync.NowMs() as int
+    testing.AssertTrue(km.handle(r.ptr(), key("g")))
+    testing.AssertEqInt(seq_hits, 1)
+end
+
 func main:
     test_single_hit_and_miss()
     test_rebind_last_write_wins()
@@ -776,5 +880,9 @@ func main:
     test_default_keymap_fresh_per_call()
     test_default_keymap_set_keymap_and_replace()
     test_default_keymap_extend_rebind()
+    test_sequence_timeout_blocks_completion()
+    test_sequence_timeout_fresh_start_fires_single()
+    test_sequence_timeout_zero_never_expires()
+    test_sequence_timeout_ignores_non_key_events()
     ret testing.Summary()
 end
