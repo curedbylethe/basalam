@@ -9,21 +9,22 @@ basalam is a thin layer over Salam's `std/term`. `term` already reads keys, deco
 ## The big picture
 
 ```text
-                    +-------------------------- Screen ----------------------------+
- terminal           |                                                              |
- --------           |   input thread              main thread                      |
- stdin   --bytes--> |   term.ReadKey  --Event-->  next_event                       |
- size    --ioctl--> |   term.Size     --Event-->     |                             |
- clock   ---------> |   tick timer    --Event-->     v                             |
-                    |        (events channel)     dispatch -----> Tree             |
-                    |                                |      focused widget,        |
-                    |                                |      then each ancestor     |
-                    |                                v                             |
-                    |                             draw  -----> Widget.render       |
-                    |                                |         into Buffer copies  |
-                    |                                v                             |
- stdout  <--frame-- |                          present: Buffer.flush (diff)        |
-                    +--------------------------------------------------------------+
+                    +------------------------------- Screen -------------------------------+
+                    |                                                                      |
+ terminal           |   input thread         resize watcher (POSIX)    main thread         |
+ --------           |                                                                      |
+ stdin   --bytes--> |   term.ReadKey --Event-->                       next_event           |
+ size    --ioctl--> |                        sigwait(SIGWINCH) -->       |                 |
+ clock   ---------> |   tick timer --Ev-->   term.Size -->               v                 |
+                    |   (events channel) ---------------------------> dispatch --> Tree    |
+                    |                                                    |  focused widget,|
+                    |                                                    |  then ancestors |
+                    |                                                    v                 |
+                    |                                               draw --> Widget.render |
+                    |                                                    |  into buffers   |
+                    |                                                    v                 |
+ stdout  <--frame-- |                                          present: Buffer.flush (diff)|
+                    +----------------------------------------------------------------------+
 ```
 
 Each box has one job:
@@ -45,7 +46,7 @@ Each box has one job:
     Widgets are long-lived values that keep their own state. The application builds the tree once, changes widget state, and the screen redraws. The alternative, immediate mode, rebuilds the UI from application state every frame. It suits games, but it makes focus and per-widget state the application's problem.
   </Accordion>
   <Accordion title="Only input is asynchronous">
-    One background thread reads input and produces events onto a channel. The main thread consumes them and calls widgets synchronously. Widgets never run concurrently with each other or with drawing, so they need no locks, and `handle_event` is plain code. The cost is that a slow handler delays the next frame; keep handlers short and do background work in your application.
+    Two background threads produce events onto one channel: the input thread reads stdin, and, on POSIX, the resize watcher waits for `SIGWINCH` and reads the new size. Neither touches widgets, the tree, or the buffer. The main thread consumes the events and calls widgets synchronously, so widgets never run concurrently with each other or with drawing and need no locks; `handle_event` is plain code. The cost is that a slow handler delays the next frame; keep handlers short and do background work in your application.
   </Accordion>
   <Accordion title="Widgets are interfaces, identified by ID">
     Any struct with the eight `Widget` methods is a widget, stored as `dyn Widget`. Salam cannot compare or downcast `dyn` values, so the tree identifies widgets by integer ID: their index in the tree. IDs only grow, so a parent's ID is always smaller than its children's.

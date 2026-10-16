@@ -1,25 +1,28 @@
 ---
 title: "The event loop"
-description: "How input moves from the terminal to your widgets: one async input thread, one synchronous main loop, mouse routing, and resize polling."
+description: "How input moves from the terminal to your widgets: background input and resize threads, one synchronous main loop, and mouse routing."
 keywords: ["event loop", "thread", "channel", "async", "tick", "resize", "mouse", "hit test", "key bindings"]
 ---
 
-Exactly one part of basalam is asynchronous: reading input. Everything that touches your widgets runs synchronously on the main thread, one event at a time. That is why `handle_event` can be plain code with no locks and no `async`.
+Exactly one part of basalam is asynchronous: input. Everything that touches your widgets runs synchronously on the main thread, one event at a time. That is why `handle_event` can be plain code with no locks and no `async`. On POSIX a second background thread feeds the same channel: the resize watcher described below.
 
-## Two threads, one channel
+## Background threads, one channel
 
 ```mermaid
 sequenceDiagram
     participant T as Terminal
     participant I as Input thread
+    participant N as Resize watcher
     participant C as events channel
     participant M as Main thread
     participant W as Widgets
     T->>I: bytes on stdin
     I->>I: term.ReadKey()
     I->>C: KeyEvent / MouseEvent
-    I->>C: ResizeEvent (size changed)
     I->>C: TickEvent (every tick_ms)
+    T->>N: SIGWINCH (POSIX)
+    N->>N: term.Size()
+    N->>C: ResizeEvent (size changed)
     M->>C: next_event(ev)
     C-->>M: ev
     M->>W: dispatch(ev): first widget, then ancestors
@@ -27,13 +30,14 @@ sequenceDiagram
     M->>T: one write of the changed cells
 ```
 
-**The input thread** starts in `screen.start()`. It loops over three sources:
+**The input thread** starts in `screen.start()`. It loops over two sources:
 
 - **Keys and mouse.** It waits up to `PollMs` (20 ms) for input with `term.KeyReady`, then reads it with `term.ReadKey`. Keys become a `KeyEvent`. Mouse reports are decoded with `term.DecodeMouse` into a `MouseEvent`.
-- **Size.** It checks `term.Size()` on every pass and sends a `ResizeEvent` when it changes. See [Limitations](#limitations) for why this polls.
 - **Ticks.** When `tick_ms` is above zero, it sends a `TickEvent` that often. A late tick is scheduled from the time it was sent, so a slow main thread gets one late tick, not a burst of catch-up ticks.
 
-The input thread never touches widgets, the tree, or the buffer. Its only shared state is the channel, which `std/chan` already synchronizes.
+**The resize watcher** (POSIX only) starts in `screen.start()` as well. Size is a signal, not input: the terminal announces a resize with `SIGWINCH`, so `start()` installs a handler and blocks the signal before spawning either thread. The watcher parks in `sigwait`, reads `term.Size()` on each wake, and sends a `ResizeEvent` only when the size actually changed, so a wake with an unchanged size emits nothing. Windows has no `SIGWINCH`: there the input thread keeps polling `term.Size()` once per pass, and `PollMs` bounds that poll. See [Limitations](#limitations).
+
+Neither thread touches widgets, the tree, or the buffer. Their only shared state is the channel, which `std/chan` already synchronizes.
 
 <Note>
   Key repeat is not a special event. Holding a key makes the terminal send the same bytes again and again, and each one becomes its own `KeyEvent` through the input loop. basalam coalesces nothing and drops nothing. Whether a repeat means "hold" or "one more step" is your application's decision.
@@ -63,9 +67,9 @@ end
 
 ## Stopping and restoring the terminal
 
-`stop()` closes the channel. Events already queued are still delivered, then `next_event` returns `false`. The input thread notices the closed channel within `PollMs` and exits.
+`stop()` closes the channel. Events already queued are still delivered, then `next_event` returns `false`. The input thread notices the closed channel within `PollMs` and exits. The resize watcher is parked in `sigwait` instead of polling, so `close()` wakes it with a self-signal and it exits as soon as it sees the closed channel.
 
-`close()` calls `stop()`, writes the sequences that show the cursor and leave the alternate screen, restores the saved terminal modes with `term.Restore`, joins the input thread, and frees the screen. Put it in a `defer` right after `start()`:
+`close()` calls `stop()`, writes the sequences that show the cursor and leave the alternate screen, restores the saved terminal modes with `term.Restore`, joins the input thread and the resize watcher, and frees the screen. Put it in a `defer` right after `start()`:
 
 ```salam
 screen.start()
@@ -76,7 +80,7 @@ Every `ret` from that function, including early error returns, then restores the
 
 ## Resize
 
-When the terminal size changes, the input thread sends a `ResizeEvent` with the new `width` and `height`. `dispatch` reallocates the buffer's two grids and gives the root widget the full rect before any widget sees the event; the next frame repaints in full. When the root is a [layout container](/reference/layout), that `set_bounds` call propagates down the tree, so a resize re-lays out every child in one pass. Hand-placed widgets keep their bounds; recompute those in your loop, as the demo does:
+When the terminal size changes, a `ResizeEvent` arrives with the new `width` and `height` — from the resize watcher on POSIX, from the input thread on Windows. `dispatch` reallocates the buffer's two grids and gives the root widget the full rect before any widget sees the event; the next frame repaints in full. When the root is a [layout container](/reference/layout), that `set_bounds` call propagates down the tree, so a resize re-lays out every child in one pass. Hand-placed widgets keep their bounds; recompute those in your loop, as the demo does:
 
 ```salam
 consumed := screen.dispatch(ev)
@@ -124,9 +128,10 @@ screen.keymap.bind(term.Decode("n"), (screen: basalam.Screen*, event: basalam.Ev
 
 ## Limitations
 
-**Resize is polled, not signalled.** Terminals announce a resize with the `SIGWINCH` signal, and most TUI libraries listen for it. Salam's standard library has no signal API (no `sigaction`, no `SIGWINCH`), and basalam does not use FFI, so the input thread asks `term.Size()` on every pass instead.
+**How resize detection works.** On POSIX the terminal announces a resize with `SIGWINCH`. `start()` installs a handler and blocks the signal, and a dedicated resize watcher parks in `sigwait`, reads `term.Size()`, and sends a `ResizeEvent` only when the size changed. Windows has no `SIGWINCH`, so there the input thread keeps polling `term.Size()` once per pass.
 
-- A resize reaches your widgets at most `PollMs` (20 ms) after it happens. That is below one frame at 30 fps, so it is not visible in practice.
-- The cost is one size query per wake-up, whether or not anything changed.
-- Lowering `PollMs` makes resizes snappier and `stop()` quicker, and spends more CPU while idle. Raising it does the opposite.
-- Nothing about your code depends on this. A `ResizeEvent` looks the same however it was detected, so if Salam gains signal support only the input thread changes.
+- Rapid resizes coalesce: `SIGWINCH` does not queue, so two quick resizes can arrive as one wake and an intermediate size can be skipped. The event always carries the current size, so a container re-laid out to the final size is the right outcome.
+- On Windows, a resize reaches your widgets at most `PollMs` (20 ms) after it happens. That is below one frame at 30 fps, so it is not visible in practice.
+- Lowering `PollMs` makes `stop()` quicker and the Windows poll snappier, and spends more CPU while idle. Raising it does the opposite. On POSIX, resize latency does not depend on `PollMs`.
+- Start the screen before your own threads. Call `screen.start()` before spawning threads of your own: a thread created earlier does not inherit the blocked `SIGWINCH`, so the kernel may deliver a resize to it, where the no-op handler swallows it. If you must create a thread first, block `SIGWINCH` in it yourself.
+- Nothing about your code depends on this. A `ResizeEvent` looks the same however it was detected.
