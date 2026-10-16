@@ -79,7 +79,7 @@ Each box has one job:
 ## Current limits
 
 <Warning>
-  The buffer diffs per cell at flush time; there is no dirty-region or rectangle tracking yet, so a frame with one changed cell still scans the whole grid to find it. Styles are raw SGR strings (the [Color](/reference/color) value type now exists, but cells and widgets do not carry it yet), and each cell holds one codepoint assumed to be one column wide, so wide characters are not supported (epic 2), nor is cursor placement for text input. The `Widget.render` contract will not change when these land.
+  The buffer diffs per cell at flush time; there is no dirty-region or rectangle tracking yet, so a frame with one changed cell still scans the whole grid to find it. Styles are raw SGR strings in the buffer — the [Style](/reference/style) type exists and `Text` draws with it, but cells and the other widgets still pass strings. Each cell holds one codepoint assumed to be one column wide, so wide characters are not supported (epic 2), nor is cursor placement for text input. The `Widget.render` contract will not change when these land.
 </Warning>
 
 - The tree cannot remove or reparent widgets.
