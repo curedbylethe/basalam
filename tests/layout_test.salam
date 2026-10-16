@@ -18,9 +18,10 @@
 // worked vectors, not a random sweep: the two padding vectors (uniform and
 // per-side), the over-budget padding that must collapse to an empty rect
 // anchored at the raw origin, a negative inset side that must clamp to 0, the
-// three main-axis split vectors, split with no Fill entries and with Fixed
-// entries that exceed the length, a negative Fixed that clamps to 0, the grid
-// track vectors, and the placement tables for Start/Center/End/Stretch plus
+// three main-axis split vectors, the weighted-share vectors, split with no
+// Fill entries and with Fixed entries that exceed the length, a negative
+// Fixed that clamps to 0, the grid track vectors, and the placement tables
+// for Start/Center/End/Stretch plus
 // the non-positive-avail edge (which behaves like Stretch). Rect normal form
 // (never a negative dimension) is asserted directly on FitRect.
 //
@@ -94,6 +95,14 @@ end
 
 func fillSize(): basalam.LayoutSize:
     ret basalam.LayoutSize { kind = basalam.SizeKind.Fill }
+end
+
+func fillWeight(w: int): basalam.LayoutSize:
+    ret basalam.LayoutSize { kind = basalam.SizeKind.Fill, weight = w }
+end
+
+func prefWeight(w: int): basalam.LayoutSize:
+    ret basalam.LayoutSize { kind = basalam.SizeKind.Pref, weight = w }
 end
 
 func prefSize(): basalam.LayoutSize:
@@ -302,6 +311,156 @@ func test_split_pref_counts_as_fill():
     r.free()
 end
 
+func test_split_weights_2_1_1():
+    // L=10, weights 2,1,1. Floors 5,2,2, one cell to the earliest tied leftover.
+    sizes := Vector {} as Vector<basalam.LayoutSize>
+    sizes.push(fillWeight(2))
+    sizes.push(fillWeight(1))
+    sizes.push(fillWeight(1))
+    r := basalam.SplitMain(10, sizes)
+    testing.AssertEqInt(r.len(), 3)
+    testing.AssertEqInt(r.get(0), 5)
+    testing.AssertEqInt(r.get(1), 3)
+    testing.AssertEqInt(r.get(2), 2)
+    sizes.free()
+    r.free()
+end
+
+func test_split_weights_1_2_3():
+    // L=24, weights 1,2,3. Exact integers, no remainder.
+    sizes := Vector {} as Vector<basalam.LayoutSize>
+    sizes.push(fillWeight(1))
+    sizes.push(fillWeight(2))
+    sizes.push(fillWeight(3))
+    r := basalam.SplitMain(24, sizes)
+    testing.AssertEqInt(r.get(0), 4)
+    testing.AssertEqInt(r.get(1), 8)
+    testing.AssertEqInt(r.get(2), 12)
+    sizes.free()
+    r.free()
+end
+
+func test_split_weights_fixed_and_zero():
+    // L=30, Fixed(6), weights 3,0,0,1. Shares 18,0,0,6. Zero still has a slot.
+    sizes := Vector {} as Vector<basalam.LayoutSize>
+    sizes.push(fixedSize(6))
+    sizes.push(fillWeight(3))
+    sizes.push(fillWeight(0))
+    sizes.push(fillWeight(0))
+    sizes.push(fillWeight(1))
+    r := basalam.SplitMain(30, sizes)
+    testing.AssertEqInt(r.len(), 5)
+    testing.AssertEqInt(r.get(0), 6)
+    testing.AssertEqInt(r.get(1), 18)
+    testing.AssertEqInt(r.get(2), 0)
+    testing.AssertEqInt(r.get(3), 0)
+    testing.AssertEqInt(r.get(4), 6)
+    sizes.free()
+    r.free()
+end
+
+func test_split_weight_one_remainder():
+    // L=28, three weight-1 Fills. Same rule as an equal split: 10,9,9.
+    sizes := Vector {} as Vector<basalam.LayoutSize>
+    sizes.push(fillSize())
+    sizes.push(fillSize())
+    sizes.push(fillSize())
+    r := basalam.SplitMain(28, sizes)
+    testing.AssertEqInt(r.get(0), 10)
+    testing.AssertEqInt(r.get(1), 9)
+    testing.AssertEqInt(r.get(2), 9)
+    sizes.free()
+    r.free()
+end
+
+func test_split_negative_weight():
+    // A negative weight clamps to 0 and the slot is still returned.
+    sizes := Vector {} as Vector<basalam.LayoutSize>
+    sizes.push(fillWeight(-3))
+    sizes.push(fillWeight(1))
+    sizes.push(fillWeight(1))
+    r := basalam.SplitMain(10, sizes)
+    testing.AssertEqInt(r.len(), 3)
+    testing.AssertEqInt(r.get(0), 0)
+    testing.AssertEqInt(r.get(1), 5)
+    testing.AssertEqInt(r.get(2), 5)
+    sizes.free()
+    r.free()
+end
+
+func test_split_zero_weight_sum():
+    // Every pool weight is 0. Pool sizes stay 0, Fixed stays nominal, R unused.
+    sizes := Vector {} as Vector<basalam.LayoutSize>
+    sizes.push(fixedSize(4))
+    sizes.push(fillWeight(0))
+    sizes.push(fillWeight(-1))
+    r := basalam.SplitMain(15, sizes)
+    testing.AssertEqInt(r.get(0), 4)
+    testing.AssertEqInt(r.get(1), 0)
+    testing.AssertEqInt(r.get(2), 0)
+    sizes.free()
+    r.free()
+    none := Vector {} as Vector<basalam.LayoutSize>
+    none.push(fillWeight(0))
+    none.push(fillWeight(0))
+    z := basalam.SplitMain(15, none)
+    testing.AssertEqInt(z.len(), 2)
+    testing.AssertEqInt(z.get(0), 0)
+    testing.AssertEqInt(z.get(1), 0)
+    none.free()
+    z.free()
+end
+
+func test_split_fixed_overflow_weight():
+    // Fixed overflow. R is 0, heavy Fill weights get 0, Fixed is not shrunk.
+    sizes := Vector {} as Vector<basalam.LayoutSize>
+    sizes.push(fixedSize(8))
+    sizes.push(fixedSize(8))
+    sizes.push(fillWeight(5))
+    sizes.push(fillWeight(1))
+    r := basalam.SplitMain(12, sizes)
+    testing.AssertEqInt(r.get(0), 8)
+    testing.AssertEqInt(r.get(1), 8)
+    testing.AssertEqInt(r.get(2), 0)
+    testing.AssertEqInt(r.get(3), 0)
+    sizes.free()
+    r.free()
+end
+
+func test_split_fixed_ignores_weight():
+    // A Fixed child's weight is not part of the share.
+    sizes := Vector {} as Vector<basalam.LayoutSize>
+    sizes.push(basalam.LayoutSize { kind = basalam.SizeKind.Fixed, cells = 4, weight = 9 })
+    sizes.push(fillWeight(1))
+    sizes.push(fillWeight(1))
+    r := basalam.SplitMain(10, sizes)
+    testing.AssertEqInt(r.get(0), 4)
+    testing.AssertEqInt(r.get(1), 3)
+    testing.AssertEqInt(r.get(2), 3)
+    sizes.free()
+    r.free()
+end
+
+func test_split_pref_weight():
+    // Pref stays in the pool and its weight counts, same as Fill.
+    sizes := Vector {} as Vector<basalam.LayoutSize>
+    sizes.push(prefWeight(2))
+    sizes.push(fillWeight(1))
+    r := basalam.SplitMain(10, sizes)
+    testing.AssertEqInt(r.get(0), 7)
+    testing.AssertEqInt(r.get(1), 3)
+    sizes.free()
+    r.free()
+    zero := Vector {} as Vector<basalam.LayoutSize>
+    zero.push(prefWeight(0))
+    zero.push(fillWeight(1))
+    z := basalam.SplitMain(10, zero)
+    testing.AssertEqInt(z.get(0), 0)
+    testing.AssertEqInt(z.get(1), 10)
+    zero.free()
+    z.free()
+end
+
 func test_split_empty():
     empty := Vector {} as Vector<basalam.LayoutSize>
     r := basalam.SplitMain(10, empty)
@@ -427,6 +586,84 @@ func test_row_fixed_and_fill():
     checkRect(c.bounds(), 20, 0, 9, 6)
     checkRect(d.bounds(), 29, 0, 5, 6)
     checkRect(e.bounds(), 34, 0, 9, 6)
+end
+
+func test_row_weighted_main():
+    // Unequal main-axis weights produce unequal child rects. Cross axis stretches.
+    row := basalam.NewRow()
+    a := leaf()
+    b := leaf()
+    c := leaf()
+    ia := row.add(a)
+    ib := row.add(b)
+    ic := row.add(c)
+    row.set_width(ia, fillWeight(2))
+    row.set_width(ib, fillWeight(1))
+    row.set_width(ic, fillWeight(1))
+    row.set_bounds(rect(0, 0, 10, 3))
+    checkRect(a.bounds(), 0, 0, 5, 3)
+    checkRect(b.bounds(), 5, 0, 3, 3)
+    checkRect(c.bounds(), 8, 0, 2, 3)
+end
+
+func test_row_weight_cross_ignored():
+    // Width weights split the main axis. Height weights and Fixed weight do not.
+    row := basalam.NewRow()
+    a := leaf()
+    b := leaf()
+    ia := row.add(a)
+    ib := row.add(b)
+    row.set_width(ia, fillWeight(2))
+    row.set_width(ib, fillWeight(1))
+    row.set_height(ia, basalam.LayoutSize { kind = basalam.SizeKind.Fixed, cells = 2, weight = 50 })
+    row.set_height(ib, fillWeight(50))
+    row.set_align(ia, basalam.CrossAlign.Stretch, basalam.CrossAlign.Center)
+    row.set_bounds(rect(0, 0, 18, 6))
+    checkRect(a.bounds(), 0, 2, 12, 2)
+    checkRect(b.bounds(), 12, 0, 6, 6)
+end
+
+func test_row_zero_weight_visited():
+    // A 0 or negative weight still places a 0x0 slot. The next child starts after it.
+    row := basalam.NewRow()
+    f := leaf()
+    a := leaf()
+    b := leaf()
+    c := leaf()
+    d := leaf()
+    ifx := row.add(f)
+    ia := row.add(a)
+    ib := row.add(b)
+    ic := row.add(c)
+    id := row.add(d)
+    row.set_width(ifx, fixedSize(6))
+    row.set_width(ia, fillWeight(3))
+    row.set_width(ib, fillWeight(0))
+    row.set_width(ic, fillWeight(-2))
+    row.set_width(id, fillWeight(1))
+    row.set_bounds(rect(0, 0, 30, 3))
+    checkRect(f.bounds(), 0, 0, 6, 3)
+    checkRect(a.bounds(), 6, 0, 18, 3)
+    checkRect(b.bounds(), 24, 0, 0, 0)
+    checkRect(c.bounds(), 24, 0, 0, 0)
+    checkRect(d.bounds(), 24, 0, 6, 3)
+end
+
+func test_grid_ignores_weight():
+    // Grid track sizes ignore weight. 10 columns and 2 tracks stay 5, 5.
+    g := basalam.NewGrid(1, 2)
+    a := leaf()
+    b := leaf()
+    ia := g.add(a)
+    ib := g.add(b)
+    g.set_cell(ib, 0, 1)
+    g.set_width(ia, fillWeight(9))
+    g.set_width(ib, fillWeight(1))
+    g.set_height(ia, fillWeight(4))
+    g.set_height(ib, fillWeight(1))
+    g.set_bounds(rect(0, 0, 10, 4))
+    checkRect(a.bounds(), 0, 0, 5, 4)
+    checkRect(b.bounds(), 5, 0, 5, 4)
 end
 
 func test_recursion_nested():
@@ -1037,6 +1274,15 @@ func main:
     test_split_over_budget()
     test_split_negative_fixed()
     test_split_pref_counts_as_fill()
+    test_split_weights_2_1_1()
+    test_split_weights_1_2_3()
+    test_split_weights_fixed_and_zero()
+    test_split_weight_one_remainder()
+    test_split_negative_weight()
+    test_split_zero_weight_sum()
+    test_split_fixed_overflow_weight()
+    test_split_fixed_ignores_weight()
+    test_split_pref_weight()
     test_split_empty()
     test_tracks_uneven()
     test_tracks_even()
@@ -1047,6 +1293,10 @@ func main:
     test_place_nonpositive()
     test_column_padding_recursion()
     test_row_fixed_and_fill()
+    test_row_weighted_main()
+    test_row_weight_cross_ignored()
+    test_row_zero_weight_visited()
+    test_grid_ignores_weight()
     test_recursion_nested()
     test_idempotent()
     test_grid_cells()
