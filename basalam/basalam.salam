@@ -33,6 +33,7 @@
  *     event.salam    Event, the value input arrives as, and its kinds
  *     buffer.salam   Buffer and Cell, the grid widgets draw into
  *     color.salam    the Color value type and its raw SGR encoding
+ *     style.salam    the Style value type, merge, equality and SGR emission
  *     widget.salam   the Widget interface and BaseWidget defaults
  *     layout.salam   the Row, Column, Grid and Stack containers
  *     text.salam     the Text widget and the pure line rules it draws through
