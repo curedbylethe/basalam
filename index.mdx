@@ -9,7 +9,7 @@ basalam is a library for building terminal user interfaces in [Salam](https://gi
 It sits on top of Salam's standard `term` package. `term` already handles raw mode, escape sequences, colors, and key decoding. basalam adds the parts a full-screen application needs on top: geometry, widgets, events, focus, and a screen that draws frames.
 
 <Note>
-  basalam is at version 0.1.0 and under active development. This release covers the core (epic 1), the first concrete widgets (`Text`, `Input`, and `List`), and the layout engine (`Row`, `Column`, `Grid`, and `Stack`). More widgets and keymaps come in later releases.
+  basalam is at version 0.1.0 and under active development. This release covers the core (epic 1), the first concrete widgets (`Text`, `Input`, and `List`), the layout engine (`Row`, `Column`, `Grid`, and `Stack`), and an opt-in keymap with `NewDefaultKeymap`. More widgets are planned for later releases.
 </Note>
 
 ## Design in brief
@@ -18,7 +18,7 @@ It sits on top of Salam's standard `term` package. `term` already handles raw mo
 - **Only input is asynchronous.** One background thread reads the terminal and produces events. Your widgets handle them synchronously on the main thread, so they need no locks.
 - **Widgets are interfaces.** Anything with the six `Widget` methods is a widget. Embed `BaseWidget` and override only what you need.
 - **Widgets draw into a buffer, never the terminal.** That keeps rendering testable without a terminal.
-- **Two focus models.** Tab-style linear order and arrow-key spatial navigation, as methods your application binds to keys. The library adds no key bindings or modes of its own.
+- **Two focus models.** Tab-style linear order and arrow-key spatial navigation, as methods your application calls. The opt-in keymap (`NewDefaultKeymap`) wires up `Tab` and the four arrows for you, with no imposed bindings and no modes of its own.
 - **Geometry on the cell grid.** Every position is an integer cell coordinate, 0-based, with half-open rectangles.
 
 ## Status
@@ -35,6 +35,7 @@ It sits on top of Salam's standard `term` package. `term` already handles raw mo
 | Widget tree with integer IDs | Available |
 | `Screen`: event loop, input thread, resize, ticks | Available |
 | Focus: stack, linear, and spatial navigation | Available |
+| Keymap: opt-in key bindings with scopes and sequences | Available; install with `set_keymap`, defaults via `NewDefaultKeymap` |
 | `Buffer` (double-buffered) | Available; double-buffered with diffing; dirty-region tracking comes later |
 
 <Columns cols={2}>

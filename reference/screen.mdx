@@ -37,6 +37,7 @@ pub func NewTerminalScreen(root: dyn Widget): Screen
 <ResponseField name="tree" type="Tree">The widget registry. Prefer `add` and `widget`.</ResponseField>
 <ResponseField name="tick_ms" type="int" default="0">Interval of `TickEvent`s in milliseconds. `0` sends none. Set it before `start()`.</ResponseField>
 <ResponseField name="mouse" type="bool" default="false">When `true`, `start()` enables mouse reporting and clicks arrive as `MouseEvent`s. Set it before `start()`.</ResponseField>
+<ResponseField name="keymap" type="Keymap" default="Keymap {}">The opt-in [keymap](/reference/keymap) consulted as a fallback for a `KeyEvent` no widget consumed. Empty by default, so a screen behaves exactly as before until you install or extend it. Bind through this field to extend the map in place, or use `set_keymap` to replace it. Never assign a `Keymap` directly.</ResponseField>
 <ResponseField name="dirty" type="bool">`true` when the next `present()` has something new to show. Set by consumed events, resizes, focus changes, and added widgets.</ResponseField>
 <ResponseField name="focus_stack" type="Vector<int>">Widget IDs; the last entry is the focused widget. Change it only through the focus methods, which keep `focused` and `dirty` in sync.</ResponseField>
 
@@ -72,14 +73,14 @@ Each returns `true` when the focus moved, and every change marks the screen dirt
 | --- | --- |
 | `start()` | Raw mode, alternate screen, hidden cursor, mouse reporting if `mouse` is set, a buffer sized to the terminal, and the input thread. |
 | `stop()` | Ends the loop. `next_event` returns `false` once the queue is drained. Safe to call more than once. |
-| `close()` | Stops the loop, restores the terminal exactly as `start()` found it, joins the input thread, and frees the screen's storage. Safe to call more than once. |
+| `close()` | Stops the loop, restores the terminal exactly as `start()` found it, joins the input thread, and frees the screen's storage, including its keymap. Safe to call more than once. |
 
 ## The event loop
 
 | Method | Description |
 | --- | --- |
 | `next_event(event &: Event): bool` | Waits for the next event. Returns `false` once the screen is stopped and every queued event was delivered. |
-| `dispatch(event: Event): bool` | Handles one event synchronously. A `ResizeEvent` first resizes the screen. Then the event goes to a starting widget and bubbles up: the widget under the cursor for a mouse event, the focused widget for everything else. Returns `true` if a widget consumed it. See [Hit testing](#hit-testing). |
+| `dispatch(event: Event): bool` | Handles one event synchronously. A `ResizeEvent` first resizes the screen. Then the event goes to a starting widget and bubbles up: the widget under the cursor for a mouse event, the focused widget for everything else. An unconsumed `KeyEvent` is then offered to the [keymap](/reference/keymap) fallback. Returns `true` if a widget or the keymap consumed it. See [Hit testing](#hit-testing). |
 | `draw()` | Renders every widget into the buffer's back grid, in ID order, each clipped to its visible bounds. |
 | `present()` | `draw()`, then, once attached, writes only the cells that changed since the last frame. Clears `dirty`. |
 | `post(event: Event): bool` | Queues an event as if the input thread had produced it. Safe from any thread. |

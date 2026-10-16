@@ -55,8 +55,8 @@ end
 ```
 
 - `next_event` blocks until an event arrives. It returns `false` when the screen was stopped and the queue is empty.
-- `dispatch` handles a resize (the buffer is reallocated and the root refitted first, forcing a full repaint), then offers the event to a starting widget and [bubbles it up](/reference/event#dispatch-and-bubbling). The starting widget is the focused one, except for mouse events (see [Mouse routing](#mouse-routing)). It returns whether a widget consumed it.
-- Anything no widget consumed is yours: keymaps, modes, and quitting are application decisions, not library ones.
+- `dispatch` handles a resize (the buffer is reallocated and the root refitted first, forcing a full repaint), then offers the event to a starting widget and [bubbles it up](/reference/event#dispatch-and-bubbling). The starting widget is the focused one, except for mouse events (see [Mouse routing](#mouse-routing)). It returns whether a widget — or the [keymap](/reference/keymap) fallback — consumed it.
+- An unconsumed `KeyEvent` is then offered to the screen's opt-in [keymap](/reference/keymap), if you installed one. Whatever is still left — quitting, modes — is yours: application decisions, not library ones.
 - `present` draws every widget into the buffer and writes only the cells that changed since the last frame.
 
 `run()` and `run_with_tick(on_tick)` are this loop with two additions: they redraw only when something changed (`screen.dirty`), and an unconsumed Ctrl+C stops them. In raw mode, Ctrl+C is an ordinary key, so without this a program that forgets to handle it could not be left.
@@ -106,11 +106,21 @@ Every other event kind (keys, ticks, resizes) still starts at the focused widget
 
 Mouse events only arrive when you set `screen.mouse = true` before `start()`.
 
-## No key bindings
+## Key bindings
 
-basalam delivers raw `KeyEvent`s and ships no bindings. There is no built-in `Tab` for focus, no `q` for quit, and no vim keys (`hjkl`, `gg`, `G`, `/`). The focus methods (`focus_next`, `focus_up`, and the rest) exist, but connecting them to keys is your job.
+basalam delivers raw `KeyEvent`s, so your widgets always see a key first. What a key means is policy, and policy belongs to the application, so the library imposes no bindings of its own: press nothing and nothing happens.
 
-This is deliberate. Bindings are policy, and every application wants a different one. An application that wants vim-style modes wraps the library and interprets keys itself, the way Televim wraps ratatui. The library stays small, and nobody has to fight a default they cannot turn off. The [demo](https://github.com/curedbylethe/basalam/blob/main/examples/demo.salam) shows the usual shape: an application-owned function that maps keys to focus calls.
+The extension point is the opt-in [keymap](/reference/keymap). Every screen holds a `Keymap`, empty by default. `dispatch` offers a `KeyEvent` to the widget chain first and passes it to the keymap only when no widget consumed it, so a widget's own handling always wins and the keymap fills the gaps. Non-key events never reach the keymap.
+
+`NewDefaultKeymap()` supplies the library's only stock map: `Tab` moves to the next widget and the four arrows move spatially. Nothing installs it for you — opt in with `screen.set_keymap(basalam.NewDefaultKeymap())`, or build your own with `bind` and its variants. There is still no `q` for quit and no vim keys (`hjkl`, `gg`, `G`, `/`).
+
+Modes stay app-level. An application that wants vim-style modes wraps the library and installs the map that matches the current mode, the way Televim wraps ratatui. The library stays small, and nobody has to fight a default they cannot turn off. The [demo](https://github.com/curedbylethe/basalam/blob/main/examples/demo.salam) installs the default map before its loop; a custom binding is just as short:
+
+```salam
+// Opt in to the library defaults, then add a binding of your own.
+screen.set_keymap(basalam.NewDefaultKeymap())
+screen.keymap.bind(term.Decode("n"), (screen: basalam.Screen*, event: basalam.Event): ret screen[0].focus_next() end)
+```
 
 ## Limitations
 

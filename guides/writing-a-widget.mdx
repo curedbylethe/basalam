@@ -136,6 +136,10 @@ end
 
 The first counter is focused automatically, because it is the first focusable widget added. `Tab` moves the focus, the newly focused counter draws in reverse video, and `+` and `-` go to whichever counter has focus.
 
+<Note>
+  This sample wires `Tab` by hand so the focus call is visible. basalam also ships an opt-in [keymap](/reference/keymap): install the defaults with `screen.set_keymap(basalam.NewDefaultKeymap())` and `Tab` plus the four arrows move the focus with no loop code at all.
+</Note>
+
 ## The complete widget
 
 <Accordion title="counter.salam">
