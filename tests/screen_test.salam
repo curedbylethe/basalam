@@ -30,6 +30,31 @@ include "../basalam/basalam.salam"
 
 mut ticks := 0
 
+// Column the next ZBox render writes. present() walks paint order, so the
+// row text is that order: each widget writes its mark and steps the column.
+mut paint_at := 0
+
+// Draws one mark at paint_at. Used to read Screen paint order off the buffer.
+struct ZBox:
+    pub use basalam.BaseWidget
+    pub mark: str = "0"
+    pub can_focus: bool = false
+    pub allow_hits: bool = true
+
+    pub func focusable(): bool:
+        ret this.can_focus
+    end
+
+    pub func hits(): bool:
+        ret this.allow_hits
+    end
+
+    pub func render(buf: basalam.Buffer, bounds: basalam.Rect):
+        buf.put_str(paint_at, bounds.y, this.mark, "")
+        paint_at = paint_at + 1
+    end
+end
+
 // Root widget: draws a title on row 0 and counts the keys that bubble up
 // to it. Consumes "r".
 struct Frame:
@@ -57,6 +82,35 @@ struct Block:
     pub func render(buf: basalam.Buffer, bounds: basalam.Rect):
         buf.fill(bounds, this.ch, "")
     end
+end
+
+// Four widgets, ids 0..3, each covering the whole row. Widget 1 holds focus.
+func zstack(): basalam.Screen:
+    mut s := basalam.NewScreen(ZBox { mark = "0" }, 4, 1)
+    _ := s.add(basalam.RootId, ZBox { mark = "1", can_focus = true })
+    _ := s.add(basalam.RootId, ZBox { mark = "2", can_focus = true })
+    _ := s.add(basalam.RootId, ZBox { mark = "3" })
+    full := rect(0, 0, 4, 1)
+    repeat s.tree.count() in id:
+        s.widget(id).set_bounds(full)
+    end
+    ret s
+end
+
+func painted(s &: basalam.Screen): str:
+    paint_at = 0
+    s.present()
+    ret s.buffer.row_text(0)
+end
+
+// n is 1 or 2. b is pushed only when n is 2, so a negative id can be passed.
+func id_vec(n: int, a: int, b: int): Vector<int>:
+    mut ids := Vector {} as Vector<int>
+    ids.push(a)
+    if n >= 2:
+        ids.push(b)
+    end
+    ret ids
 end
 
 func rect(x: int, y: int, w: int, h: int): basalam.Rect:
@@ -209,6 +263,90 @@ func test_close_is_idempotent():
     testing.AssertFalse(s.running)
 end
 
+func test_raise_paint_order():
+    mut s := zstack()
+    defer s.close()
+    // First focusable added (id 1) holds focus. raise must not move it,
+    // including onto a later focusable layer.
+    testing.AssertEqInt(s.focused_id(), 1)
+    testing.AssertEqStr(painted(s), "0123")
+
+    mut ids := id_vec(1, 1, 0)
+    s.raise(ids)
+    testing.AssertEqStr(painted(s), "0231")
+    testing.AssertEqInt(s.focused_id(), 1)
+    s.unraise(ids)
+    ids.free()
+    testing.AssertEqStr(painted(s), "0123")
+
+    ids = id_vec(2, 1, 2)
+    s.raise(ids)
+    testing.AssertEqStr(painted(s), "0312")
+    s.unraise(ids)
+    ids.free()
+    testing.AssertEqStr(painted(s), "0123")
+
+    // Call order is 2 then 1. One stamp, so id order inside the layer
+    // is still 1 then 2, not 2 then 1.
+    ids = id_vec(2, 2, 1)
+    s.raise(ids)
+    testing.AssertEqStr(painted(s), "0312")
+    testing.AssertEqInt(s.focused_id(), 1)
+    s.unraise(ids)
+    ids.free()
+
+    // Raising only the other focusable widget must not steal focus.
+    ids = id_vec(1, 2, 0)
+    s.raise(ids)
+    testing.AssertEqStr(painted(s), "0132")
+    testing.AssertEqInt(s.focused_id(), 1)
+    s.unraise(ids)
+    ids.free()
+
+    ids = id_vec(2, 1, 2)
+    s.raise(ids)
+    ids.free()
+    ids = id_vec(1, 1, 0)
+    s.raise(ids)
+    testing.AssertEqStr(painted(s), "0321")
+    testing.AssertEqInt(s.focused_id(), 1)
+    ids.free()
+    ids = id_vec(2, 1, 2)
+    s.unraise(ids)
+    ids.free()
+    testing.AssertEqStr(painted(s), "0123")
+
+    // Unknown ids are stored and do not crash. 99 is not registered, so
+    // the registered order matches raise([1]). Unraise of 99 and of -1
+    // is idempotent and leaves 1 raised.
+    ids = id_vec(2, 1, 99)
+    s.raise(ids)
+    ids.free()
+    testing.AssertEqStr(painted(s), "0231")
+    ids = id_vec(2, 99, -1)
+    s.unraise(ids)
+    s.unraise(ids)
+    ids.free()
+    testing.AssertEqStr(painted(s), "0231")
+    ids = id_vec(1, 1, 0)
+    s.unraise(ids)
+    ids.free()
+    testing.AssertEqStr(painted(s), "0123")
+    testing.AssertEqInt(s.focused_id(), 1)
+end
+
+func test_hits_false_still_paints():
+    mut s := basalam.NewScreen(ZBox { mark = "0" }, 2, 1)
+    defer s.close()
+    top := s.add(basalam.RootId, ZBox { mark = "1", allow_hits = false })
+    full := rect(0, 0, 2, 1)
+    s.widget(basalam.RootId).set_bounds(full)
+    s.widget(top).set_bounds(full)
+    testing.AssertEqStr(painted(s), "01")
+    testing.AssertEqInt(s.hit_test(0, 0), basalam.RootId)
+    testing.AssertEqInt(s.hit_test(1, 0), basalam.RootId)
+end
+
 func test_resize_forces_full_repaint():
     mut s := basalam.NewScreen(Frame { title = "g" }, 8, 2)
     defer s.close()
@@ -246,5 +384,7 @@ func main:
     test_ansi_frame()
     test_close_is_idempotent()
     test_resize_forces_full_repaint()
+    test_raise_paint_order()
+    test_hits_false_still_paints()
     ret testing.Summary()
 end

@@ -44,6 +44,7 @@ struct Recorder:
     pub takes_mouse: bool = false
     pub takes_keys: bool = false
     pub can_focus: bool = false
+    pub allow_hits: bool = true
 
     pub func handle_event(event: basalam.Event): bool:
         visits.push(this.name)
@@ -55,6 +56,10 @@ struct Recorder:
 
     pub func focusable(): bool:
         ret this.can_focus
+    end
+
+    pub func hits(): bool:
+        ret this.allow_hits
     end
 end
 
@@ -210,6 +215,60 @@ func test_undecoded_mouse_report_falls_back_to_focus():
     testing.AssertEqStr(trail(), "panel>root")
 end
 
+func test_raised_widget_beats_later_sibling():
+    mut s := build()
+    defer s.close()
+    mut ids := Vector {} as Vector<int>
+    defer ids.free()
+    ids.push(1)
+    testing.AssertEqInt(s.focused_id(), 1)
+    s.raise(ids)
+    // panel now paints above overlay, which used to win at (4, 1).
+    testing.AssertEqInt(s.hit_test(4, 1), 1)
+    testing.AssertEqInt(s.focused_id(), 1)
+    testing.AssertFalse(s.dispatch(click(4, 1)))
+    testing.AssertEqStr(trail(), "panel>root")
+end
+
+func test_one_raise_shares_one_stamp():
+    mut s := build()
+    defer s.close()
+    mut ids := Vector {} as Vector<int>
+    defer ids.free()
+    // 2 then 1. A per-id increment would stamp panel above child.
+    ids.push(2)
+    ids.push(1)
+    s.raise(ids)
+    testing.AssertEqInt(s.hit_test(4, 1), 2)
+    testing.AssertEqInt(s.focused_id(), 1)
+end
+
+// Spec z1, hit probes only. Widget 3 covers (7, 2) but refuses hits, so
+// the scan falls through to widget 2. raise does not move focus.
+func test_hits_false_is_skipped():
+    mut s := basalam.NewScreen(Recorder { name = "w0", can_focus = true }, 10, 4)
+    defer s.close()
+    w1 := s.add(basalam.RootId, Recorder { name = "w1", can_focus = true })
+    w2 := s.add(basalam.RootId, Recorder { name = "w2", can_focus = true })
+    w3 := s.add(basalam.RootId, Recorder { name = "w3", allow_hits = false })
+    s.widget(w1).set_bounds(rect(2, 1, 4, 2))
+    s.widget(w2).set_bounds(rect(0, 0, 10, 4))
+    s.widget(w3).set_bounds(rect(6, 1, 4, 2))
+    testing.AssertTrue(s.focus(w2))
+    mut ids := Vector {} as Vector<int>
+    defer ids.free()
+    ids.push(w1)
+    s.raise(ids)
+    testing.AssertEqInt(s.focused_id(), w2)
+    testing.AssertEqInt(s.hit_test(3, 2), w1)
+    testing.AssertEqInt(s.hit_test(7, 2), w2)
+    testing.AssertEqInt(s.hit_test(0, 0), w2)
+    testing.AssertEqInt(s.hit_test(9, 9), basalam.NoWidget)
+    testing.AssertFalse(s.dispatch(click(7, 2)))
+    testing.AssertEqStr(trail(), "w2>w0")
+    testing.AssertEqInt(s.focused_id(), w2)
+end
+
 func test_keyboard_still_goes_to_focused_widget():
     mut s := build()
     defer s.close()
@@ -239,6 +298,9 @@ func main:
     test_click_outside_children_goes_to_root()
     test_click_with_nothing_under_cursor_falls_back_to_focus()
     test_overlapping_siblings_later_wins()
+    test_raised_widget_beats_later_sibling()
+    test_one_raise_shares_one_stamp()
+    test_hits_false_is_skipped()
     test_undecoded_mouse_report_falls_back_to_focus()
     test_keyboard_still_goes_to_focused_widget()
     test_tick_and_resize_stay_on_focus_path()

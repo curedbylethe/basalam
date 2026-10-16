@@ -61,13 +61,14 @@
  * current map in place.
  *
  * Mouse routing. A decoded MouseEvent starts at the widget under the
- * cursor instead of the focused one: hit_test finds the topmost widget
- * (highest ID, i.e. last painted) whose bounds contain the cell, and the
- * event bubbles up from there. If no widget contains it (a click outside
- * the buffer, or an undecodable report) it starts at the focused widget
- * like any other event. Routing never moves the focus: a click does not
- * focus what it hits, because whether a click should focus is a widget
- * and application decision, and it can call focus() itself.
+ * cursor instead of the focused one: hit_test walks reverse paint order
+ * and takes the first widget whose bounds contain the cell and whose
+ * hits() is true, and the event bubbles up from there. If nothing
+ * qualifies (a click outside the buffer, or every cover refuses hits) or
+ * the report could not be decoded, it starts at the focused widget like
+ * any other event. Routing never moves the focus: a click does not focus
+ * what it hits, because whether a click should focus is a widget and
+ * application decision, and it can call focus() itself.
  *
  * Resizing. On a ResizeEvent the screen resizes its buffer and gives the
  * root widget the full terminal rect (fit_root). A resize reallocates the
@@ -184,7 +185,8 @@ pub struct Screen:
 
     @en "dirty"
     /// True when the next present() has something new to show. Set by
-    /// consumed events, resizes, focus changes, and added widgets.
+    /// consumed events, resizes, focus changes, added widgets, and
+    /// raise/unraise.
     pub dirty: bool = true
 
     @en "focus_stack"
@@ -198,11 +200,18 @@ pub struct Screen:
     closed: bool = false
     input_thread: i64 = 0
     term_state: term.TermState = term.TermState {}
+    // Raise stamps live on the screen, not on the widget. A missing id is
+    // stamp 0 (unraised). One raise() call bumps ztop once and writes that
+    // same stamp on every id, so the call is one layer. D6 focus movement
+    // is not done here: raise and unraise only assign stamps.
+    stamps: HashMap<int, int> = HashMap {} as HashMap<int, int>
+    ztop: int = 0
 
     @en "add"
     /// Adds w under parent (an ID; RootId for top level) and returns the
-    /// new widget's ID. Widgets paint in the order they are added. The
-    /// first focusable widget added while nothing has focus receives it.
+    /// new widget's ID. Unraised widgets paint in ID order, which is the
+    /// order they were added. The first focusable widget added while
+    /// nothing has focus receives it.
     pub func add(parent: int, w: dyn Widget): int:
         this.dirty = true
         id := this.tree.add(parent, w)
@@ -210,6 +219,33 @@ pub struct Screen:
             _ := this.focus(id)
         end
         ret id
+    end
+
+    @en "raise"
+    /// Assigns every id one fresh stamp, shared by this whole call, so the
+    /// ids form a single layer above every widget raised earlier and above
+    /// every unraised widget. Within the layer, paint order stays ID order.
+    /// Does not move focus. An id that is not in the tree is recorded and
+    /// does not crash; it changes painting only once that id is registered.
+    pub func raise(ids: Vector<int>):
+        this.ztop = this.ztop + 1
+        stamp := this.ztop
+        repeat ids.len() in i:
+            this.stamps.put(ids.get(i), stamp)
+        end
+        this.dirty = true
+    end
+
+    @en "unraise"
+    /// Clears the stamp of every id to 0, so those widgets return to plain
+    /// ID order. Idempotent: an id that was not raised, or that is not in
+    /// the tree, is left at 0. Does not rewind the stamp counter and does
+    /// not move focus.
+    pub func unraise(ids: Vector<int>):
+        repeat ids.len() in i:
+            this.stamps.put(ids.get(i), 0)
+        end
+        this.dirty = true
     end
 
     @en "widget"
@@ -334,18 +370,22 @@ pub struct Screen:
 
     @en "hit_test"
     /// The ID of the widget drawn at cell (x, y), both 0-based, or
-    /// NoWidget when no widget covers it. Where widgets overlap, the one
-    /// painted last (the highest ID) wins, so a child beats its parent and
-    /// a later sibling beats an earlier one: the result is whatever the
-    /// user sees on that cell. Widgets with empty bounds never match.
+    /// NoWidget when no widget covers it. The scan is reverse paint order:
+    /// the first widget whose rect contains the point and whose hits() is
+    /// true wins. A widget may paint and still refuse hits; the scan then
+    /// continues. Widgets with empty bounds never match.
     pub func hit_test(x: int, y: int): int:
         p := Point { x = x, y = y }
-        mut id := this.tree.count() - 1
-        until id >= 0:
-            if this.tree.get(id).bounds().contains(p):
+        order := this.paint_order()
+        defer order.free()
+        mut i := order.len() - 1
+        until i >= 0:
+            id := order.get(i)
+            w := this.tree.get(id)
+            if w.bounds().contains(p) and w.hits():
                 ret id
             end
-            id = id - 1
+            i = i - 1
         end
         ret NoWidget
     end
@@ -393,15 +433,20 @@ pub struct Screen:
     end
 
     @en "draw"
-    /// Renders every widget into the back buffer, in ID order (later
-    /// widgets paint over earlier ones). Each widget gets a copy of the
-    /// buffer clipped to its visible bounds, with `focused` set if it holds
-    /// the focus. Widgets with no visible area are skipped.
+    /// Renders every widget into the back buffer in ascending (stamp, id)
+    /// order, so later in that order paints on top. Unraised widgets have
+    /// stamp 0 and therefore stay in ID order; with nothing raised this is
+    /// ID order. Each widget gets a copy of the buffer clipped to its
+    /// visible bounds, with `focused` set if it holds the focus. Widgets
+    /// with no visible area are skipped.
     pub func draw():
         this.buffer.clear()
         area := this.buffer.area()
         focus := this.focused_id()
-        repeat this.tree.count() in id:
+        order := this.paint_order()
+        defer order.free()
+        repeat order.len() in i:
+            id := order.get(i)
             w := this.tree.get(id)
             b := w.bounds()
             visible := b.intersection(area)
@@ -504,6 +549,7 @@ pub struct Screen:
         this.buffer.free()
         this.focus_stack.free()
         this.keymap.free()
+        this.stamps.free()
     end
 
     @en "run"
@@ -520,6 +566,42 @@ pub struct Screen:
     /// every tick_ms milliseconds; set tick_ms before start().
     pub func run_with_tick(on_tick: func ()):
         this.loop(true, on_tick)
+    end
+
+    // True when a paints before b: lower stamp, or the same stamp and a
+    // smaller id. Stamp 0 is every unraised widget, so nothing raised keeps
+    // ID order.
+    func paints_before(a: int, b: int): bool:
+        sa := this.stamps.get_or(a, 0)
+        sb := this.stamps.get_or(b, 0)
+        ret sa < sb or (sa == sb and a < b)
+    end
+
+    // Ascending (stamp, id). The caller frees the vector.
+    func paint_order(): Vector<int>:
+        mut order := Vector {} as Vector<int>
+        n := this.tree.count()
+        repeat n in id:
+            order.push(id)
+        end
+        mut i := 0
+        until i < n:
+            mut best := i
+            mut j := i + 1
+            until j < n:
+                if this.paints_before(order.get(j), order.get(best)):
+                    best = j
+                end
+                j = j + 1
+            end
+            if best != i:
+                kept := order.get(i)
+                order.set(i, order.get(best))
+                order.set(best, kept)
+            end
+            i = i + 1
+        end
+        ret order
     end
 
     // Keeps the `focused` field in step with the stack and asks for a

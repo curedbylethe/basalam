@@ -27,8 +27,9 @@
  *   - the root is always ID 0 (RootId) and has no parent (NoWidget);
  *   - add() appends, so IDs are stable for the tree's lifetime and a
  *     parent's ID is always smaller than its children's. That ordering
- *     makes bubbling loop-free by construction, and it is also the paint
- *     and focus order: the "stack" z-order of v1 is simply ID order, so a
+ *     makes bubbling loop-free by construction, and it is the focus
+ *     order. Paint order is ID order unless the Screen has raised a
+ *     widget (R16): the stack z-order of v1 is simply ID order, so a
  *     child (added after its parent) paints over it, and a later sibling
  *     paints over an earlier one.
  *
