@@ -48,6 +48,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `force_full`, so the next `diff()` reports only later changes.
 - `Buffer.flush()`: now diff-based; writes only the changed cells (nothing
   when the grids already match) and then commits.
+- Opt-in keymap: a `Keymap` of key and key-sequence bindings with
+  `basalam.NewKeymap` and `basalam.NewDefaultKeymap`, global and per-widget
+  scope through `bind`, `bind_for`, `bind_seq`, and `bind_for_seq`,
+  `unbind`, and `handle`, exposed on the screen as `Screen.keymap` and
+  installed or replaced with `Screen.set_keymap`. `NewDefaultKeymap` builds
+  the library's stock map — Tab for `focus_next` and the four arrows for the
+  spatial moves — and nothing installs it for you.
 
 ### Changed
 
@@ -57,6 +64,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   cursor and bubbles from there. With no widget under the cursor it falls
   back to the focused widget. Every other event kind still starts at the
   focused widget.
+- `Screen.dispatch` falls back to the screen's keymap for a `KeyEvent` no
+  widget consumed, and returns `true` when the keymap consumes it. The
+  keymap is empty by default, so a screen with none installed behaves as
+  before.
 
 ### Documentation
 
@@ -64,7 +75,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `SIGWINCH`); the limitation and its trade-off (`PollMs`) are documented
   in the `screen.salam` module comment and the event-loop concept page.
 - The event-loop, `Event`, and `Screen` pages cover mouse routing, mouse
-  coordinates, and the decision to ship no key bindings.
+  coordinates, and how an unconsumed `KeyEvent` reaches the opt-in keymap
+  fallback; the `reference/keymap` page documents the keymap itself.
 - Key repeat is documented: a held key arrives as repeated discrete
   `KeyEvent`s through the input loop; the library coalesces and drops
   nothing.
