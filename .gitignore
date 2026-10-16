@@ -30,3 +30,7 @@ salam-trace.json
 # Local tooling.
 .codegraph/
 node_modules/
+
+# OpenCode session tooling (never committed).
+.agents/
+.opencode/
