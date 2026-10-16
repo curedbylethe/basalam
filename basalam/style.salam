@@ -1,0 +1,164 @@
+/*
+ * basalam - a terminal user interface library for Salam (2026)
+ *
+ *   +-------------------+
+ *   |   B A S A L A M   |
+ *   +-------------------+
+ *
+ * Built on the Salam standard library's std/term package
+ * Salam: https://github.com/SalamLang/Salam
+ *
+ * Repository: https://github.com/curedbylethe/basalam
+ * License: GPL-3.0-or-later
+ *
+ */
+
+/*
+ * Style: the value type a cell is drawn with — six stored fields, no more.
+ *
+ * A Style says how a cell looks: a foreground and a background color, and
+ * four attributes (bold, dim, italic, underline). A field with no effect is
+ * its neutral value — Color.Default for a color, false for an attribute — so
+ * a Style never carries "is this set" metadata, and zero-initialised fields
+ * already spell the default style (StyleDefault).
+ *
+ *   present:  the Style struct; BorderStyle, the sibling enum for a
+ *             container's border kind, and BorderInset, the cells a border
+ *             costs on each side (0 for None, 1 otherwise); StyleDefault,
+ *             the constant of a cell that asks for nothing; StyleMerge, the
+ *             sentinel-patch inheritance that resolves a child style over
+ *             its parent; StyleEq, value equality over the six stored
+ *             fields; and StyleSgr / StyleSgrOff, which turn a style into
+ *             the SGR bytes that enter and leave it, built from std/term's
+ *             sequence builders and color.salam's tier-aware encoders.
+ *
+ *   fit:      sits beside color.salam, whose Color it carries and whose
+ *             FgSeqAt / BgSeqAt it emits through. This is the value half of
+ *             the styling work; Text consumes it in a later stage, where its
+ *             raw SGR string becomes a Style.
+ *
+ *   absent:   any wiring into Cell, Buffer, Screen, or the widgets (a cell
+ *             still holds a raw SGR string); any border drawing or geometry
+ *             (BorderStyle is a value only, for CUR-220 to consume); a
+ *             border field on Style (it is deliberately a sibling enum, so
+ *             a child never inherits a parent's border); and any terminal
+ *             reset — clearing a previous cell is the screen's job, so these
+ *             functions never emit term.Reset and never read the environment
+ *             (the capability tier is a pure parameter).
+ *
+ * Transition contract (not implemented here): between two cells whose styles
+ * differ the screen emits StyleSgrOff(prev) then StyleSgr(next); the first
+ * cell of a frame assumes the terminal's default, and the screen emits
+ * StyleSgrOff(last) at the end of the frame. These functions are pure and
+ * hold no state, so that sequencing lives entirely with the caller.
+ *
+ * Why no reset inside the conversion: StyleSgr never emits ESC[0m. A reset
+ * would discard the previous cell's state instead of describing this one,
+ * and the color spec promises that a tier-Off stream carries no color SGR.
+ * StyleSgrOff exists so the caller need not re-derive the fact that SGR 22
+ * clears bold and dim together.
+ */
+
+package basalam
+
+import term
+
+@en "StyleDefault"
+/// The style of a cell that asks for nothing: both colors the terminal's
+/// default and all four attributes off. It is the zero value of Style and
+/// the identity of StyleMerge.
+pub const StyleDefault := Style {}
+
+@en "BorderStyle"
+/// The kind of border a container draws: none, or a one-cell ring drawn with
+/// light lines, double lines, or light lines and arc corners. A value only —
+/// drawing the ring (its code points, corners and titles) is CUR-220. It is
+/// a sibling of Style, never a field of it, so a border is a per-widget
+/// choice and is not inherited or merged.
+pub enum BorderStyle:
+    @en "None"
+    /// No border; the content area is the full area.
+    None
+    @en "Single"
+    /// A one-cell ring of light lines with square corners.
+    Single
+    @en "Double"
+    /// A one-cell ring of double lines.
+    Double
+    @en "Rounded"
+    /// A one-cell ring of light lines with arc corners.
+    Rounded
+end
+
+@en "Style"
+/// How a cell is drawn: a foreground and a background color and four
+/// attributes. Colors are Color, not Option<Color> — Default already means
+/// "no color chosen" — and a false attribute is one that is off. The field
+/// set is closed: no reverse, strikethrough, blink or hidden.
+pub struct Style:
+    @en "fg"
+    /// Glyph foreground; Color.Default leaves the terminal's own foreground.
+    pub fg: Color = Color.Default
+
+    @en "bg"
+    /// Cell background; Color.Default leaves the terminal's own background.
+    pub bg: Color = Color.Default
+
+    @en "bold"
+    /// Bold weight only; never brightens the foreground slot.
+    pub bold: bool = false
+
+    @en "dim"
+    /// Reduced intensity.
+    pub dim: bool = false
+
+    @en "italic"
+    /// Slanted glyphs.
+    pub italic: bool = false
+
+    @en "underline"
+    /// A single underline.
+    pub underline: bool = false
+end
+
+@en "BorderInset"
+/// The cells a border of this kind uses on each side: 0 for None, 1 for
+/// every other kind. A container shrinks its content area by this to get the
+/// area its children draw into.
+pub func BorderInset(b: BorderStyle): int:
+    ret b == BorderStyle.None ? 0 : 1
+end
+
+@en "StyleMerge"
+/// The style a child ends up with under a parent, by sentinel patch: a
+/// child's color is used unless it is Color.Default (then the parent's
+/// color is inherited), and each attribute is the OR of the two. So
+/// StyleMerge(StyleDefault, s) and StyleMerge(s, StyleDefault) both equal
+/// s, and the result of merging into StyleDefault is a fully resolved
+/// style. Pure: it returns a new value and never mutates its inputs.
+///
+/// ponytail: a child can add an attribute or override a color but cannot
+/// remove an inherited attribute (child false is indistinguishable from
+/// unset) or force the terminal-default color under a colored parent
+/// (child Default means inherit). Ceiling: no subtraction. Upgrade path if
+/// removal is ever needed: a separate StylePatch of Option fields that
+/// resolves into a Style, leaving Style, cells and equality unchanged.
+pub func StyleMerge(parent: Style, child: Style): Style:
+    ret Style {
+        fg = child.fg == Color.Default ? parent.fg : child.fg, bg = child.bg == Color.Default ? parent.bg : child.bg,
+        bold = parent.bold or child.bold, dim = parent.dim or child.dim, italic = parent.italic or child.italic,
+        underline = parent.underline or child.underline,
+    }
+end
+
+@en "StyleEq"
+/// True when two styles are equal field by field, over the six stored
+/// fields — colors by kind and payload, attributes directly. It needs no
+/// tier. The contract with emission: equal styles emit identical bytes for
+/// every tier (sound), but unequal styles can emit the same bytes at tier
+/// Off, where every color is dropped (not complete). It therefore errs
+/// toward "different", so a cell is never wrongly skipped; a tier change
+/// invalidates every cell, since equality ignores the tier.
+pub func StyleEq(a: Style, b: Style): bool:
+    ret a.fg == b.fg and a.bg == b.bg and a.bold == b.bold and a.dim == b.dim and a.italic == b.italic and a.underline == b.underline
+end

@@ -34,7 +34,7 @@
  *
  *   fit:      sits beside buffer.salam and text.salam, whose Cell.style is a
  *             raw SGR string today. This is the value half of the styling
- *             work; nothing consumes it yet.
+ *             work; style.salam carries it and emits through FgSeqAt / BgSeqAt.
  *
  *   absent:   any wiring into Cell, Buffer, Screen, or the widgets (still
  *             deferred), and any caching of the detected tier — DetectTier
