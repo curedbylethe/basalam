@@ -121,6 +121,13 @@ pub struct Style:
     pub underline: bool = false
 end
 
+// Whether a color survives lowering to the tier: a color that lowers to
+// Color.Default emits nothing, so StyleSgr(StyleDefault, t) is empty and a
+// tier-Off stream carries no color SGR.
+func _color_shown(c: Color, tier: ColorTier): bool:
+    ret Lower(c, tier) != Color.Default
+end
+
 @en "BorderInset"
 /// The cells a border of this kind uses on each side: 0 for None, 1 for
 /// every other kind. A container shrinks its content area by this to get the
@@ -161,4 +168,63 @@ end
 /// invalidates every cell, since equality ignores the tier.
 pub func StyleEq(a: Style, b: Style): bool:
     ret a.fg == b.fg and a.bg == b.bg and a.bold == b.bold and a.dim == b.dim and a.italic == b.italic and a.underline == b.underline
+end
+
+@en "StyleSgr"
+/// The SGR sequence that takes a terminal from its default state to `style`
+/// at `tier`: attributes first in the fixed order bold, dim, italic,
+/// underline, then the foreground, then the background. Attributes ignore
+/// the tier (NO_COLOR asks for no color, not for no bold); each color is
+/// lowered to the tier first, and one that is Default after lowering is
+/// skipped. Returns "" when nothing is set, and never emits a reset — every
+/// sequence is built from term's builders and color.salam's encoders, none
+/// is written by hand.
+pub func StyleSgr(style: Style, tier: ColorTier): str:
+    mut out := ""
+    if style.bold:
+        out = out + term.Sgr(term.StyleBold)
+    end
+    if style.dim:
+        out = out + term.Sgr(term.StyleDim)
+    end
+    if style.italic:
+        out = out + term.Sgr(term.StyleItalic)
+    end
+    if style.underline:
+        out = out + term.Sgr(term.StyleUnderline)
+    end
+    if _color_shown(style.fg, tier):
+        out = out + FgSeqAt(style.fg, tier)
+    end
+    if _color_shown(style.bg, tier):
+        out = out + BgSeqAt(style.bg, tier)
+    end
+    ret out
+end
+
+@en "StyleSgrOff"
+/// The mirror of StyleSgr: the SGR sequence that takes a terminal from
+/// `style` back to its default state at `tier`, in the fixed order a single
+/// 22 if bold or dim is set (22 clears both together), then 23 if italic,
+/// then 24 if underline, then 39 if the foreground is non-default after
+/// lowering, then 49 if the background is. Returns "" when nothing is set
+/// and never emits a reset; the codes are built with term.Sgr.
+pub func StyleSgrOff(style: Style, tier: ColorTier): str:
+    mut out := ""
+    if style.bold or style.dim:
+        out = out + term.Sgr(22)
+    end
+    if style.italic:
+        out = out + term.Sgr(23)
+    end
+    if style.underline:
+        out = out + term.Sgr(24)
+    end
+    if _color_shown(style.fg, tier):
+        out = out + term.Sgr(term.FgDefault)
+    end
+    if _color_shown(style.bg, tier):
+        out = out + term.Sgr(term.BgDefault)
+    end
+    ret out
 end
