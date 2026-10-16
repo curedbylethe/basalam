@@ -188,11 +188,10 @@ pub struct BaseWidget:
         ret Measure { ok = false, extent = 0 }
     end
 
-    @en "_note_measure"
-    /// Publishes this widget as the node just measured. Row and Column call
-    /// it before measure returns so the layout memo keys the fallback to this
-    /// node. Not part of the layout result.
-    pub func _note_measure():
+    // Private. Row and Column finish by calling BaseWidget.measure, which
+    // lands here and publishes this node. A private method is not callable
+    // from outside BaseWidget.
+    func _note_measure():
         if this.memo_id == 0:
             _next_memo_id = _next_memo_id + 1
             this.memo_id = _next_memo_id

@@ -326,7 +326,8 @@ pub struct Row:
     /// child. A child that cannot measure makes ok false.
     pub func measure(axis: Axis, max_width: int): Measure:
         m := _measureLinear(this.items, this.pad, this.gap, true, axis, max_width)
-        this._note_measure()
+        // Publishes this row's memo id. The default measure result is discarded.
+        _ := this.BaseWidget.measure(axis, max_width)
         ret m
     end
 
@@ -419,7 +420,8 @@ pub struct Column:
     /// mirror of Row.measure: main axis is Y.
     pub func measure(axis: Axis, max_width: int): Measure:
         m := _measureLinear(this.items, this.pad, this.gap, false, axis, max_width)
-        this._note_measure()
+        // Publishes this column's memo id. The default measure result is discarded.
+        _ := this.BaseWidget.measure(axis, max_width)
         ret m
     end
 
