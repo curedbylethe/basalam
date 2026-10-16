@@ -44,9 +44,14 @@
  * artifact's M = infinity): every paragraph is returned unwrapped.
  *
  * This file deliberately has no notion of display width beyond one codepoint
- * per cell, no layout pass, and no style/colour type: the style is the opaque
- * SGR string the caller builds with std/term, and placement in the parent's
- * box belongs to the layout engine.
+ * per cell and no layout pass: placement in the parent's box belongs to the
+ * layout engine. The style is a basalam.Style value (style.salam), not a raw
+ * SGR string: render paints the box's padding with the style's background
+ * only and the glyph runs with the full style, both built once with StyleSgr
+ * at ColorTier.TrueColor. That tier is a fixed constant, not a DetectTier
+ * read, so the bytes never depend on the ambient environment and the goldens
+ * stay deterministic; real tier plumbing — the screen detecting the tier once
+ * and lowering colors at emission — is the boundary-B follow-up.
  */
 
 package basalam
@@ -97,10 +102,11 @@ pub struct Text:
     pub align: Alignment = Alignment.Left
 
     @en "style"
-    /// SGR escape sequence(s) applied to the whole box: the background is
-    /// painted across the box and the glyph runs carry the same style. ""
-    /// means the terminal's default style.
-    pub style: str = ""
+    /// How the content is drawn. The background fills the whole box; the
+    /// foreground and attributes apply to the glyph cells only, interior
+    /// spaces included, so an underline stays continuous. StyleDefault draws
+    /// with the terminal's defaults. render emits it at ColorTier.TrueColor.
+    pub style: Style = StyleDefault
 
     @en "wrap"
     /// How the content becomes lines at render time. Defaults to
@@ -120,8 +126,8 @@ pub struct Text:
     end
 
     @en "set_style"
-    /// Sets the SGR style string applied to the whole box.
-    pub func set_style(style: str):
+    /// Sets the style the content is drawn with.
+    pub func set_style(style: Style):
         this.style = style
     end
 
@@ -147,13 +153,19 @@ pub struct Text:
     end
 
     @en "render"
-    /// Draws the content into bounds. The whole box is first painted with the
-    /// style (so a background colour reads full-bleed), then each line is
-    /// placed with the alignment offset and written as one run; at most
-    /// bounds.height lines are drawn. A degenerate box draws nothing and
-    /// never panics.
+    /// Draws the content into bounds. The box is first filled with the pad
+    /// style — the widget style's background only — so a background colour
+    /// reads full-bleed while nothing else reaches the padding. Each line is
+    /// then placed with the alignment offset and written as one run in the
+    /// full style, interior spaces included, so an underline never breaks; at
+    /// most bounds.height lines are drawn. Both SGR strings are built once,
+    /// at ColorTier.TrueColor. A degenerate box draws nothing and never
+    /// panics.
     pub func render(buf: Buffer, bounds: Rect):
-        buf.fill(bounds, " ", this.style)
+        tier := ColorTier.TrueColor
+        pad := StyleSgr(Style { bg = this.style.bg }, tier)
+        glyph := StyleSgr(this.style, tier)
+        buf.fill(bounds, " ", pad)
         mut lines := Vector {} as Vector<str>
         if this.wrap == WrapMode.None:
             lines = WrapText(this.content, 0)
@@ -183,7 +195,7 @@ pub struct Text:
             else this.align == Alignment.Center:
                 offset = slack / 2
             end
-            buf.put_str(bounds.x + offset, bounds.y + i, line, this.style)
+            buf.put_str(bounds.x + offset, bounds.y + i, line, glyph)
         end
     end
 end
