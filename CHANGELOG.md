@@ -59,6 +59,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   next `KeyEvent` arrives later than this many milliseconds. It is evaluated
   lazily on the next key — never on a timer — defaults to `0` (never expires,
   the previous behavior), and nothing fires from the timeout alone.
+- `Color`: the terminal color value type — `Default`, `Ansi`, `Indexed`, and
+  `Rgb` — with the 16 palette constants `Black` through `BrightWhite`, and
+  `FgSeq`/`BgSeq` for full-fidelity SGR encoding through `std/term`.
+- `ColorTier` and `DetectTier`: the terminal's color capability (off, 16,
+  256, or truecolor) read from `NO_COLOR`, `TERM`, `COLORTERM`, and
+  `CLICOLOR_FORCE` only — uncached, pure, and tty-free.
+- `Lower`, `FgSeqAt`, and `BgSeqAt`: emission-time downgrade of a color to a
+  lower tier — RGB to the nearest 256-color index, RGB and indexed colors to
+  the nearest ANSI color, and everything to `Default` when color is off.
 
 ### Changed
 
@@ -84,6 +93,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Key repeat is documented: a held key arrives as repeated discrete
   `KeyEvent`s through the input loop; the library coalesces and drops
   nothing.
+- The `reference/color` page documents the color value type, the palette,
+  the SGR encodings, capability detection, and the downgrade ladder. The
+  architecture, buffer, and text pages now state that the `Color` type exists
+  while cells and widgets still carry raw SGR strings.
 
 ## [0.1.0] - 2026-10-06
 
