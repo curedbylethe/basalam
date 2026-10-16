@@ -86,9 +86,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `Lower`, `FgSeqAt`, and `BgSeqAt`: emission-time downgrade of a color to a
   lower tier — RGB to the nearest 256-color index, RGB and indexed colors to
   the nearest ANSI color, and everything to `Default` when color is off.
+- `Style`: the value type a cell is drawn with — a foreground and background
+  `Color` and the four attributes `bold`, `dim`, `italic`, and `underline`,
+  all defaulting to off/default — with `StyleDefault`, the constant of a
+  style that asks for nothing.
+- `StyleMerge(parent, child)`: sentinel-patch inheritance that resolves a
+  child style over its parent. A child's color is used unless it is
+  `Color.Default` (then the parent's is inherited) and each attribute is the
+  OR of the two. A child can add an attribute or override a color, but cannot
+  remove an inherited attribute or force the terminal default under a colored
+  parent.
+- `BorderStyle` (`None`, `Single`, `Double`, `Rounded`) and `BorderInset`:
+  the sibling enum for a container's border kind and the cells a border costs
+  on each side (0 for `None`, 1 otherwise). A value only; drawing the ring is
+  a follow-up.
+- `StyleEq`: value equality over a style's six stored fields. It needs no
+  tier and errs toward "different", so a cell is never wrongly skipped and a
+  tier change invalidates every cell.
+- `StyleSgr` and `StyleSgrOff`: the SGR sequences that take a terminal from
+  its default state to a style and back, at a given tier — attributes first
+  in the fixed order bold, dim, italic, underline, then the foreground, then
+  the background. Colors lower to the tier first and a color that is
+  `Default` after lowering is skipped. Both return `""` when nothing is set
+  and never emit a reset.
 
 ### Changed
 
+- `Text.style` is now a `basalam.Style` value instead of a raw SGR string
+  built with `std/term`, and `set_style` takes a `Style`. This is a breaking
+  change at every `Text` style-construction site; the escape bytes a given
+  palette color composes to are unchanged.
 - `Buffer.resize()` and `Screen.resize`: now reallocate both buffer grids
   and force a full repaint.
 - `Screen.dispatch` routes a decoded `MouseEvent` to the widget under the
@@ -123,6 +150,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the SGR encodings, capability detection, and the downgrade ladder. The
   architecture, buffer, and text pages now state that the `Color` type exists
   while cells and widgets still carry raw SGR strings.
+- The new `reference/style` page documents the `Style` value type, the
+  `BorderStyle` and `BorderInset` pair, `StyleDefault`, `StyleMerge` and its
+  limitations, `StyleEq`, and the `StyleSgr` / `StyleSgrOff` emission rules.
+  The `reference/text`, `reference/color`, `reference/buffer`, and
+  architecture pages now describe Text's `Style` interface and the
+  cells-still-raw boundary.
 - The layout, screen, widget, focus, and architecture pages describe weights,
   gap, measurement, grid spanning, and overlay order.
 
