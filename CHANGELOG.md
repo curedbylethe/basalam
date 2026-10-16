@@ -134,12 +134,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   order in reverse and skips `hits() == false`, and focus navigation stays
   inside the topmost layer's focusable widgets. `unraise` can restore the
   focus from before the layer.
+- Resize detection now listens for `SIGWINCH` on POSIX: `start()` installs
+  a handler, blocks the signal, and spawns a resize watcher that parks in
+  `sigwait`, reads `term.Size()`, and sends a `ResizeEvent` only when the
+  size changed. Windows keeps polling `term.Size()` on each input pass.
 
 ### Documentation
 
-- Resize detection polls `term.Size()` because Salam has no signal API (no
-  `SIGWINCH`); the limitation and its trade-off (`PollMs`) are documented
-  in the `screen.salam` module comment and the event-loop concept page.
+- Resize detection is documented as signal-driven on POSIX and polled on
+  Windows: the `SIGWINCH` watcher, the coalescing of rapid resizes, and the
+  caveat about threads created before `start()` are covered in the
+  `screen.salam` module comment and the event-loop concept page.
 - The event-loop, `Event`, and `Screen` pages cover mouse routing, mouse
   coordinates, and how an unconsumed `KeyEvent` reaches the opt-in keymap
   fallback; the `reference/keymap` page documents the keymap itself.
