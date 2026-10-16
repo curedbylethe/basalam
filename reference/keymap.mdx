@@ -97,8 +97,14 @@ The scope walk is O(tree depth) and only runs at nodes that carry scoped binding
 
 - A node that has both a binding and children defers: its single-key binding fires only when the next key breaks the path. While a longer sequence keeps matching, the longer one wins.
 - A key that does not continue a pending prefix resets it and is reprocessed from the root, so a sequence followed by an unrelated bound key still triggers that key.
-- There is no timeout. If you bind both a key and a longer sequence that starts with it, the single-key binding waits for the next key to decide.
-- Non-key events (tick, resize, mouse) never reach the keymap, so a pending sequence survives them.
+- A pending prefix can time out. The check is lazy — it runs only when the next `KeyEvent` arrives, never on a timer — and `pending_timeout_ms` defaults to `0`, which never expires a prefix. Set it on the map:
+
+  ```salam
+  screen.keymap.pending_timeout_ms = 700 // abandon a prefix after 700ms
+  ```
+
+  Nothing fires from the timeout alone: an expired prefix is dropped silently and the arriving key is processed as a fresh start, so it may open a new sequence or trigger a single binding.
+- Non-key events (tick, resize, mouse) never reach the keymap and never evaluate the timeout, so a pending sequence survives them. Elapsed time still counts, though: if only non-key events arrived during the gap, the next `KeyEvent` evaluates the full elapsed time.
 - An invoked action resolves the key: nothing is reprocessed after an action runs, even when the action returns `false`.
 - An unbound `Esc` or `Ctrl+C` leaves the pending state reset and returns `false`, so the loop's auto-stop still works.
 

@@ -55,6 +55,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   installed or replaced with `Screen.set_keymap`. `NewDefaultKeymap` builds
   the library's stock map — Tab for `focus_next` and the four arrows for the
   spatial moves — and nothing installs it for you.
+- `Keymap.pending_timeout_ms`: a pending key sequence is abandoned when the
+  next `KeyEvent` arrives later than this many milliseconds. It is evaluated
+  lazily on the next key — never on a timer — defaults to `0` (never expires,
+  the previous behavior), and nothing fires from the timeout alone.
 
 ### Changed
 
