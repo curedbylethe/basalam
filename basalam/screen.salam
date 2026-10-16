@@ -22,20 +22,24 @@
  *     ------------                         -----------
  *     poll stdin (term.KeyReady)           screen.next_event(ev)  <- blocks
  *     term.ReadKey -> KeyEvent  ----+      screen.dispatch(ev)    <- sync
- *     term.Size changed -> Resize --+-->   (first widget, then its
- *     timer due -> TickEvent -------+       ancestors, see tree.salam)
- *                    events channel        screen.present()       <- draw
+ *     timer due -> TickEvent -------+-->   (first widget, then its
+ *                    events channel        ancestors, see tree.salam)
+ *                                          screen.present()       <- draw
  *
- * The input thread only produces Events onto the `events` channel. It never
- * touches widgets, the tree, or the buffer, so none of those need locks.
- * Everything that touches widgets happens on the main thread, one event at
- * a time, which is why Widget.handle_event can be plain synchronous code.
+ * On POSIX a second producer feeds the same channel: the winch thread,
+ * which parks in sigwait(SIGWINCH) and turns each wake into a ResizeEvent
+ * when the size changed (see winch_loop and the Resizing paragraph below).
+ * Neither producer touches widgets, the tree, or the buffer, so none of
+ * those need locks. Everything that touches widgets happens on the main
+ * thread, one event at a time, which is why Widget.handle_event can be
+ * plain synchronous code.
  *
  * Stopping. stop() closes the channel. The input thread notices on its next
- * poll (within PollMs) and exits; next_event drains what is left and then
- * returns false. close() additionally joins the thread and restores the
- * terminal. Applications call start() and immediately `defer
- * screen.close()`, so the terminal is restored on every exit path.
+ * poll (within PollMs) and the winch thread on its next wake, which close()
+ * supplies (WakeWinch); next_event drains what is left and then returns
+ * false. close() additionally joins both threads and restores the terminal.
+ * Applications call start() and immediately `defer screen.close()`, so the
+ * terminal is restored on every exit path.
  *
  * Headless use. Nothing here requires a terminal until start() is called.
  * A screen that was never started still accepts post()ed events, dispatches
@@ -79,13 +83,16 @@
  * widget gets its bounds from the application, or from a layout container
  * (basalam/layout.salam), via set_bounds.
  *
- * Resize detection polls term.Size() on the input thread. Salam's stdlib
- * does not expose a signal API (no sigaction, no SIGWINCH), so polling is
- * the only option without FFI. The poll interval is PollMs (currently
- * 20ms); this is a deliberate trade-off between CPU usage and resize
- * latency: a resize shows up at most one interval late, and the cost is
- * one size query per wakeup. If Salam gains signal support, only
- * input_loop needs to change.
+ * Resize detection. On POSIX a dedicated winch thread (winch_loop) parks in
+ * sigwait(SIGWINCH) and, on every wake, reads term.Size() and sends a
+ * ResizeEvent only when the size actually changed. The signal plumbing
+ * lives in signal.salam; the watcher is spawned in start() and joined in
+ * close() before the channel is freed. SIGWINCH coalesces, so two quick
+ * resizes can arrive as one wake: the event carries the current size, not a
+ * count, and a wake with an unchanged size emits nothing, preserving the
+ * only-on-change behavior the old poll had. Windows has no SIGWINCH
+ * (WinchSupported is false), so there the input thread keeps polling
+ * term.Size() once per pass instead, and PollMs bounds that poll's latency.
  *
  * Deliberate gaps: no key bindings are installed by default (NewScreen and
  * start() add none; an application installs or extends a keymap itself), no
@@ -108,7 +115,8 @@ import term
 
 @en "PollMs"
 /// How often, at most, the input thread wakes when no key arrives, in
-/// milliseconds. Bounds the latency of resize detection and of stop().
+/// milliseconds. Bounds the latency of stop() and, on Windows, of resize
+/// detection (on POSIX a resize arrives as SIGWINCH instead).
 pub const PollMs := 20
 
 @en "EventCapacity"
@@ -120,6 +128,17 @@ pub const EventCapacity := 256
 struct InputContext:
     pub events: Channel<Event>
     pub tick_ms: int = 0
+end
+
+// What the winch thread needs, copied onto the heap for the same reason as
+// InputContext. width and height are the size start() just resized the
+// screen to, so the watcher emits a ResizeEvent only when the terminal
+// genuinely changes size (a same-size wake emits nothing, which is the
+// behavior the polling path had).
+struct WinchContext:
+    pub events: Channel<Event>
+    pub width: int = 0
+    pub height: int = 0
 end
 
 @en "Channel"
@@ -201,6 +220,10 @@ pub struct Screen:
     attached: bool = false
     closed: bool = false
     input_thread: i64 = 0
+    // The SIGWINCH watcher's handle, or 0 when none was started (Windows, or
+    // a screen that never ran start()). close() joins it before freeing the
+    // channel.
+    winch_thread: i64 = 0
     term_state: term.TermState = term.TermState {}
     // Raise stamps live on the screen, not on the widget. A missing id is
     // stamp 0 (unraised). One raise() call bumps ztop once and writes that
@@ -527,6 +550,21 @@ pub struct Screen:
         this.attached = true
         size := term.Size()
         this.resize(size.cols, size.rows)
+        if WinchSupported():
+            // Order matters. Give SIGWINCH a non-default disposition before
+            // blocking it (a blocked signal whose disposition is still
+            // SIG_DFL is discarded at generation on Darwin), then block it
+            // before spawning either thread so both inherit the mask: the
+            // watcher parks in sigwait instead of running the handler, and
+            // the input thread must not receive it on some arbitrary stack.
+            InstallWinchHandler()
+            BlockWinch()
+            wctx := mem.Allocate(sizeof(WinchContext) as u64) as WinchContext*
+            wctx[0] = WinchContext {
+                events = this.events, width = size.cols, height = size.rows
+            }
+            this.winch_thread = spawn(winch_loop, wctx)
+        end
         ctx := mem.Allocate(sizeof(InputContext) as u64) as InputContext*
         ctx[0] = InputContext { events = this.events, tick_ms = this.tick_ms }
         this.input_thread = spawn(input_loop, ctx)
@@ -544,8 +582,8 @@ pub struct Screen:
 
     @en "close"
     /// Stops the loop, restores the terminal exactly as start() found it,
-    /// waits for the input thread, and frees the screen's storage. Safe to
-    /// call more than once; meant for `defer`.
+    /// waits for the input and winch threads, and frees the screen's
+    /// storage. Safe to call more than once; meant for `defer`.
     pub func close():
         if this.closed:
             ret
@@ -560,6 +598,16 @@ pub struct Screen:
             term.Emit(teardown)
             _ := term.Restore(this.term_state)
             join(this.input_thread)
+            if this.winch_thread != 0:
+                // The channel is already closed (stop above), so the watcher
+                // exits on its next is_closed() check; WakeWinch() supplies
+                // the wake it needs to get there, and join waits for it to
+                // finish. Both must happen before events.ch.free(), which
+                // requires every user of the channel to be gone.
+                WakeWinch()
+                join(this.winch_thread)
+                this.winch_thread = 0
+            end
             this.attached = false
         end
         this.events.ch.free()
@@ -802,9 +850,11 @@ pub struct Screen:
 end
 
 // The input thread. It owns nothing but its copy of the channel and polls
-// three sources: stdin (with a timeout, so it never blocks indefinitely),
-// the terminal size, and the tick timer. It exits when the channel is
-// closed, either noticed on a poll or because a send was refused.
+// stdin (with a timeout, so it never blocks indefinitely) and the tick
+// timer. On Windows it also polls the terminal size, because there is no
+// SIGWINCH there; on POSIX the winch thread owns size changes. It exits
+// when the channel is closed, either noticed on a poll or because a send
+// was refused.
 func input_loop(ctx: InputContext*):
     c := ctx[0]
     mem.Free(ctx as void*)
@@ -835,12 +885,19 @@ func input_loop(ctx: InputContext*):
         else:
             sync.SleepMs(wait)
         end
-        now := term.Size()
-        if now.cols != size.cols or now.rows != size.rows:
-            size = now
-            resized := Event { kind = ResizeEvent, width = now.cols, height = now.rows }
-            if not events.ch.send(resized):
-                break
+        if not WinchSupported():
+            // Windows only: no SIGWINCH, so the size is polled here. On
+            // POSIX winch_loop produces ResizeEvents and this block is
+            // skipped, so the size is queried only when something happened.
+            // `size` is the baseline this thread compares against; it is
+            // still read here (and in start()) on every platform.
+            now := term.Size()
+            if now.cols != size.cols or now.rows != size.rows:
+                size = now
+                resized := Event { kind = ResizeEvent, width = now.cols, height = now.rows }
+                if not events.ch.send(resized):
+                    break
+                end
             end
         end
         if c.tick_ms > 0 and sync.NowMs() >= next_tick:
@@ -853,6 +910,44 @@ func input_loop(ctx: InputContext*):
             end
         end
     end
+end
+
+// The winch thread (POSIX only). It owns nothing but its copy of the
+// channel and its baseline size, parks in WaitWinch(set), and on each wake
+// re-reads term.Size(): a change updates the baseline and becomes a
+// ResizeEvent, a same-size wake emits nothing. SIGWINCH coalesces, so
+// several resizes can collapse into one wake; the event carries the current
+// size, not a count. It exits when the channel is closed, either noticed
+// before the wait or because a send was refused. It is never spawned on
+// Windows (WinchSupported is false).
+func winch_loop(ctx: WinchContext*):
+    c := ctx[0]
+    mem.Free(ctx as void*)
+    events := c.events
+    mut width := c.width
+    mut height := c.height
+    set := NewWinchSet()
+    until events.ch.is_closed():
+        n := WaitWinch(set)
+        if n == 0:
+            // No signal arrived (a null set or a non-POSIX build). Waiting
+            // again would spin, so leave instead.
+            break
+        end
+        if events.ch.is_closed():
+            break
+        end
+        now := term.Size()
+        if now.cols != width or now.rows != height:
+            width = now.cols
+            height = now.rows
+            resized := Event { kind = ResizeEvent, width = now.cols, height = now.rows }
+            if not events.ch.send(resized):
+                break
+            end
+        end
+    end
+    mem.Free(set)
 end
 
 // Wraps a key from term.ReadKey in an Event; mouse reports are decoded.
