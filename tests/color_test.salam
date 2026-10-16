@@ -23,7 +23,19 @@
 // truth table: equal payloads are equal, and different kinds or payloads
 // never are (including Indexed(1) vs Rgb(205,0,0) and Indexed(196) vs
 // Rgb(255,0,0)).
+//
+// STAGE-02 adds the terminal tier and the emission-time downgrade: DetectTier
+// is pinned against all 13 environment cases (every case explicitly sets or
+// unsets TERM, COLORTERM, NO_COLOR and CLICOLOR_FORCE first), and Lower is
+// pinned against the worked examples (Rgb(255,0,0)->196, (128,128,128)->244,
+// (30,144,255)->33, (100,110,105)->242, Indexed(196)->Ansi(9),
+// Indexed(244)->Ansi(8), Indexed(33)->Ansi(6)), Off->Default for every kind,
+// TrueColor unchanged, Indexed256 (Default/Ansi/Indexed unchanged, Rgb
+// lowered), and the tie rules (step tie -> lower step, gray-vs-cube tie ->
+// cube, nearest-Ansi tie -> lower index). FgSeqAt / BgSeqAt are checked at
+// each tier with term-built oracle strings.
 
+import env
 import testing
 import term
 
@@ -175,6 +187,179 @@ func test_equality_unequal():
     testing.AssertFalse(basalam.Color.Rgb(255, 0, 0) == basalam.Color.Rgb(255, 0, 1))
 end
 
+func clear_env():
+    env.Unset("TERM")
+    env.Unset("COLORTERM")
+    env.Unset("NO_COLOR")
+    env.Unset("CLICOLOR_FORCE")
+end
+
+func test_detect_nothing_set():
+    clear_env()
+    testing.AssertTrue(basalam.DetectTier() == basalam.ColorTier.Ansi16)
+end
+
+func test_detect_term_xterm():
+    clear_env()
+    env.Set("TERM", "xterm")
+    testing.AssertTrue(basalam.DetectTier() == basalam.ColorTier.Ansi16)
+end
+
+func test_detect_term_256color():
+    clear_env()
+    env.Set("TERM", "xterm-256color")
+    testing.AssertTrue(basalam.DetectTier() == basalam.ColorTier.Indexed256)
+end
+
+func test_detect_colorterm_other():
+    clear_env()
+    env.Set("TERM", "xterm")
+    env.Set("COLORTERM", "yes")
+    testing.AssertTrue(basalam.DetectTier() == basalam.ColorTier.Indexed256)
+end
+
+func test_detect_truecolor_with_256term():
+    clear_env()
+    env.Set("TERM", "xterm-256color")
+    env.Set("COLORTERM", "truecolor")
+    testing.AssertTrue(basalam.DetectTier() == basalam.ColorTier.TrueColor)
+end
+
+func test_detect_24bit():
+    clear_env()
+    env.Set("TERM", "xterm")
+    env.Set("COLORTERM", "24bit")
+    testing.AssertTrue(basalam.DetectTier() == basalam.ColorTier.TrueColor)
+end
+
+func test_detect_dumb():
+    clear_env()
+    env.Set("TERM", "dumb")
+    testing.AssertTrue(basalam.DetectTier() == basalam.ColorTier.Off)
+end
+
+func test_detect_dumb_beats_colorterm():
+    clear_env()
+    env.Set("TERM", "dumb")
+    env.Set("COLORTERM", "truecolor")
+    testing.AssertTrue(basalam.DetectTier() == basalam.ColorTier.Off)
+end
+
+func test_detect_clicolor_force_dumb():
+    clear_env()
+    env.Set("TERM", "dumb")
+    env.Set("CLICOLOR_FORCE", "1")
+    testing.AssertTrue(basalam.DetectTier() == basalam.ColorTier.Ansi16)
+end
+
+func test_detect_clicolor_force_truecolor():
+    clear_env()
+    env.Set("TERM", "dumb")
+    env.Set("COLORTERM", "truecolor")
+    env.Set("CLICOLOR_FORCE", "1")
+    testing.AssertTrue(basalam.DetectTier() == basalam.ColorTier.TrueColor)
+end
+
+func test_detect_nocolor_beats_truecolor():
+    clear_env()
+    env.Set("NO_COLOR", "1")
+    env.Set("COLORTERM", "truecolor")
+    testing.AssertTrue(basalam.DetectTier() == basalam.ColorTier.Off)
+end
+
+func test_detect_nocolor_beats_force():
+    clear_env()
+    env.Set("NO_COLOR", "1")
+    env.Set("CLICOLOR_FORCE", "1")
+    testing.AssertTrue(basalam.DetectTier() == basalam.ColorTier.Off)
+end
+
+func test_detect_empty_nocolor():
+    clear_env()
+    env.Set("NO_COLOR", "")
+    env.Set("TERM", "xterm-256color")
+    testing.AssertTrue(basalam.DetectTier() == basalam.ColorTier.Indexed256)
+end
+
+func test_lower_off():
+    testing.AssertTrue(basalam.Lower(basalam.Color.Default, basalam.ColorTier.Off) == basalam.Color.Default)
+    testing.AssertTrue(basalam.Lower(basalam.Color.Ansi(3), basalam.ColorTier.Off) == basalam.Color.Default)
+    testing.AssertTrue(basalam.Lower(basalam.Color.Indexed(196), basalam.ColorTier.Off) == basalam.Color.Default)
+    testing.AssertTrue(basalam.Lower(basalam.Color.Rgb(255, 0, 0), basalam.ColorTier.Off) == basalam.Color.Default)
+end
+
+func test_lower_truecolor_unchanged():
+    testing.AssertTrue(basalam.Lower(basalam.Color.Default, basalam.ColorTier.TrueColor) == basalam.Color.Default)
+    testing.AssertTrue(basalam.Lower(basalam.Color.Ansi(9), basalam.ColorTier.TrueColor) == basalam.Color.Ansi(9))
+    testing.AssertTrue(basalam.Lower(basalam.Color.Indexed(196), basalam.ColorTier.TrueColor) == basalam.Color.Indexed(196))
+    testing.AssertTrue(basalam.Lower(basalam.Color.Rgb(30, 144, 255), basalam.ColorTier.TrueColor) == basalam.Color.Rgb(30, 144, 255))
+end
+
+func test_lower_256_unchanged():
+    testing.AssertTrue(basalam.Lower(basalam.Color.Default, basalam.ColorTier.Indexed256) == basalam.Color.Default)
+    testing.AssertTrue(basalam.Lower(basalam.Color.Ansi(9), basalam.ColorTier.Indexed256) == basalam.Color.Ansi(9))
+    testing.AssertTrue(basalam.Lower(basalam.Color.Indexed(196), basalam.ColorTier.Indexed256) == basalam.Color.Indexed(196))
+end
+
+func test_lower_256_rgb_examples():
+    testing.AssertTrue(basalam.Lower(basalam.Color.Rgb(255, 0, 0), basalam.ColorTier.Indexed256) == basalam.Color.Indexed(196))
+    testing.AssertTrue(basalam.Lower(basalam.Color.Rgb(128, 128, 128), basalam.ColorTier.Indexed256) == basalam.Color.Indexed(244))
+    testing.AssertTrue(basalam.Lower(basalam.Color.Rgb(30, 144, 255), basalam.ColorTier.Indexed256) == basalam.Color.Indexed(33))
+    testing.AssertTrue(basalam.Lower(basalam.Color.Rgb(100, 110, 105), basalam.ColorTier.Indexed256) == basalam.Color.Indexed(242))
+end
+
+func test_lower_16_unchanged():
+    testing.AssertTrue(basalam.Lower(basalam.Color.Default, basalam.ColorTier.Ansi16) == basalam.Color.Default)
+    testing.AssertTrue(basalam.Lower(basalam.Color.Ansi(9), basalam.ColorTier.Ansi16) == basalam.Color.Ansi(9))
+end
+
+func test_lower_16_indexed_passthrough():
+    testing.AssertTrue(basalam.Lower(basalam.Color.Indexed(0), basalam.ColorTier.Ansi16) == basalam.Color.Ansi(0))
+    testing.AssertTrue(basalam.Lower(basalam.Color.Indexed(15), basalam.ColorTier.Ansi16) == basalam.Color.Ansi(15))
+end
+
+func test_lower_16_indexed_examples():
+    testing.AssertTrue(basalam.Lower(basalam.Color.Indexed(196), basalam.ColorTier.Ansi16) == basalam.Color.Ansi(9))
+    testing.AssertTrue(basalam.Lower(basalam.Color.Indexed(244), basalam.ColorTier.Ansi16) == basalam.Color.Ansi(8))
+    testing.AssertTrue(basalam.Lower(basalam.Color.Indexed(33), basalam.ColorTier.Ansi16) == basalam.Color.Ansi(6))
+end
+
+func test_lower_16_rgb_direct():
+    testing.AssertTrue(basalam.Lower(basalam.Color.Rgb(255, 0, 0), basalam.ColorTier.Ansi16) == basalam.Color.Ansi(9))
+    testing.AssertTrue(basalam.Lower(basalam.Color.Rgb(0, 0, 0), basalam.ColorTier.Ansi16) == basalam.Color.Ansi(0))
+    testing.AssertTrue(basalam.Lower(basalam.Color.Rgb(255, 255, 255), basalam.ColorTier.Ansi16) == basalam.Color.Ansi(15))
+end
+
+func test_lower_ties():
+    // 115 is midway between cube steps 95 and 135: step tie -> lower step.
+    testing.AssertTrue(basalam.Lower(basalam.Color.Rgb(115, 0, 0), basalam.ColorTier.Indexed256) == basalam.Color.Indexed(52))
+    // (0,0,12) is equidistant from cube 16 and gray 232: gray-vs-cube tie -> cube.
+    testing.AssertTrue(basalam.Lower(basalam.Color.Rgb(0, 0, 12), basalam.ColorTier.Indexed256) == basalam.Color.Indexed(16))
+    // 178 is midway between Ansi refs 127 and 229: nearest-Ansi tie -> lower index.
+    testing.AssertTrue(basalam.Lower(basalam.Color.Rgb(178, 178, 178), basalam.ColorTier.Ansi16) == basalam.Color.Ansi(7))
+end
+
+func test_lower_256_slots_0_15_never_chosen():
+    testing.AssertTrue(basalam.Lower(basalam.Color.Rgb(0, 0, 0), basalam.ColorTier.Indexed256) == basalam.Color.Indexed(16))
+    testing.AssertTrue(basalam.Lower(basalam.Color.Rgb(255, 255, 255), basalam.ColorTier.Indexed256) == basalam.Color.Indexed(231))
+end
+
+func test_fg_seq_at():
+    testing.AssertEqStr(basalam.FgSeqAt(basalam.Color.Rgb(255, 0, 0), basalam.ColorTier.Indexed256), term.SeqFg256(196))
+    testing.AssertEqStr(basalam.FgSeqAt(basalam.Color.Rgb(255, 0, 0), basalam.ColorTier.TrueColor), term.SeqFgRGB(255, 0, 0))
+    testing.AssertEqStr(basalam.FgSeqAt(basalam.Color.Rgb(255, 0, 0), basalam.ColorTier.Ansi16), term.Sgr(91))
+    testing.AssertEqStr(basalam.FgSeqAt(basalam.Color.Indexed(196), basalam.ColorTier.Off), term.Sgr(term.FgDefault))
+    testing.AssertEqStr(basalam.FgSeqAt(basalam.Color.Ansi(3), basalam.ColorTier.Indexed256), term.Sgr(33))
+end
+
+func test_bg_seq_at():
+    testing.AssertEqStr(basalam.BgSeqAt(basalam.Color.Rgb(255, 0, 0), basalam.ColorTier.Indexed256), term.SeqBg256(196))
+    testing.AssertEqStr(basalam.BgSeqAt(basalam.Color.Rgb(255, 0, 0), basalam.ColorTier.TrueColor), term.SeqBgRGB(255, 0, 0))
+    testing.AssertEqStr(basalam.BgSeqAt(basalam.Color.Rgb(255, 0, 0), basalam.ColorTier.Ansi16), term.Sgr(101))
+    testing.AssertEqStr(basalam.BgSeqAt(basalam.Color.Indexed(196), basalam.ColorTier.Off), term.Sgr(term.BgDefault))
+    testing.AssertEqStr(basalam.BgSeqAt(basalam.Color.Ansi(3), basalam.ColorTier.Indexed256), term.Sgr(43))
+end
+
 func main:
     test_construct_kind()
     test_payload_round_trip()
@@ -186,5 +371,30 @@ func main:
     test_fg_seq_palette()
     test_equality_equal()
     test_equality_unequal()
+    test_detect_nothing_set()
+    test_detect_term_xterm()
+    test_detect_term_256color()
+    test_detect_colorterm_other()
+    test_detect_truecolor_with_256term()
+    test_detect_24bit()
+    test_detect_dumb()
+    test_detect_dumb_beats_colorterm()
+    test_detect_clicolor_force_dumb()
+    test_detect_clicolor_force_truecolor()
+    test_detect_nocolor_beats_truecolor()
+    test_detect_nocolor_beats_force()
+    test_detect_empty_nocolor()
+    test_lower_off()
+    test_lower_truecolor_unchanged()
+    test_lower_256_unchanged()
+    test_lower_256_rgb_examples()
+    test_lower_16_unchanged()
+    test_lower_16_indexed_passthrough()
+    test_lower_16_indexed_examples()
+    test_lower_16_rgb_direct()
+    test_lower_ties()
+    test_lower_256_slots_0_15_never_chosen()
+    test_fg_seq_at()
+    test_bg_seq_at()
     ret testing.Summary()
 end
