@@ -32,12 +32,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the available axis instead.
 - `Row`, `Column`, `Grid`, and `Stack` containers with `NewRow`,
   `NewColumn`, `NewGrid`, and `NewStack`, the slot API (`add`,
-  `set_margin`, `set_width`, `set_height`, `set_align`, `set_padding`, and
-  Grid's `set_cell`), the `LayoutSlot`, `CrossAlign`, `SizeKind`,
-  `LayoutSize`, and `Insets` types, and the box math `FitRect`,
+  `set_margin`, `set_width`, `set_height`, `set_align`, `set_padding`,
+  Row and Column `set_gap`, and Grid's `set_cell` and `set_span`), the
+  `LayoutSlot` (`row_span`, `col_span`), `CrossAlign`, `SizeKind`,
+  `LayoutSize` (`weight`), and `Insets` types, and the box math `FitRect`,
   `InsetRect`, `SplitMain`, `TrackSizes`, `PlaceAxisSize`,
   `PlaceAxisOffset`, `NewInsets`, and `UniformInsets`. One `set_bounds` on
-  a container lays out its whole subtree in slot order.
+  a container lays out its whole subtree in slot order. Main-axis `Fill`
+  shares by `weight`, Row and Column reserve a `gap`, Grid slots span, and
+  a measurable main-axis `Pref` is reserved at its measured size.
+- `LayoutSize.weight` (default 1). Main-axis `Fill` shares by largest
+  remainder. Ties go to the earliest slot. Weight 1 matches the old equal
+  split.
+- `Row.gap`, `Column.gap`, and `set_gap`. The gap budget is `(k-1)*gap`
+  on the main axis, including zero-size slots. Negatives clamp to 0.
+- `LayoutSlot.row_span`, `LayoutSlot.col_span` (default 1), and
+  `Grid.set_span(i, rows, cols)`. A non-positive span is 1. The span
+  clamps to the remaining tracks. An out-of-range origin is still a 0×0
+  cell and ignores the span.
+- `Axis`, `Measure`, and `Widget.measure`. Row and Column report a natural
+  extent. Grid and Stack cannot measure. `BaseWidget.measure` returns
+  not-ok.
+- `Screen.raise` and `Screen.unraise`. One `raise` call is one layer (one
+  shared stamp).
+- `Widget.hits` (default true). A widget may paint and refuse hits.
 - `Buffer.front` and `Buffer.force_full`: the front grid (what the
   terminal currently shows) alongside the back grid widgets draw into, and
   the flag that makes the next `diff()` serialize the whole frame instead of
@@ -81,6 +99,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   widget consumed, and returns `true` when the keymap consumes it. The
   keymap is empty by default, so a screen with none installed behaves as
   before.
+- A main-axis `Pref` that can measure is reserved at that size. A `Pref`
+  that cannot measure still shares like `Fill` weight 1. A Column measures
+  that Pref at the content width, because `preferred_size` takes a width.
+- With nothing raised, paint order and focus order stay id order. After
+  `raise`, paint order is ascending `(stamp, id)`, hit-test walks that
+  order in reverse and skips `hits() == false`, and focus navigation stays
+  inside the topmost layer's focusable widgets. `unraise` can restore the
+  focus from before the layer.
 
 ### Documentation
 
@@ -97,6 +123,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the SGR encodings, capability detection, and the downgrade ladder. The
   architecture, buffer, and text pages now state that the `Color` type exists
   while cells and widgets still carry raw SGR strings.
+- The layout, screen, widget, focus, and architecture pages describe weights,
+  gap, measurement, grid spanning, and overlay order.
 
 ## [0.1.0] - 2026-10-06
 
