@@ -9,7 +9,7 @@ keywords: ["text", "wrap", "alignment", "wraptext", "measuretext", "clip"]
 ```salam
 mut t := basalam.NewText("Hello, terminal")
 t.set_align(basalam.Alignment.Center)
-t.set_style(term.Sgr(term.FgGreen))
+t.set_style(basalam.Style { fg = basalam.Green })
 ```
 
 ## Text
@@ -22,14 +22,14 @@ pub struct Text:
 
     pub content: str = ""
     pub align: Alignment = Alignment.Left
-    pub style: str = ""
+    pub style: Style = StyleDefault
     pub wrap: WrapMode = WrapMode.Word
 end
 ```
 
 <ResponseField name="content" type="str">The text to draw. An explicit `"\n"` starts a new line.</ResponseField>
 <ResponseField name="align" type="Alignment">Horizontal placement of each line. Defaults to `Alignment.Left`.</ResponseField>
-<ResponseField name="style" type="str">SGR escape sequence(s) applied to the whole box. `""` means the terminal's default style.</ResponseField>
+<ResponseField name="style" type="Style">How the content is drawn. Defaults to `StyleDefault`, the terminal's default style.</ResponseField>
 <ResponseField name="wrap" type="WrapMode">How the content becomes lines at render time. Defaults to `WrapMode.Word`.</ResponseField>
 
 ## Content
@@ -97,17 +97,15 @@ A box with `width <= 0` or `height <= 0` draws nothing and never panics.
 
 ## Style
 
-`style` is a raw SGR string built with `std/term`:
+`style` is a [`Style`](/reference/style) value:
 
 ```salam
-t.set_style(term.Sgr(term.FgCyan) + term.Sgr(term.BgBlack) + term.Sgr(term.StyleBold))
+t.set_style(basalam.Style { fg = basalam.Cyan, bg = basalam.Black, bold = true })
 ```
 
-The widget fills the whole box with the style first, so a background colour reads full-bleed across the widget's area. The foreground and bold attributes apply to the glyph cells. An empty style is the terminal's default.
+A style is a plain value, so a partial literal leaves every other field at its default and `StyleDefault` is the style that asks for nothing.
 
-<Note>
-  There is no `basalam.Style` type yet. The [Color](/reference/color) value type now exists as the first piece of the style work, but until the rest lands, a style here is still the SGR string you assemble with `std/term`.
-</Note>
+`render` paints in two passes. It fills the whole box with the style's background only, so a background colour reads full-bleed across the widget's area while nothing else reaches the padding. It then writes each line of glyph cells — interior spaces included, so an underline stays continuous — in the full style. Both SGR strings are built at `ColorTier.TrueColor`; wiring the terminal's detected capability tier through the screen is a follow-up.
 
 ## Preferred size
 
