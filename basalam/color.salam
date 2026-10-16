@@ -1,0 +1,179 @@
+/*
+ * basalam - a terminal user interface library for Salam (2026)
+ *
+ *   +-------------------+
+ *   |   B A S A L A M   |
+ *   +-------------------+
+ *
+ * Built on the Salam standard library's std/term package
+ * Salam: https://github.com/SalamLang/Salam
+ *
+ * Repository: https://github.com/curedbylethe/basalam
+ * License: GPL-3.0-or-later
+ *
+ */
+
+/*
+ * Color: the value type a style will carry, and its raw SGR encoding.
+ *
+ * The terminal distinguishes four color kinds — its own default, the 16
+ * ANSI palette, the 256-color palette, and 24-bit truecolor — and each has
+ * its own SGR form. Color models exactly those four as a payload enum, so a
+ * value never carries more than its kind needs: Default has no payload,
+ * Ansi and Indexed carry one index, Rgb carries three channels. Value
+ * equality is native, so a future structured style can compare two colors
+ * for dirty-cell detection the way cells are compared today.
+ *
+ *   present:  the Color enum; the 16 palette constants (Black..White,
+ *             BrightBlack..BrightWhite); and FgSeq / BgSeq, which turn a
+ *             color into the exact escape a terminal understands.
+ *
+ *   fit:      sits beside buffer.salam and text.salam, whose Cell.style is a
+ *             raw SGR string today. This is the value half of the styling
+ *             work; nothing consumes it yet.
+ *
+ *   absent:   capability detection and emission-time downgrade (not yet
+ *             implemented): FgSeq / BgSeq are full fidelity and never rewrite
+ *             a color to a lower tier. No validation or clamping either —
+ *             Ansi is documented for 0-15, but any int follows the same
+ *             arithmetic.
+ *
+ * Why raw sequences live here: the encoding is the one thing every consumer
+ * of a color needs, and it must be built from std/term's sequence builders
+ * rather than hand-written escapes. Keeping FgSeq / BgSeq pure (a color in,
+ * a string out) means tests can assert them without a terminal.
+ */
+
+package basalam
+
+import term
+
+@en "Black"
+/// Palette index 0.
+pub const Black := Color.Ansi(0)
+
+@en "Red"
+/// Palette index 1.
+pub const Red := Color.Ansi(1)
+
+@en "Green"
+/// Palette index 2.
+pub const Green := Color.Ansi(2)
+
+@en "Yellow"
+/// Palette index 3.
+pub const Yellow := Color.Ansi(3)
+
+@en "Blue"
+/// Palette index 4.
+pub const Blue := Color.Ansi(4)
+
+@en "Magenta"
+/// Palette index 5.
+pub const Magenta := Color.Ansi(5)
+
+@en "Cyan"
+/// Palette index 6.
+pub const Cyan := Color.Ansi(6)
+
+@en "White"
+/// Palette index 7.
+pub const White := Color.Ansi(7)
+
+@en "BrightBlack"
+/// Palette index 8, the bright variant of Black.
+pub const BrightBlack := Color.Ansi(8)
+
+@en "BrightRed"
+/// Palette index 9, the bright variant of Red.
+pub const BrightRed := Color.Ansi(9)
+
+@en "BrightGreen"
+/// Palette index 10, the bright variant of Green.
+pub const BrightGreen := Color.Ansi(10)
+
+@en "BrightYellow"
+/// Palette index 11, the bright variant of Yellow.
+pub const BrightYellow := Color.Ansi(11)
+
+@en "BrightBlue"
+/// Palette index 12, the bright variant of Blue.
+pub const BrightBlue := Color.Ansi(12)
+
+@en "BrightMagenta"
+/// Palette index 13, the bright variant of Magenta.
+pub const BrightMagenta := Color.Ansi(13)
+
+@en "BrightCyan"
+/// Palette index 14, the bright variant of Cyan.
+pub const BrightCyan := Color.Ansi(14)
+
+@en "BrightWhite"
+/// Palette index 15, the bright variant of White.
+pub const BrightWhite := Color.Ansi(15)
+
+@en "Color"
+/// One terminal color, as the four kinds the wire format distinguishes.
+/// Equality is native: two Colors are equal when their kind and payload are
+/// equal, so different kinds are never equal.
+pub enum Color:
+    @en "Default"
+    /// The terminal's own default foreground or background (SGR 39 / 49),
+    /// not an entry in any palette.
+    Default
+    @en "Ansi"
+    /// A 16-color palette index, 0-15: 0-7 the normal colors, 8-15 their
+    /// bright variants. No validation; the documented range is 0-15.
+    Ansi(n: int)
+    @en "Indexed"
+    /// A 256-color palette index, 0-255 (SGR 38;5;n / 48;5;n). An index in
+    /// 0-15 stays Indexed on the wire, never rewritten to the ANSI form.
+    Indexed(n: int)
+    @en "Rgb"
+    /// A 24-bit truecolor triple, each channel 0-255 (SGR 38;2;r;g;b).
+    Rgb(r: int, g: int, b: int)
+end
+
+func _ansi_fg(n: int): int:
+    if n < 8:
+        ret term.FgBlack + n
+    end
+    ret term.FgBlack + term.FgBright + (n - 8)
+end
+
+func _ansi_bg(n: int): int:
+    if n < 8:
+        ret term.BgBlack + n
+    end
+    ret term.BgBlack + term.FgBright + (n - 8)
+end
+
+@en "FgSeq"
+/// The foreground SGR sequence for a color, at full fidelity: the exact
+/// escape the color's kind encodes to, with no tier downgrade. Default is
+/// SGR 39; Ansi 0-7 is 30+n and Ansi 8-15 is 90+(n-8); Indexed is 38;5;n;
+/// Rgb is 38;2;r;g;b. Built from term's sequence builders — no escape is
+/// written by hand.
+pub func FgSeq(c: Color): str:
+    ret match c:
+        Default => term.Sgr(term.FgDefault)
+        Ansi(n) => term.Sgr(_ansi_fg(n))
+        Indexed(n) => term.SeqFg256(n)
+        Rgb(r, g, b) => term.SeqFgRGB(r, g, b)
+    end
+end
+
+@en "BgSeq"
+/// The background SGR sequence for a color, at full fidelity: the exact
+/// escape the color's kind encodes to, with no tier downgrade. Default is
+/// SGR 49; Ansi 0-7 is 40+n and Ansi 8-15 is 100+(n-8); Indexed is 48;5;n;
+/// Rgb is 48;2;r;g;b. Built from term's sequence builders — no escape is
+/// written by hand.
+pub func BgSeq(c: Color): str:
+    ret match c:
+        Default => term.Sgr(term.BgDefault)
+        Ansi(n) => term.Sgr(_ansi_bg(n))
+        Indexed(n) => term.SeqBg256(n)
+        Rgb(r, g, b) => term.SeqBgRGB(r, g, b)
+    end
+end
