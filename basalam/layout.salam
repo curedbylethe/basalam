@@ -58,9 +58,8 @@
  * the pass through its existing fit_root path. Nothing here changes Screen,
  * Tree or Buffer.
  *
- * Deliberately absent. No grid row/column spanning. No stack z-order
- * beyond registry id order, and no focus-to-topmost. Containers position;
- * they never paint their children.
+ * Deliberately absent. No stack z-order beyond registry id order, and no
+ * focus-to-topmost. Containers position; they never paint their children.
  */
 
 package basalam
@@ -199,8 +198,8 @@ end
 /// One child's place in a container's ordered slot list. A slot is owned by
 /// the parent; a widget never sees it. margin insets the slot before the
 /// child is placed, width and height are the requested sizes on each axis,
-/// and align_x / align_y position a child that does not stretch. row and col
-/// are read by Grid only.
+/// and align_x / align_y position a child that does not stretch. row, col,
+/// row_span and col_span are read by Grid only.
 pub struct LayoutSlot:
     @en "child"
     /// The child widget. It must be registered in the Screen's tree as well,
@@ -234,6 +233,17 @@ pub struct LayoutSlot:
     @en "col"
     /// The Grid column this child occupies. 0 by default.
     pub col: int = 0
+
+    @en "row_span"
+    /// How many Grid rows this child covers from row. 1 by default. A
+    /// non-positive value means 1, and Grid clamps it to the rows remaining.
+    pub row_span: int = 1
+
+    @en "col_span"
+    /// How many Grid columns this child covers from col. 1 by default. A
+    /// non-positive value means 1, and Grid clamps it to the columns
+    /// remaining.
+    pub col_span: int = 1
 end
 
 @en "Row"
@@ -432,7 +442,8 @@ end
 /// (R9) and places each child by its explicit (row, col) (R10). Columns and
 /// rows share the space equally, the remainder to the earliest; an
 /// out-of-range or negative cell is a 0x0 slot at the content origin, and the
-/// child is still visited. Two children in one cell share it and overlap.
+/// child is still visited. set_span extends a cell by whole tracks (R15).
+/// Two children in one cell share it and overlap.
 pub struct Grid:
     pub use BaseWidget
 
@@ -488,6 +499,13 @@ pub struct Grid:
     /// Sets the slot's grid cell (R10).
     pub func set_cell(i: int, row: int, col: int):
         _slotCell(this.items, i, row, col)
+    end
+
+    @en "set_span"
+    /// Sets how many rows and columns the slot at i covers (R15). A
+    /// non-positive count is stored as 1. An out-of-range index is ignored.
+    pub func set_span(i: int, rows: int, cols: int):
+        _slotSpan(this.items, i, rows, cols)
     end
 
     @en "set_padding"
@@ -823,6 +841,17 @@ func _slotCell(items &: Vector<LayoutSlot>, i: int, row: int, col: int):
     items.set(i, s)
 end
 
+// Sets one slot's row and column span. A non-positive count is stored as 1.
+func _slotSpan(items &: Vector<LayoutSlot>, i: int, rows: int, cols: int):
+    if i < 0 or i >= items.len():
+        ret
+    end
+    mut s := items.get(i)
+    s.row_span = rows <= 0 ? 1 : rows
+    s.col_span = cols <= 0 ? 1 : cols
+    items.set(i, s)
+end
+
 // R5/R6/R7: the shared Row and Column engine. A measured main-axis Pref is
 // turned into Fixed before SplitMain; a Pref that cannot measure becomes
 // Fill weight 1. SplitMain then reserves each Fixed size at max(0, cells),
@@ -880,10 +909,13 @@ func _arrangeLinear(content: Rect, items: Vector<LayoutSlot>, main_is_width: boo
     ret out
 end
 
-// R9/R10: grid tracks plus explicit (row, col) placement. An out-of-range or
-// negative cell is a 0x0 slot at the content origin, but the child is still
-// placed once. Each cell behaves like a slot: margin, then alignment on both
-// axes, then clip.
+// R9/R10/R15: grid tracks plus explicit (row, col) placement. An out-of-range
+// or negative origin is a 0x0 slot at the content origin; the span is ignored
+// and the child is still placed once. An in-range span is the sum of that
+// many tracks from the origin. A non-positive span means 1, and the count is
+// clamped to the tracks that remain, so a span does not wrap or resize
+// tracks. Each slot then behaves like a cell: margin, then alignment on both
+// axes (x measured at the slot width, then y at the resolved width), then clip.
 func _arrangeGrid(content: Rect, items: Vector<LayoutSlot>, rows: int, cols: int): Vector<Rect>:
     widths := TrackSizes(content.width, cols)
     heights := TrackSizes(content.height, rows)
@@ -893,7 +925,27 @@ func _arrangeGrid(content: Rect, items: Vector<LayoutSlot>, rows: int, cols: int
         if s.row < 0 or s.row >= rows or s.col < 0 or s.col >= cols:
             out.push(FitRect(Rect { x = content.x, y = content.y }, content))
         else:
-            slot := Rect { x = _prefixTotal(widths, s.col, content.x), y = _prefixTotal(heights, s.row, content.y), width = widths.get(s.col), height = heights.get(s.row) }
+            mut cs := s.col_span
+            if cs <= 0:
+                cs = 1
+            end
+            cs = _clamp(cs, 1, cols - s.col)
+            mut rs := s.row_span
+            if rs <= 0:
+                rs = 1
+            end
+            rs = _clamp(rs, 1, rows - s.row)
+            x := _prefixTotal(widths, s.col, content.x)
+            y := _prefixTotal(heights, s.row, content.y)
+            mut w := 0
+            repeat cs in k:
+                w = w + widths.get(s.col + k)
+            end
+            mut h := 0
+            repeat rs in k:
+                h = h + heights.get(s.row + k)
+            end
+            slot := Rect { x = x, y = y, width = w, height = h }
             box := InsetRect(slot, s.margin)
             mut nw := 0
             if s.align_x != CrossAlign.Stretch:
