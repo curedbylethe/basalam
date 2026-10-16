@@ -27,11 +27,13 @@
  *   - the root is always ID 0 (RootId) and has no parent (NoWidget);
  *   - add() appends, so IDs are stable for the tree's lifetime and a
  *     parent's ID is always smaller than its children's. That ordering
- *     makes bubbling loop-free by construction, and it is the focus
- *     order. Paint order is ID order unless the Screen has raised a
- *     widget (R16): the stack z-order of v1 is simply ID order, so a
- *     child (added after its parent) paints over it, and a later sibling
- *     paints over an earlier one.
+ *     makes bubbling loop-free by construction. Focus order (R17) is the
+ *     focusable widgets whose stamp equals the max stamp, ascending id.
+ *     When nothing is raised, or that layer has no focusable widget, it
+ *     falls back to every focusable widget in ascending id. Paint order
+ *     is ascending (stamp, id) (R16). Unraised widgets share stamp 0, so
+ *     with nothing raised a child (added after its parent) paints over
+ *     it, and a later sibling paints over an earlier one.
  *
  * Dispatch. An event goes to one starting widget (normally the focused
  * one) and, while unconsumed, to each ancestor in turn up to the root.

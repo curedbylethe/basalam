@@ -244,7 +244,8 @@ func test_one_raise_shares_one_stamp():
 end
 
 // Spec z1, hit probes only. Widget 3 covers (7, 2) but refuses hits, so
-// the scan falls through to widget 2. raise does not move focus.
+// the scan falls through to widget 2. Raising focusable w1 moves focus
+// onto w1. The click still follows hit-test, not focus.
 func test_hits_false_is_skipped():
     mut s := basalam.NewScreen(Recorder { name = "w0", can_focus = true }, 10, 4)
     defer s.close()
@@ -259,14 +260,14 @@ func test_hits_false_is_skipped():
     defer ids.free()
     ids.push(w1)
     s.raise(ids)
-    testing.AssertEqInt(s.focused_id(), w2)
+    testing.AssertEqInt(s.focused_id(), w1)
     testing.AssertEqInt(s.hit_test(3, 2), w1)
     testing.AssertEqInt(s.hit_test(7, 2), w2)
     testing.AssertEqInt(s.hit_test(0, 0), w2)
     testing.AssertEqInt(s.hit_test(9, 9), basalam.NoWidget)
     testing.AssertFalse(s.dispatch(click(7, 2)))
     testing.AssertEqStr(trail(), "w2>w0")
-    testing.AssertEqInt(s.focused_id(), w2)
+    testing.AssertEqInt(s.focused_id(), w1)
 end
 
 func test_keyboard_still_goes_to_focused_widget():

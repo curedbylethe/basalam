@@ -47,8 +47,10 @@
  * buf.focused set. Every focus change marks the screen dirty, so the next
  * present() redraws both the old and the new focus indicator. Linear
  * (focus_next/prev) and spatial (focus_up/down/left/right, see
- * focus.salam) navigation are methods here; an application binds them to
- * keys through the opt-in keymap.
+ * focus.salam) navigation walk the focus order: focusable widgets in the
+ * topmost raised layer, or every focusable widget in ID order when that
+ * layer has none. An application binds the methods to keys through the
+ * opt-in keymap.
  *
  * Keymap fallback. A screen carries an opt-in Keymap (see keymap.salam). For
  * an event the widget chain does not consume, dispatch offers KeyEvents to
@@ -202,10 +204,12 @@ pub struct Screen:
     term_state: term.TermState = term.TermState {}
     // Raise stamps live on the screen, not on the widget. A missing id is
     // stamp 0 (unraised). One raise() call bumps ztop once and writes that
-    // same stamp on every id, so the call is one layer. D6 focus movement
-    // is not done here: raise and unraise only assign stamps.
+    // same stamp on every id, so the call is one layer. Focus moves after
+    // the stamps change, and only through focus(). restore is the single
+    // id unraise puts back when the last layer is cleared.
     stamps: HashMap<int, int> = HashMap {} as HashMap<int, int>
     ztop: int = 0
+    restore: int = NoWidget
 
     @en "add"
     /// Adds w under parent (an ID; RootId for top level) and returns the
@@ -225,8 +229,11 @@ pub struct Screen:
     /// Assigns every id one fresh stamp, shared by this whole call, so the
     /// ids form a single layer above every widget raised earlier and above
     /// every unraised widget. Within the layer, paint order stays ID order.
-    /// Does not move focus. An id that is not in the tree is recorded and
-    /// does not crash; it changes painting only once that id is registered.
+    /// When the resulting focus order is non-empty and the current focus
+    /// is outside it, saves that focus and moves to the order's first id.
+    /// Otherwise leaves the focus and the saved id unchanged. An id that
+    /// is not in the tree is recorded and does not crash; it changes
+    /// painting only once that id is registered.
     pub func raise(ids: Vector<int>):
         this.ztop = this.ztop + 1
         stamp := this.ztop
@@ -234,18 +241,23 @@ pub struct Screen:
             this.stamps.put(ids.get(i), stamp)
         end
         this.dirty = true
+        this.focus_after_raise()
     end
 
     @en "unraise"
     /// Clears the stamp of every id to 0, so those widgets return to plain
     /// ID order. Idempotent: an id that was not raised, or that is not in
-    /// the tree, is left at 0. Does not rewind the stamp counter and does
-    /// not move focus.
+    /// the tree, is left at 0. Does not rewind the stamp counter. When
+    /// nothing remains raised, focuses the saved id if it is still
+    /// focusable, otherwise the first focusable widget, and clears the
+    /// saved id. While a layer remains, focuses the first id of the new
+    /// focus order when the current focus is outside it.
     pub func unraise(ids: Vector<int>):
         repeat ids.len() in i:
             this.stamps.put(ids.get(i), 0)
         end
         this.dirty = true
+        this.focus_after_unraise()
     end
 
     @en "widget"
@@ -314,42 +326,48 @@ pub struct Screen:
     end
 
     @en "focus_next"
-    /// Moves the focus to the next focusable widget in ID order, wrapping
-    /// from the last to the first. With nothing focused, focuses the first.
-    /// Returns true when the focus moved.
+    /// Moves the focus to the next widget in focus order, wrapping from
+    /// the last to the first. Focus order is the focusable widgets in the
+    /// topmost raised layer, or every focusable widget in ID order when
+    /// that layer has none. A current focus outside the order lands on
+    /// the first entry. With no focusable widget, does nothing. Returns
+    /// true when the focus moved.
     pub func focus_next(): bool:
         ret this.focus_step(1)
     end
 
     @en "focus_prev"
-    /// Moves the focus to the previous focusable widget in ID order,
-    /// wrapping from the first to the last. With nothing focused, focuses
-    /// the last. Returns true when the focus moved.
+    /// Moves the focus to the previous widget in focus order, wrapping
+    /// from the first to the last. A current focus outside the order
+    /// lands on the last entry. With no focusable widget, does nothing.
+    /// Returns true when the focus moved.
     pub func focus_prev(): bool:
         ret this.focus_step(-1)
     end
 
     @en "focus_up"
-    /// Moves the focus to the nearest focusable widget above (see Nearest
-    /// for the exact rule). Returns true when the focus moved.
+    /// Moves the focus to the nearest widget above, chosen from the focus
+    /// order (see Nearest). Returns true when the focus moved.
     pub func focus_up(): bool:
         ret this.focus_toward(DirUp)
     end
 
     @en "focus_down"
-    /// Moves the focus to the nearest focusable widget below.
+    /// Moves the focus to the nearest widget below, from the focus order.
     pub func focus_down(): bool:
         ret this.focus_toward(DirDown)
     end
 
     @en "focus_left"
-    /// Moves the focus to the nearest focusable widget to the left.
+    /// Moves the focus to the nearest widget to the left, from the focus
+    /// order.
     pub func focus_left(): bool:
         ret this.focus_toward(DirLeft)
     end
 
     @en "focus_right"
-    /// Moves the focus to the nearest focusable widget to the right.
+    /// Moves the focus to the nearest widget to the right, from the focus
+    /// order.
     pub func focus_right(): bool:
         ret this.focus_toward(DirRight)
     end
@@ -616,43 +634,142 @@ pub struct Screen:
         this.dirty = true
     end
 
-    // Linear navigation. Walks IDs from the current focus in steps of
-    // `step` (+1 or -1), wrapping around, and stops at the first focusable
-    // widget. With nothing focused it starts just outside the range, so
-    // the first step lands on the first (or last) ID.
-    func focus_step(step: int): bool:
-        n := this.tree.count()
-        current := this.focused_id()
-        mut id := current
-        if id == NoWidget:
-            id = step > 0 ? n - 1 : 0
-        end
-        repeat n:
-            id = (id + step + n) % n
-            if id == current:
-                ret false
+    // Highest raise stamp, or 0 when nothing is raised. unraise writes 0
+    // and leaves the entry in the map, so those values do not count.
+    func max_stamp(): int:
+        mut top := 0
+        mut it := this.stamps.iter()
+        until it.has_next():
+            v := it.value()
+            if v > top:
+                top = v
             end
-            if this.can_focus(id):
-                ret this.focus(id)
-            end
+            it.next()
         end
-        ret false
+        ret top
     end
 
-    // Spatial navigation: collects the bounds of every other focusable
-    // widget and lets Nearest pick one. With nothing focused there is no
-    // starting rect, so it falls back to focusing the first widget.
+    // Focusable widgets in the topmost layer, ascending id. An empty layer,
+    // or a layer with no focusable widget, falls back to every focusable
+    // widget, which is ID order. The caller frees the vector.
+    func focus_order(): Vector<int>:
+        mut all := Vector {} as Vector<int>
+        mut layered := Vector {} as Vector<int>
+        top := this.max_stamp()
+        repeat this.tree.count() in id:
+            if this.can_focus(id):
+                all.push(id)
+                if top > 0 and this.stamps.get_or(id, 0) == top:
+                    layered.push(id)
+                end
+            end
+        end
+        if layered.len() > 0:
+            all.free()
+            ret layered
+        end
+        layered.free()
+        ret all
+    end
+
+    func order_index(order: Vector<int>, id: int): int:
+        repeat order.len() in i:
+            if order.get(i) == id:
+                ret i
+            end
+        end
+        ret -1
+    end
+
+    // Stamps are already updated. Move only when the new order is non-empty
+    // and the current focus is outside it. Otherwise leave both the focus
+    // and the restore slot alone.
+    func focus_after_raise():
+        order := this.focus_order()
+        defer order.free()
+        if order.len() == 0:
+            ret
+        end
+        if this.order_index(order, this.focused_id()) >= 0:
+            ret
+        end
+        this.restore = this.focused_id()
+        _ := this.focus(order.get(0))
+    end
+
+    func focus_after_unraise():
+        order := this.focus_order()
+        defer order.free()
+        if this.max_stamp() == 0:
+            saved := this.restore
+            this.restore = NoWidget
+            if this.can_focus(saved):
+                _ := this.focus(saved)
+            else order.len() > 0:
+                _ := this.focus(order.get(0))
+            else:
+                this.clear_focus()
+            end
+            ret
+        end
+        if this.order_index(order, this.focused_id()) >= 0:
+            ret
+        end
+        if order.len() > 0:
+            _ := this.focus(order.get(0))
+        else:
+            this.clear_focus()
+        end
+    end
+
+    // focus() refuses NoWidget. This is only the spec's assignment of -1.
+    func clear_focus():
+        if this.focus_stack.len() == 0:
+            ret
+        end
+        this.focus_stack.clear()
+        this.focus_changed()
+    end
+
+    // Linear navigation over focus_order. step is +1 or -1 and wraps inside
+    // that order. A focus outside the order jumps to the first entry (next)
+    // or the last (prev). No focusable widget leaves the focus unchanged.
+    func focus_step(step: int): bool:
+        order := this.focus_order()
+        defer order.free()
+        n := order.len()
+        if n == 0:
+            ret false
+        end
+        idx := this.order_index(order, this.focused_id())
+        if idx < 0:
+            pick := step > 0 ? 0 : n - 1
+            ret this.focus(order.get(pick))
+        end
+        next := (idx + step + n) % n
+        if next == idx:
+            ret false
+        end
+        ret this.focus(order.get(next))
+    end
+
+    // Spatial navigation. Candidates are focus_order, and Nearest does not
+    // wrap. Nothing focused has no starting rect, so fall back to
+    // focus_next, which lands on the first entry of the order.
     func focus_toward(dir: int): bool:
         current := this.focused_id()
         if current == NoWidget:
             ret this.focus_next()
         end
+        order := this.focus_order()
+        defer order.free()
         mut ids := Vector {} as Vector<int>
         defer ids.free()
         mut rects := Vector {} as Vector<Rect>
         defer rects.free()
-        repeat this.tree.count() in id:
-            if id != current and this.can_focus(id):
+        repeat order.len() in i:
+            id := order.get(i)
+            if id != current:
                 ids.push(id)
                 rects.push(this.tree.get(id).bounds())
             end

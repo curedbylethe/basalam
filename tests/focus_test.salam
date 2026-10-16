@@ -351,6 +351,113 @@ func test_dispatch_routes_through_focus_stack():
     testing.AssertEqStr(trail(), "a")
 end
 
+// Focusables 1..4 in one row; widget 0 is not focusable. A raised layer
+// owns focus navigation until it is unraised.
+func test_focus_topmost_layer():
+    mut s := basalam.NewScreen(basalam.BaseWidget {}, 8, 1)
+    defer s.close()
+    a := s.add(basalam.RootId, Tile { name = "a" })
+    b := s.add(basalam.RootId, Tile { name = "b" })
+    c := s.add(basalam.RootId, Tile { name = "c" })
+    d := s.add(basalam.RootId, Tile { name = "d" })
+    s.widget(a).set_bounds(rect(0, 0, 2, 1))
+    s.widget(b).set_bounds(rect(2, 0, 2, 1))
+    s.widget(c).set_bounds(rect(4, 0, 2, 1))
+    s.widget(d).set_bounds(rect(6, 0, 2, 1))
+    testing.AssertEqInt(a, 1)
+    testing.AssertEqInt(b, 2)
+    testing.AssertEqInt(c, 3)
+    testing.AssertEqInt(d, 4)
+    testing.AssertEqInt(s.focused_id(), 1)
+
+    // Nothing raised: order is 1 2 3 4, and prev from 1 wraps to 4.
+    testing.AssertTrue(s.focus_next())
+    testing.AssertEqInt(s.focused_id(), 2)
+    testing.AssertTrue(s.focus_prev())
+    testing.AssertEqInt(s.focused_id(), 1)
+    testing.AssertTrue(s.focus_prev())
+    testing.AssertEqInt(s.focused_id(), 4)
+    testing.AssertTrue(s.focus_next())
+    testing.AssertEqInt(s.focused_id(), 1)
+
+    mut ids := Vector {} as Vector<int>
+    defer ids.free()
+    ids.push(2)
+    ids.push(3)
+    s.raise(ids)
+    testing.AssertEqInt(s.focused_id(), 2)
+    testing.AssertTrue(s.focus_next())
+    testing.AssertEqInt(s.focused_id(), 3)
+    // Wrap stays inside the layer: 3 goes to 2, not to 4.
+    testing.AssertTrue(s.focus_next())
+    testing.AssertEqInt(s.focused_id(), 2)
+    testing.AssertTrue(s.focus_prev())
+    testing.AssertEqInt(s.focused_id(), 3)
+    testing.AssertTrue(s.focus_next())
+    testing.AssertEqInt(s.focused_id(), 2)
+    // 4 is outside the order, so next from 4 lands on 2.
+    testing.AssertTrue(s.focus(4))
+    testing.AssertTrue(s.focus_next())
+    testing.AssertEqInt(s.focused_id(), 2)
+
+    visits.clear()
+    k := basalam.Event { kind = basalam.KeyEvent, key = term.Decode("k") }
+    testing.AssertTrue(s.dispatch(k))
+    testing.AssertEqStr(trail(), "b")
+
+    // Right reaches c, the other widget in the layer, and stops there.
+    // Left from b does not reach a, which is behind the layer.
+    testing.AssertTrue(s.focus_right())
+    testing.AssertEqInt(s.focused_id(), 3)
+    testing.AssertFalse(s.focus_right())
+    testing.AssertEqInt(s.focused_id(), 3)
+    testing.AssertTrue(s.focus_left())
+    testing.AssertEqInt(s.focused_id(), 2)
+    testing.AssertFalse(s.focus_left())
+    testing.AssertEqInt(s.focused_id(), 2)
+
+    ids.clear()
+    ids.push(0)
+    s.raise(ids)
+    // Layer {0} has no focusable widget, so the order falls back to
+    // 1 2 3 4 and focus stays at 2.
+    testing.AssertEqInt(s.focused_id(), 2)
+    testing.AssertTrue(s.focus_next())
+    testing.AssertEqInt(s.focused_id(), 3)
+    testing.AssertTrue(s.focus_next())
+    testing.AssertEqInt(s.focused_id(), 4)
+    testing.AssertTrue(s.focus_next())
+    testing.AssertEqInt(s.focused_id(), 1)
+    testing.AssertTrue(s.focus_next())
+    testing.AssertEqInt(s.focused_id(), 2)
+
+    ids.clear()
+    ids.push(0)
+    s.unraise(ids)
+    testing.AssertEqInt(s.focused_id(), 2)
+    testing.AssertTrue(s.focus_next())
+    testing.AssertEqInt(s.focused_id(), 3)
+    testing.AssertTrue(s.focus_prev())
+    testing.AssertEqInt(s.focused_id(), 2)
+
+    ids.clear()
+    ids.push(2)
+    ids.push(3)
+    s.unraise(ids)
+    testing.AssertEqInt(s.focused_id(), 1)
+
+    mut blank := basalam.NewScreen(basalam.BaseWidget {}, 1, 1)
+    defer blank.close()
+    testing.AssertEqInt(blank.focused_id(), basalam.NoWidget)
+    testing.AssertFalse(blank.focus_next())
+    testing.AssertFalse(blank.focus_prev())
+    testing.AssertFalse(blank.focus_up())
+    testing.AssertFalse(blank.focus_down())
+    testing.AssertFalse(blank.focus_left())
+    testing.AssertFalse(blank.focus_right())
+    testing.AssertEqInt(blank.focused_id(), basalam.NoWidget)
+end
+
 func test_indicator_follows_focus():
     mut s := grid()
     defer s.close()
@@ -381,6 +488,7 @@ func main:
     test_dispatch_goes_to_focused_widget()
     test_dispatch_with_empty_stack_starts_at_root()
     test_dispatch_routes_through_focus_stack()
+    test_focus_topmost_layer()
     test_indicator_follows_focus()
     visits.free()
     ret testing.Summary()

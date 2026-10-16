@@ -266,8 +266,9 @@ end
 func test_raise_paint_order():
     mut s := zstack()
     defer s.close()
-    // First focusable added (id 1) holds focus. raise must not move it,
-    // including onto a later focusable layer.
+    // First focusable added (id 1) holds focus. A raise moves focus only
+    // when 1 is outside the new focus order. raise([1]), raise([1,2]),
+    // and raise([2,1]) all contain 1, so focus stays there.
     testing.AssertEqInt(s.focused_id(), 1)
     testing.AssertEqStr(painted(s), "0123")
 
@@ -282,6 +283,7 @@ func test_raise_paint_order():
     ids = id_vec(2, 1, 2)
     s.raise(ids)
     testing.AssertEqStr(painted(s), "0312")
+    testing.AssertEqInt(s.focused_id(), 1)
     s.unraise(ids)
     ids.free()
     testing.AssertEqStr(painted(s), "0123")
@@ -295,12 +297,14 @@ func test_raise_paint_order():
     s.unraise(ids)
     ids.free()
 
-    // Raising only the other focusable widget must not steal focus.
+    // raise([2]) does not contain 1, so focus moves to 2 and the saved
+    // id is 1. unraise of that layer puts 1 back. Paint order is unchanged.
     ids = id_vec(1, 2, 0)
     s.raise(ids)
     testing.AssertEqStr(painted(s), "0132")
-    testing.AssertEqInt(s.focused_id(), 1)
+    testing.AssertEqInt(s.focused_id(), 2)
     s.unraise(ids)
+    testing.AssertEqInt(s.focused_id(), 1)
     ids.free()
 
     ids = id_vec(2, 1, 2)
