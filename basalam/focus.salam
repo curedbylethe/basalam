@@ -27,9 +27,11 @@
  * file holds only the geometric search behind the spatial model, kept
  * free of widgets and screens so it can be tested on plain rects.
  *
- * What the library does NOT do: bind keys. Which key means "next" or
- * "left" is the application's decision (or a future keymap's), not the
- * focus system's.
+ * Key bindings. The focus system binds nothing itself: the movement
+ * methods are plain calls. The library's only stock bindings live in the
+ * opt-in default keymap (see keymap.salam), which an application installs
+ * with set_keymap. Which key means "next" or "left" stays the
+ * application's decision, not the focus system's.
  */
 
 package basalam

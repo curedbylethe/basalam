@@ -101,6 +101,8 @@ In this tree, a key pressed while `left` has focus visits `left`, `panel`, and `
 
 The [widget tree](/reference/tree) implements the walk with `Tree.dispatch`.
 
+Once the walk reaches the root unconsumed, `dispatch` offers a `KeyEvent` to the screen's opt-in [keymap](/reference/keymap) before returning `false`; other event kinds stop at the root.
+
 ### Mouse routing
 
 The starting widget depends on the kind. Keys, ticks, and resizes start at the focused widget. A `MouseEvent` whose report decoded starts at the widget under the cursor, then bubbles up from there. If no widget is under the cursor, it starts at the focused widget like the rest.
