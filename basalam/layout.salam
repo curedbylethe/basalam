@@ -21,8 +21,9 @@
  * turns its ordered slot list into one rect per child, and calls each child's
  * set_bounds in slot order. A child container recurses the same way, so a
  * single set_bounds on the root drives the whole subtree (R1, pre-order DFS,
- * every node visited exactly once). Every rect handed to a widget passes
- * through FitRect, so it is non-empty or exactly 0x0, never negative (R2).
+ * every node given set_bounds exactly once). Every rect handed to a widget
+ * passes through FitRect, so it is non-empty or exactly 0x0, never negative
+ * (R2).
  *
  * Two structures, one tree. A container owns the ordered `items` list that
  * defines layout; the Screen's registry is still what paints, dispatches
@@ -32,13 +33,24 @@
  * one grid cell paint in registration order; layout order and paint order are
  * independent.
  *
- * Measurement. Cross-axis Pref reads the child's Widget.preferred_size once,
- * after the main-axis split, resolving x before y (R8). A Fixed request on a
- * non-stretch cross axis is used directly instead, with no call. A child that
- * cannot measure (a container, or any widget using the BaseWidget default)
- * reports the negative sentinel, which fills the axis instead. max_width <= 0
- * is never forwarded; that axis resolves to 0 with no call. Pref on a main
- * axis is reserved and acts as Fill.
+ * Measurement. A pass measures before it positions. The outermost set_bounds
+ * clears the memo; a nested set_bounds does not. The container stores its own
+ * rect first (R1), measures what it needs, then calls each child's set_bounds
+ * in slot order. Measurement is post-order and never calls set_bounds.
+ * measured(node, axis, mw) calls Widget.measure. ok uses max(0, extent).
+ * Otherwise it reads preferred_size(mw), at most once per (node, axis, mw)
+ * for this pass: a negative component on that axis cannot measure. mw <= 0
+ * yields 0 and calls nothing. Row and Column measure. Main extent is padding
+ * plus each Fixed size, or the measured size of a Fill or Pref, plus the gap
+ * budget; cross extent is padding plus the largest measured child. Any null
+ * operand cannot measure. A childless container measures as its padding.
+ * Grid and Stack cannot measure. On a main axis a measured Pref is reserved
+ * like Fixed before SplitMain, and a Pref that cannot measure becomes Fill
+ * weight 1. SplitMain does not measure: a Pref still in its vector shares
+ * like Fill. Cross axis still resolves x at box.width, then y at the resolved
+ * width. A cross-axis Pref, or a non-stretch Fill, uses the measured extent;
+ * a child that cannot measure fills the axis. max_width <= 0 is never
+ * forwarded.
  *
  * Neighbours. rect.salam is the geometry these helpers build on: Point, Rect,
  * and the half-open rule. widget.salam owns set_bounds and preferred_size,
@@ -46,12 +58,58 @@
  * the pass through its existing fit_root path. Nothing here changes Screen,
  * Tree or Buffer.
  *
- * Deliberately absent. No two-pass measure-then-position. No grid
- * row/column spanning. No stack z-order beyond registry id order, and no
- * focus-to-topmost. Containers position; they never paint their children.
+ * Deliberately absent. No grid row/column spanning. No stack z-order
+ * beyond registry id order, and no focus-to-topmost. Containers position;
+ * they never paint their children.
  */
 
 package basalam
+
+// Cleared when the outermost set_bounds starts. Nested passes keep it.
+// Keyed by the widget's memo_id, not by dyn Widget (E021: dyn cannot be a
+// map key).
+mut _layout_depth := 0
+mut _memo := Vector {} as Vector<_MemoEntry>
+
+// One cached measured() answer. known false is null (cannot measure), which
+// is distinct from a known 0.
+struct _MemoEntry:
+    pub id: int = 0
+    pub axis: Axis = Axis.X
+    pub mw: int = 0
+    pub known: bool = false
+    pub n: int = 0
+end
+
+struct _Extent:
+    pub known: bool = false
+    pub n: int = 0
+end
+
+@en "Axis"
+/// The axis a measurement is taken on. X is horizontal, Y is vertical.
+pub enum Axis:
+    @en "X"
+    /// The horizontal axis.
+    X
+    @en "Y"
+    /// The vertical axis.
+    Y
+end
+
+@en "Measure"
+/// The result of Widget.measure. ok is false when the widget cannot measure.
+/// The layout engine then reads preferred_size.
+pub struct Measure:
+    @en "ok"
+    /// True when extent is a real measurement. False means cannot measure.
+    pub ok: bool = false
+
+    @en "extent"
+    /// The measured length in cells when ok is true. The engine clamps a
+    /// negative value to 0. Ignored when ok is false.
+    pub extent: int = 0
+end
 
 @en "CrossAlign"
 /// How a child is placed on the container's cross axis, the axis the
@@ -84,8 +142,9 @@ pub enum SizeKind:
     /// Exactly `cells` long. A negative value clamps to 0.
     Fixed
     @en "Pref"
-    /// The child's preferred size, resolved by the caller. On a main axis it
-    /// is reserved and acts as Fill (R8).
+    /// The child's preferred size. On a main axis a measured Pref is reserved
+    /// like Fixed; one that cannot measure is Fill weight 1. On a cross axis
+    /// it is the measured natural size (R8).
     Pref
 end
 
@@ -103,9 +162,12 @@ pub struct LayoutSize:
     pub cells: int = 0
 
     @en "weight"
-    /// Share of the main-axis leftover for a Fill or Pref. Defaults to 1. A
-    /// negative value clamps to 0 when used. Fixed ignores it, and so do Grid,
-    /// Stack, and cross-axis alignment.
+    /// Share of the main-axis leftover for a Fill. Defaults to 1. A negative
+    /// value clamps to 0 when used. Fixed ignores it, and so do Grid, Stack,
+    /// and cross-axis alignment. SplitMain also reads it for a Pref that is
+    /// still in the vector. Arrange resolves a measured Pref to Fixed first,
+    /// and a Pref that cannot measure to Fill weight 1, so this value is not
+    /// that slot's weight.
     pub weight: int = 1
 end
 
@@ -177,11 +239,12 @@ end
 @en "Row"
 /// A container that lays its children left to right along the x axis. Slots
 /// are packed from the content start; set_gap inserts that many cells between
-/// them. Each takes a Fixed or Fill share of the content width left after the
-/// gap budget (R5) and fills the content height unless its align_y places it
-/// otherwise. Set padding with set_padding; a child's margin, size and
-/// alignment with the slot methods. Children are positioned, not painted, so
-/// add them to the Screen's tree too.
+/// them. A measured main-axis Pref is reserved like Fixed. Fill then shares
+/// the content width left after that reservation and the gap budget (R5). A
+/// child fills the content height unless its align_y places it otherwise.
+/// Set padding with set_padding; a child's margin, size and alignment with
+/// the slot methods. Children are positioned, not painted, so add them to
+/// the Screen's tree too.
 pub struct Row:
     pub use BaseWidget
 
@@ -243,10 +306,23 @@ pub struct Row:
         this.gap = _clampNeg(gap)
     end
 
+    @en "measure"
+    /// Natural extent on axis at max_width, without moving children. Main
+    /// axis is padding, plus each Fixed size or measured Fill or Pref, plus
+    /// the gap budget. Cross axis is padding plus the largest measured
+    /// child. A child that cannot measure makes ok false.
+    pub func measure(axis: Axis, max_width: int): Measure:
+        m := _measureLinear(this.items, this.pad, this.gap, true, axis, max_width)
+        this._note_measure()
+        ret m
+    end
+
     @en "set_bounds"
-    /// Stores the container's own rect (normalised), then lays out and moves
-    /// every child in slot order (R1). Overrides the BaseWidget default.
+    /// Stores the container's own rect (normalised), measures, then lays out
+    /// and moves every child in slot order (R1). Overrides the BaseWidget
+    /// default.
     pub func set_bounds(bounds: Rect):
+        _enter_pass()
         r := FitRect(bounds, bounds)
         this.BaseWidget.set_bounds(r)
         rects := _arrangeLinear(InsetRect(r, this.pad), this.items, true, this.gap)
@@ -254,15 +330,16 @@ pub struct Row:
             this.items.get(i).child.set_bounds(rects.get(i))
         end
         rects.free()
+        _leave_pass()
     end
 end
 
 @en "Column"
 /// A container that lays its children top to bottom along the y axis. The
-/// mirror of Row: each child takes a Fixed or Fill share of the content
-/// height left after the gap budget (R5) and fills the content width unless
-/// its align_x places it otherwise. See Row for the slot, padding and gap
-/// methods.
+/// mirror of Row: a measured main-axis Pref is reserved like Fixed, then
+/// Fill shares the content height left after that reservation and the gap
+/// budget (R5). A child fills the content width unless its align_x places it
+/// otherwise. See Row for the slot, padding and gap methods.
 pub struct Column:
     pub use BaseWidget
 
@@ -324,10 +401,21 @@ pub struct Column:
         this.gap = _clampNeg(gap)
     end
 
+    @en "measure"
+    /// Natural extent on axis at max_width, without moving children. The
+    /// mirror of Row.measure: main axis is Y.
+    pub func measure(axis: Axis, max_width: int): Measure:
+        m := _measureLinear(this.items, this.pad, this.gap, false, axis, max_width)
+        this._note_measure()
+        ret m
+    end
+
     @en "set_bounds"
-    /// Stores the container's own rect (normalised), then lays out and moves
-    /// every child in slot order (R1). Overrides the BaseWidget default.
+    /// Stores the container's own rect (normalised), measures, then lays out
+    /// and moves every child in slot order (R1). Overrides the BaseWidget
+    /// default.
     pub func set_bounds(bounds: Rect):
+        _enter_pass()
         r := FitRect(bounds, bounds)
         this.BaseWidget.set_bounds(r)
         rects := _arrangeLinear(InsetRect(r, this.pad), this.items, false, this.gap)
@@ -335,6 +423,7 @@ pub struct Column:
             this.items.get(i).child.set_bounds(rects.get(i))
         end
         rects.free()
+        _leave_pass()
     end
 end
 
@@ -408,9 +497,11 @@ pub struct Grid:
     end
 
     @en "set_bounds"
-    /// Stores the container's own rect (normalised), then lays out and moves
-    /// every child in slot order (R1). Overrides the BaseWidget default.
+    /// Stores the container's own rect (normalised), measures, then lays out
+    /// and moves every child in slot order (R1). Overrides the BaseWidget
+    /// default. Grid cannot measure; measure stays the BaseWidget default.
     pub func set_bounds(bounds: Rect):
+        _enter_pass()
         r := FitRect(bounds, bounds)
         this.BaseWidget.set_bounds(r)
         rects := _arrangeGrid(InsetRect(r, this.pad), this.items, this.rows, this.cols)
@@ -418,6 +509,7 @@ pub struct Grid:
             this.items.get(i).child.set_bounds(rects.get(i))
         end
         rects.free()
+        _leave_pass()
     end
 end
 
@@ -479,9 +571,11 @@ pub struct Stack:
     end
 
     @en "set_bounds"
-    /// Stores the container's own rect (normalised), then lays out and moves
-    /// every child in slot order (R1). Overrides the BaseWidget default.
+    /// Stores the container's own rect (normalised), measures, then lays out
+    /// and moves every child in slot order (R1). Overrides the BaseWidget
+    /// default. Stack cannot measure; measure stays the BaseWidget default.
     pub func set_bounds(bounds: Rect):
+        _enter_pass()
         r := FitRect(bounds, bounds)
         this.BaseWidget.set_bounds(r)
         rects := _arrangeStack(InsetRect(r, this.pad), this.items)
@@ -489,6 +583,7 @@ pub struct Stack:
             this.items.get(i).child.set_bounds(rects.get(i))
         end
         rects.free()
+        _leave_pass()
     end
 end
 
@@ -513,34 +608,137 @@ func _clampNeg(v: int): int:
     ret v
 end
 
-// R8 natural width of a child at max_width. A negative sentinel (the child
-// cannot measure) yields avail; max_width <= 0 yields 0 with no call.
+func _enter_pass():
+    if _layout_depth == 0:
+        _memo.clear()
+    end
+    _layout_depth = _layout_depth + 1
+end
+
+func _leave_pass():
+    _layout_depth = _layout_depth - 1
+end
+
+// mw <= 0 yields a known 0 and calls nothing. Otherwise measure(); ok uses
+// max(0, extent). Not ok falls back to preferred_size, once per
+// (memo_id, axis, mw) this pass. Read _last_memo_id immediately: measure()
+// published this node's id, and the next measure overwrites it.
+func _measured(node: dyn Widget, axis: Axis, mw: int): _Extent:
+    if mw <= 0:
+        ret _Extent { known = true, n = 0 }
+    end
+    m := node.measure(axis, mw)
+    id := _last_memo_id
+    if m.ok:
+        ret _Extent { known = true, n = _clampNeg(m.extent) }
+    end
+    repeat _memo.len() in i:
+        e := _memo.get(i)
+        if e.id == id and e.axis == axis and e.mw == mw:
+            ret _Extent { known = e.known, n = e.n }
+        end
+    end
+    p := node.preferred_size(mw)
+    comp := axis == Axis.X ? p.width : p.height
+    mut known := false
+    mut n := 0
+    if comp >= 0:
+        known = true
+        n = _clampNeg(comp)
+    end
+    _memo.push(_MemoEntry { id = id, axis = axis, mw = mw, known = known, n = n })
+    ret _Extent { known = known, n = n }
+end
+
+// Row/Column natural extent. main_is_x selects Row. Padding is the pair on
+// the measured axis. A childless container has no null operand.
+func _measureLinear(items: Vector<LayoutSlot>, pad: Insets, gap: int, main_is_x: bool, axis: Axis, mw: int): Measure:
+    axis_is_x := axis == Axis.X
+    mut pad_n := _clampNeg(pad.top) + _clampNeg(pad.bottom)
+    if axis_is_x:
+        pad_n = _clampNeg(pad.left) + _clampNeg(pad.right)
+    end
+    if axis_is_x == main_is_x:
+        mut sum := pad_n
+        k := items.len()
+        if k > 1:
+            sum = sum + _clampNeg(gap) * (k - 1)
+        end
+        repeat k in i:
+            s := items.get(i)
+            slot := axis_is_x ? s.width : s.height
+            mut part := 0
+            if slot.kind == SizeKind.Fixed:
+                part = _clampNeg(slot.cells)
+            else:
+                got := _measured(s.child, axis, mw)
+                if not got.known:
+                    ret Measure { ok = false, extent = 0 }
+                end
+                part = got.n
+            end
+            sum = sum + part
+        end
+        ret Measure { ok = true, extent = sum }
+    end
+    mut max_c := 0
+    repeat items.len() in i:
+        got := _measured(items.get(i).child, axis, mw)
+        if not got.known:
+            ret Measure { ok = false, extent = 0 }
+        end
+        if got.n > max_c:
+            max_c = got.n
+        end
+    end
+    ret Measure { ok = true, extent = pad_n + max_c }
+end
+
+// Main-axis sizes passed to SplitMain. Fixed and Fill are unchanged. A
+// measured Pref becomes Fixed(extent) and its weight is dropped. A Pref
+// that cannot measure becomes Fill weight 1. mw is the width forwarded to
+// preferred_size, not the main-axis length.
+func _resolveMain(items: Vector<LayoutSlot>, main_is_width: bool, mw: int): Vector<LayoutSize>:
+    out := Vector {} as Vector<LayoutSize>
+    axis := main_is_width ? Axis.X : Axis.Y
+    repeat items.len() in i:
+        s := items.get(i)
+        slot := main_is_width ? s.width : s.height
+        if slot.kind == SizeKind.Pref:
+            got := _measured(s.child, axis, mw)
+            if got.known:
+                out.push(LayoutSize { kind = SizeKind.Fixed, cells = got.n })
+            else:
+                out.push(LayoutSize { kind = SizeKind.Fill, weight = 1 })
+            end
+        else:
+            out.push(slot)
+        end
+    end
+    ret out
+end
+
+// R8 natural width. Null (cannot measure) yields avail. mw <= 0 yields 0
+// with no call.
 func _naturalWidth(child: dyn Widget, max_width: int, avail: int): int:
-    if max_width <= 0:
-        ret 0
-    end
-    p := child.preferred_size(max_width)
-    if p.width < 0:
+    got := _measured(child, Axis.X, max_width)
+    if not got.known:
         ret avail
     end
-    ret _clampNeg(p.width)
+    ret got.n
 end
 
-// R8 natural height of a child at max_width (the resolved width). A negative
-// sentinel yields avail; max_width <= 0 yields 0 with no call.
+// R8 natural height at max_width (the resolved width). Null yields avail.
 func _naturalHeight(child: dyn Widget, max_width: int, avail: int): int:
-    if max_width <= 0:
-        ret 0
-    end
-    p := child.preferred_size(max_width)
-    if p.height < 0:
+    got := _measured(child, Axis.Y, max_width)
+    if not got.known:
         ret avail
     end
-    ret _clampNeg(p.height)
+    ret got.n
 end
 
-// R7/R8 natural width on a non-stretch cross axis: a Fixed request is taken
-// directly, Fill and Pref both ask the child's preferred_size.
+// R7/R8 natural width on a non-stretch cross axis: Fixed is taken directly.
+// Fill and Pref both measure.
 func _crossWidth(child: dyn Widget, size: LayoutSize, max_width: int, avail: int): int:
     if size.kind == SizeKind.Fixed:
         ret _clampNeg(size.cells)
@@ -548,8 +746,8 @@ func _crossWidth(child: dyn Widget, size: LayoutSize, max_width: int, avail: int
     ret _naturalWidth(child, max_width, avail)
 end
 
-// R7/R8 natural height on a non-stretch cross axis, as _crossWidth for the y
-// axis (max_width is the resolved width).
+// R7/R8 natural height on a non-stretch cross axis, as _crossWidth for Y.
+// max_width is the resolved width.
 func _crossHeight(child: dyn Widget, size: LayoutSize, max_width: int, avail: int): int:
     if size.kind == SizeKind.Fixed:
         ret _clampNeg(size.cells)
@@ -564,16 +762,6 @@ func _prefixTotal(lengths: Vector<int>, index: int, start: int): int:
         acc = acc + lengths.get(k)
     end
     ret acc
-end
-
-// The main-axis sizes of items: widths for a Row, heights for a Column.
-func _slotSizes(items: Vector<LayoutSlot>, width_axis: bool): Vector<LayoutSize>:
-    out := Vector {} as Vector<LayoutSize>
-    repeat items.len() in i:
-        s := items.get(i)
-        out.push(width_axis ? s.width : s.height)
-    end
-    ret out
 end
 
 // Appends a slot for child and returns its index. The shared body of every
@@ -635,24 +823,30 @@ func _slotCell(items &: Vector<LayoutSlot>, i: int, row: int, col: int):
     items.set(i, s)
 end
 
-// R5/R6/R7: the shared Row and Column engine. SplitMain reserves each Fixed
-// size at max(0, cells), subtracts gap * max(0, k - 1) (k counts every slot,
-// including zero-size ones; a negative gap clamps to 0), and shares the
-// leftover by weight among Fill and Pref. Shares are largest-remainder, and
-// a tie goes to the earliest pool slot. A weight sum of 0, or Fixed sizes
-// plus the gap budget that already use up the length, gives every pool entry
-// 0 and does not shrink Fixed. The gap is not refunded on overflow. Slots
-// stay in list order and pack from the content start. The next slot starts
-// at pos + length + gap; there is no gap before the first slot, and the
-// trailing step after the last slot adds no child. Each child fills its
-// margin box on the main axis. The cross axis uses alignment (Stretch by
-// default), ignores weight, and is not inset by gap. main_is_width selects
-// Row (true) or Column (false). Every resulting rect is clipped to content
-// last (R6).
+// R5/R6/R7: the shared Row and Column engine. A measured main-axis Pref is
+// turned into Fixed before SplitMain; a Pref that cannot measure becomes
+// Fill weight 1. SplitMain then reserves each Fixed size at max(0, cells),
+// subtracts gap * max(0, k - 1) (k counts every slot, including zero-size
+// ones; a negative gap clamps to 0), and shares the leftover by weight
+// among Fill and any Pref still in the vector. Shares are largest-remainder,
+// and a tie goes to the earliest pool slot. A weight sum of 0, or reserved
+// sizes plus the gap budget that already use up the length, gives every
+// pool entry 0 and does not shrink Fixed or a measured Pref. The gap is not
+// refunded on overflow. Slots stay in list order and pack from the content
+// start. The next slot starts at pos + length + gap; there is no gap before
+// the first slot, and the trailing step after the last slot adds no child.
+// Each child fills its margin box on the main axis. The cross axis uses
+// alignment (Stretch by default), ignores weight, and is not inset by gap.
+// x is measured at box.width before y is measured at the resolved width.
+// main_is_width selects Row (true) or Column (false). Every resulting rect
+// is clipped to content last (R6).
 func _arrangeLinear(content: Rect, items: Vector<LayoutSlot>, main_is_width: bool, gap: int): Vector<Rect>:
     g := _clampNeg(gap)
-    sizes := _slotSizes(items, main_is_width)
-    lengths := SplitMain(main_is_width ? content.width : content.height, sizes, g)
+    length := main_is_width ? content.width : content.height
+    // preferred_size takes a width. A Column's cross size is content.width,
+    // known before the split. Passing length would forward content.height.
+    sizes := _resolveMain(items, main_is_width, content.width)
+    lengths := SplitMain(length, sizes, g)
     out := Vector {} as Vector<Rect>
     mut pos := main_is_width ? content.x : content.y
     repeat items.len() in i:
@@ -778,7 +972,10 @@ end
 /// adjacent slots. A negative gap clamps to 0. The budget is
 /// gap * max(0, k - 1), where k is the slot count, including zero-size slots;
 /// k <= 1 charges nothing. Fill and Pref share the leftover
-/// R = max(0, length - sum of those Fixed sizes - budget). Each pool entry's
+/// R = max(0, length - sum of those Fixed sizes - budget). Arrange resolves
+/// a measured Pref to Fixed before this call, and a Pref that cannot measure
+/// to Fill weight 1. This function does not measure; a Pref still in the
+/// vector stays in the weight pool. Each pool entry's
 /// weight is max(0, weight). The share is floor(R * weight / sum of weights),
 /// then one extra cell goes to each remaining cell, given to the pool entries
 /// with the largest (R * weight) mod sum of weights. Ties go to the earliest

@@ -27,10 +27,13 @@
 //
 // The container smoke exercises the R1 recursion (a Column containing a Row
 // is moved by one set_bounds), R5 packing, R10 grid cells including an
-// out-of-range cell, R11 stack overlap, R8 Pref through Text and through a
-// child container (which cannot measure and fills the axis), R12 empty
-// propagation, and R13 idempotence. The full per-AC matrix is a later stage.
+// out-of-range cell, R11 stack overlap, R8 Pref through Text, a measurable
+// container's natural cross extent, and an unmeasurable child that still
+// fills the axis, R12 empty propagation, and R13 idempotence. Main-axis Pref
+// reserves a measured size and degrades to Fill weight 1 when it cannot
+// measure. The full per-AC matrix is a later stage.
 
+import mem
 import testing
 
 include "../basalam/basalam.salam"
@@ -69,6 +72,62 @@ end
 // AssertMeasure measures normally but fails the test if the engine ever
 // forwards a non-positive max_width: R8 says that is never forwarded, the
 // axis resolves to 0 with no call.
+// CountSizer reports a fixed preferred size and records each preferred_size
+// call. calls[0] is the count; calls[1..] are the max_width values, in order.
+// The pointer is shared with the dyn copy because an int* is not deep-copied.
+struct CountSizer:
+    pub use basalam.BaseWidget
+
+    pub w: int = 0
+    pub h: int = 0
+    pub calls: int* = null
+
+    pub func preferred_size(max_width: int): basalam.Rect:
+        if this.calls != null:
+            n := this.calls[0]
+            if n < 8:
+                this.calls[n + 1] = max_width
+            end
+            this.calls[0] = n + 1
+        end
+        ret basalam.Rect { width = this.w, height = this.h }
+    end
+
+    pub func render(buf: basalam.Buffer, b: basalam.Rect):
+        _ := buf
+        _ := b
+    end
+end
+
+// WrapSizer's height depends on max_width. A wide measure is one line; a
+// narrow one wraps to three. calls is shared with the dyn copy. calls[0] is
+// the count; calls[1..] are the max_width values, in order.
+struct WrapSizer:
+    pub use basalam.BaseWidget
+
+    pub calls: int* = null
+
+    pub func preferred_size(max_width: int): basalam.Rect:
+        if this.calls != null:
+            n := this.calls[0]
+            if n < 8:
+                this.calls[n + 1] = max_width
+            end
+            this.calls[0] = n + 1
+        end
+        mut h := 1
+        if max_width < 16:
+            h = 3
+        end
+        ret basalam.Rect { width = 4, height = h }
+    end
+
+    pub func render(buf: basalam.Buffer, b: basalam.Rect):
+        _ := buf
+        _ := b
+    end
+end
+
 struct AssertMeasure:
     pub use basalam.BaseWidget
 
@@ -300,7 +359,9 @@ func test_split_negative_fixed():
 end
 
 func test_split_pref_counts_as_fill():
-    // On a main axis Pref is reserved and acts as Fill (R8).
+    // Arrange resolves a measured Pref to a Fixed reservation before calling
+    // SplitMain. A null Pref becomes Fill weight 1. SplitMain itself does not
+    // measure: an unresolved Pref stays in the weight pool (11, 10).
     sizes := Vector {} as Vector<basalam.LayoutSize>
     sizes.push(prefSize())
     sizes.push(fillSize())
@@ -767,12 +828,29 @@ end
 
 func test_pref_container_yields_avail():
     outer := basalam.NewRow()
-    innerd := basalam.NewRow() as dyn basalam.Widget
+    inner := basalam.NewRow()
+    s := sizer(3, 2)
+    _ := inner.add(s)
+    innerd := inner as dyn basalam.Widget
     i := outer.add(innerd)
     outer.set_align(i, basalam.CrossAlign.Stretch, basalam.CrossAlign.Center)
     outer.set_bounds(rect(0, 0, 8, 5))
-    // A container cannot measure: the sentinel fills the axis (avail 5).
-    checkRect(innerd.bounds(), 0, 0, 8, 5)
+    // Inner Row measures: natural cross extent is the sizer's height 2.
+    // free = 5 - 2, centre offset 1.
+    checkRect(innerd.bounds(), 0, 1, 8, 2)
+    checkRect(s.bounds(), 0, 1, 8, 2)
+
+    // A Leaf cannot measure, so the inner Row cannot, and the cross axis fills.
+    blank := basalam.NewRow()
+    leafc := leaf()
+    _ := blank.add(leafc)
+    blankd := blank as dyn basalam.Widget
+    outer2 := basalam.NewRow()
+    j := outer2.add(blankd)
+    outer2.set_align(j, basalam.CrossAlign.Stretch, basalam.CrossAlign.Center)
+    outer2.set_bounds(rect(0, 0, 8, 5))
+    checkRect(blankd.bounds(), 0, 0, 8, 5)
+    checkRect(leafc.bounds(), 0, 0, 8, 5)
 end
 
 func test_empty_content():
@@ -1207,12 +1285,232 @@ end
 
 func test_main_pref_acts_as_fill():
     row := basalam.NewRow()
-    a := leaf()
+    a := sizer(4, 2)
     i := row.add(a)
     row.set_width(i, prefSize())
     row.set_bounds(rect(0, 0, 10, 4))
-    // Pref on the main axis is reserved: it takes the share like Fill.
-    checkRect(a.bounds(), 0, 0, 10, 4)
+    // Measured Pref reserves 4. No Fill slot, so the leftover 6 stays unused.
+    checkRect(a.bounds(), 0, 0, 4, 4)
+
+    // Unmeasurable Pref degrades to Fill weight 1 and takes the whole row.
+    row2 := basalam.NewRow()
+    b := leaf()
+    j := row2.add(b)
+    row2.set_width(j, prefSize())
+    row2.set_bounds(rect(0, 0, 10, 4))
+    checkRect(b.bounds(), 0, 0, 10, 4)
+end
+
+func test_row_pref_then_fill():
+    // L=20: Pref 16, Pref 2, Fill -> R=2 -> 16, 2, 2.
+    row := basalam.NewRow()
+    a := sizer(16, 1)
+    b := sizer(2, 1)
+    c := leaf()
+    ia := row.add(a)
+    ib := row.add(b)
+    _ := row.add(c)
+    row.set_width(ia, prefSize())
+    row.set_width(ib, prefSize())
+    row.set_bounds(rect(0, 0, 20, 3))
+    checkRect(a.bounds(), 0, 0, 16, 3)
+    checkRect(b.bounds(), 16, 0, 2, 3)
+    checkRect(c.bounds(), 18, 0, 2, 3)
+end
+
+func test_row_pref_overflow_clip():
+    // L=10: Pref 10, Pref 2, Fixed 4, Fill. Reserved 16 > 10, so R=0 and the
+    // Fill is 0. FitRect anchors anything past the content edge at x=10.
+    row := basalam.NewRow()
+    a := sizer(10, 1)
+    b := sizer(2, 1)
+    c := leaf()
+    d := leaf()
+    ia := row.add(a)
+    ib := row.add(b)
+    ic := row.add(c)
+    _ := row.add(d)
+    row.set_width(ia, prefSize())
+    row.set_width(ib, prefSize())
+    row.set_width(ic, fixedSize(4))
+    row.set_bounds(rect(0, 0, 10, 3))
+    checkRect(a.bounds(), 0, 0, 10, 3)
+    checkRect(b.bounds(), 10, 0, 0, 0)
+    checkRect(c.bounds(), 10, 0, 0, 0)
+    checkRect(d.bounds(), 10, 0, 0, 0)
+end
+
+func test_column_measured_pref():
+    // L=9: container natural height 3, Pref 1, Fill -> R=5 -> 3, 1, 5.
+    col := basalam.NewColumn()
+    inner := basalam.NewRow()
+    s := sizer(2, 3)
+    _ := inner.add(s)
+    innerd := inner as dyn basalam.Widget
+    one := sizer(1, 1)
+    fill := leaf()
+    i0 := col.add(innerd)
+    i1 := col.add(one)
+    _ := col.add(fill)
+    col.set_height(i0, prefSize())
+    col.set_height(i1, prefSize())
+    col.set_bounds(rect(0, 0, 6, 9))
+    checkRect(innerd.bounds(), 0, 0, 6, 3)
+    checkRect(s.bounds(), 0, 0, 6, 3)
+    checkRect(one.bounds(), 0, 3, 6, 1)
+    checkRect(fill.bounds(), 0, 4, 6, 5)
+end
+
+func test_column_pref_measures_at_width():
+    // Column is 8 wide and 30 tall. Main-axis Pref must see max_width 8, not
+    // 30. At width 8 the child reports height 3; at width 30 it would report 1.
+    calls := mem.AllocateZeroed((4 as u64) * sizeof(int)) as int*
+    child := WrapSizer { calls = calls } as dyn basalam.Widget
+    col := basalam.NewColumn()
+    i := col.add(child)
+    col.set_height(i, prefSize())
+    col.set_bounds(rect(0, 0, 8, 30))
+    testing.AssertEqInt(calls[0], 1)
+    testing.AssertEqInt(calls[1], 8)
+    checkRect(child.bounds(), 0, 0, 8, 3)
+    mem.Free(calls as void*)
+end
+
+func test_pref_weight_ignored_when_measured():
+    // Pref 6 (weight 9) is reserved first, then Fixed 4, then R=10 shared
+    // 1:3. Tie on the remainder goes to the earlier Fill: 3, 7.
+    row := basalam.NewRow()
+    a := sizer(6, 1)
+    b := leaf()
+    c := leaf()
+    d := leaf()
+    ia := row.add(a)
+    ib := row.add(b)
+    ic := row.add(c)
+    id := row.add(d)
+    row.set_width(ia, prefWeight(9))
+    row.set_width(ib, fixedSize(4))
+    row.set_width(ic, fillWeight(1))
+    row.set_width(id, fillWeight(3))
+    row.set_bounds(rect(0, 0, 20, 2))
+    checkRect(a.bounds(), 0, 0, 6, 2)
+    checkRect(b.bounds(), 6, 0, 4, 2)
+    checkRect(c.bounds(), 10, 0, 3, 2)
+    checkRect(d.bounds(), 13, 0, 7, 2)
+end
+
+func test_nested_pref_measure():
+    // Inner Row measure composes: 4 + 5 + gap 2 = 11, reserved by the outer.
+    outer := basalam.NewRow()
+    inner := basalam.NewRow()
+    inner.set_gap(2)
+    a := sizer(4, 1)
+    b := sizer(5, 1)
+    ia := inner.add(a)
+    ib := inner.add(b)
+    inner.set_width(ia, prefSize())
+    inner.set_width(ib, prefSize())
+    innerd := inner as dyn basalam.Widget
+    fill := leaf()
+    oi := outer.add(innerd)
+    _ := outer.add(fill)
+    outer.set_width(oi, prefSize())
+    outer.set_bounds(rect(0, 0, 20, 4))
+    checkRect(innerd.bounds(), 0, 0, 11, 4)
+    checkRect(fill.bounds(), 11, 0, 9, 4)
+    checkRect(a.bounds(), 0, 0, 4, 4)
+    checkRect(b.bounds(), 6, 0, 5, 4)
+end
+
+func test_pref_grid_stack_null():
+    // A Grid or Stack cannot measure, so a main-axis Pref degrades to Fill
+    // weight 1. Same split as a Fill beside another Fill.
+    row := basalam.NewRow()
+    g := basalam.NewGrid(1, 1) as dyn basalam.Widget
+    a := leaf()
+    ig := row.add(g)
+    _ := row.add(a)
+    row.set_width(ig, prefSize())
+    row.set_bounds(rect(0, 0, 12, 2))
+    checkRect(g.bounds(), 0, 0, 6, 2)
+    checkRect(a.bounds(), 6, 0, 6, 2)
+
+    rowf := basalam.NewRow()
+    gf := basalam.NewGrid(1, 1) as dyn basalam.Widget
+    af := leaf()
+    _ := rowf.add(gf)
+    _ := rowf.add(af)
+    rowf.set_bounds(rect(0, 0, 12, 2))
+    checkRect(gf.bounds(), 0, 0, 6, 2)
+    checkRect(af.bounds(), 6, 0, 6, 2)
+
+    rows := basalam.NewRow()
+    st := basalam.NewStack() as dyn basalam.Widget
+    b := leaf()
+    is := rows.add(st)
+    _ := rows.add(b)
+    rows.set_width(is, prefSize())
+    rows.set_bounds(rect(0, 0, 12, 2))
+    checkRect(st.bounds(), 0, 0, 6, 2)
+    checkRect(b.bounds(), 6, 0, 6, 2)
+end
+
+func test_measure_x_before_y():
+    // Main-axis Pref measures x at the content width (20). Cross-axis y then
+    // sees the resolved slot width (6), not 20.
+    calls := mem.AllocateZeroed((9 as u64) * sizeof(int)) as int*
+    a := CountSizer { w = 6, h = 2, calls = calls } as dyn basalam.Widget
+    row := basalam.NewRow()
+    i := row.add(a)
+    row.set_width(i, prefSize())
+    row.set_height(i, prefSize())
+    row.set_align(i, basalam.CrossAlign.Stretch, basalam.CrossAlign.Start)
+    row.set_bounds(rect(0, 0, 20, 10))
+    testing.AssertEqInt(calls[0], 2)
+    testing.AssertEqInt(calls[1], 20)
+    testing.AssertEqInt(calls[2], 6)
+    checkRect(a.bounds(), 0, 0, 6, 2)
+    mem.Free(calls as void*)
+end
+
+func test_measure_memo_once():
+    // Outer measure and the nested set_bounds both want (child, X, 20).
+    // One pass, one preferred_size. A second set_bounds is a new pass.
+    calls := mem.AllocateZeroed((4 as u64) * sizeof(int)) as int*
+    child := CountSizer { w = 20, h = 1, calls = calls } as dyn basalam.Widget
+    inner := basalam.NewRow()
+    i := inner.add(child)
+    inner.set_width(i, prefSize())
+    outer := basalam.NewRow()
+    o := outer.add(inner as dyn basalam.Widget)
+    outer.set_width(o, prefSize())
+    outer.set_bounds(rect(0, 0, 20, 4))
+    testing.AssertEqInt(calls[0], 1)
+    checkRect(child.bounds(), 0, 0, 20, 4)
+    child.set_bounds(rect(3, 3, 1, 1))
+    checkRect(child.bounds(), 3, 3, 1, 1)
+    outer.set_bounds(rect(0, 0, 20, 4))
+    testing.AssertEqInt(calls[0], 2)
+    checkRect(child.bounds(), 0, 0, 20, 4)
+    mem.Free(calls as void*)
+end
+
+func test_gap_reserved_pref():
+    // Gap 2 still sits between reserved Pref slots. budget 4, R = 20-10-4 = 6.
+    row := basalam.NewRow()
+    row.set_gap(2)
+    a := sizer(6, 1)
+    b := sizer(4, 1)
+    c := leaf()
+    ia := row.add(a)
+    ib := row.add(b)
+    _ := row.add(c)
+    row.set_width(ia, prefSize())
+    row.set_width(ib, prefSize())
+    row.set_bounds(rect(0, 0, 20, 3))
+    checkRect(a.bounds(), 0, 0, 6, 3)
+    checkRect(b.bounds(), 8, 0, 4, 3)
+    checkRect(c.bounds(), 14, 0, 6, 3)
 end
 
 func test_cross_fill_means_pref():
@@ -1622,6 +1920,16 @@ func main:
     test_pref_row_resolved_width_i2()
     test_pref_nonpositive_never_forwarded()
     test_main_pref_acts_as_fill()
+    test_row_pref_then_fill()
+    test_row_pref_overflow_clip()
+    test_column_measured_pref()
+    test_column_pref_measures_at_width()
+    test_pref_weight_ignored_when_measured()
+    test_nested_pref_measure()
+    test_pref_grid_stack_null()
+    test_measure_x_before_y()
+    test_measure_memo_once()
+    test_gap_reserved_pref()
     test_cross_fill_means_pref()
     test_normal_form_outputs()
     test_draw_containers_smoke()

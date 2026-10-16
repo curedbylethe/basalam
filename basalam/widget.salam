@@ -18,15 +18,16 @@
  *
  * basalam is retained mode: a widget is a long-lived value that holds its
  * own state, and the screen asks it to draw itself and to react to events.
- * The Widget interface is the whole contract; anything that has these seven
+ * The Widget interface is the whole contract; anything that has these eight
  * methods is a widget (Salam interfaces are structural: there is no
  * `implements`). A list, a button, and a panel are all Widgets, so the
  * screen stores them side by side as `dyn Widget`.
  *
- * preferred_size is the measurement hook the layout engine reads to size a
- * child by preference. It is separate from drawing and reports a size at a
- * given maximum width; a widget that cannot measure reports so with a
- * negative sentinel, and the engine fills the available space instead.
+ * preferred_size is the leaf measurement hook: a size at a given maximum
+ * width. A widget that cannot measure reports a negative sentinel, and the
+ * engine fills the available space instead. measure is the container hook.
+ * It returns ok false when the widget cannot measure, and the engine then
+ * reads preferred_size. Leaves keep the BaseWidget default.
  *
  * BaseWidget supplies a default for every method. Embed it with `use` and
  * override only what your widget needs:
@@ -58,6 +59,12 @@
  */
 
 package basalam
+
+// dyn Widget cannot be compared or downcast, so it cannot key the layout
+// memo. measure() assigns memo_id and publishes it here; the caller reads
+// _last_memo_id immediately, before any other measure.
+mut _next_memo_id := 0
+mut _last_memo_id := 0
 
 @en "Widget"
 /// The interface every widget satisfies. Store widgets as `dyn Widget`.
@@ -98,6 +105,12 @@ pub interface Widget:
     /// a rect with negative width and height as a sentinel; the layout
     /// engine reads that as "no preference" and fills the axis instead.
     func preferred_size(max_width: int): Rect
+
+    @en "measure"
+    /// Natural extent along axis at max_width. ok is false when this widget
+    /// cannot measure; the layout engine then reads preferred_size. extent
+    /// is the length in cells when ok is true. Must not call set_bounds.
+    func measure(axis: Axis, max_width: int): Measure
 end
 
 @en "BaseWidget"
@@ -110,6 +123,10 @@ pub struct BaseWidget:
     /// Storage for bounds() and set_bounds(). Embedding widgets can read it
     /// directly as this.rect.
     pub rect: Rect = Rect {}
+
+    // Stable id for the layout pass memo. 0 means not assigned yet. The pass
+    // clears the memo table, not this id.
+    memo_id: int = 0
 
     @en "render"
     /// Draws nothing.
@@ -158,5 +175,28 @@ pub struct BaseWidget:
     pub func preferred_size(max_width: int): Rect:
         _ := max_width
         ret Rect { width = -1, height = -1 }
+    end
+
+    @en "measure"
+    /// Cannot measure: ok is false and extent is 0. The layout engine then
+    /// reads preferred_size. Containers that can report a natural extent
+    /// override it.
+    pub func measure(axis: Axis, max_width: int): Measure:
+        _ := axis
+        _ := max_width
+        this._note_measure()
+        ret Measure { ok = false, extent = 0 }
+    end
+
+    @en "_note_measure"
+    /// Publishes this widget as the node just measured. Row and Column call
+    /// it before measure returns so the layout memo keys the fallback to this
+    /// node. Not part of the layout result.
+    pub func _note_measure():
+        if this.memo_id == 0:
+            _next_memo_id = _next_memo_id + 1
+            this.memo_id = _next_memo_id
+        end
+        _last_memo_id = this.memo_id
     end
 end
