@@ -42,6 +42,16 @@ struct Field:
     end
 end
 
+// Grab consumes the "r" key and nothing else, to prove widget consumption
+// wins over a keymap binding for the same key.
+struct Grab:
+    pub use basalam.BaseWidget
+
+    pub func handle_event(event: basalam.Event): bool:
+        ret event.is_char("r")
+    end
+end
+
 // A headless screen the keymap can be pointed at. handle takes a
 // basalam.Screen*; a free function cannot take `&screen` and Vector.ref is
 // the only way to address a value in Salam, so the screen lives in a
@@ -102,6 +112,30 @@ end
 // act_next_consume returns an action that advances the focus and returns true.
 func act_next_consume(): func (basalam.Screen*, basalam.Event) bool:
     ret (screen: basalam.Screen*, event: basalam.Event): ret screen[0].focus_next() end
+end
+
+// new_focus_map returns a fresh keymap that binds b to moving the focus to id;
+// the mode-switch tests install it from inside an action.
+func new_focus_map(id: int): basalam.Keymap:
+    mut km := basalam.NewKeymap()
+    km.bind(term.Decode("b"), action_focus(id))
+    ret km
+end
+
+// swap_consume installs a new keymap on the screen and reports the key as
+// consumed. It is called from inside an action, while handle runs on the map
+// being freed.
+func swap_consume(screen: basalam.Screen*, id: int): bool:
+    screen[0].set_keymap(new_focus_map(id))
+    ret true
+end
+
+// swap_decline is swap_consume but reports the key as unconsumed, exercising
+// the re-entrancy guarantee that handle touches no trie state after an invoked
+// action, even one that swapped the map out from under it.
+func swap_decline(screen: basalam.Screen*, id: int): bool:
+    screen[0].set_keymap(new_focus_map(id))
+    ret false
 end
 
 func test_single_hit_and_miss():
@@ -398,6 +432,165 @@ func test_declined_completion_stops():
     testing.AssertEqInt(r.focused(), w2)
 end
 
+func test_dispatch_empty_keymap_inert():
+    mut s := basalam.NewScreen(Root {}, 20, 5)
+    defer s.close()
+    s.add(basalam.RootId, Field {})
+    s.dirty = false
+
+    // The default keymap is empty: dispatch behaves exactly as before.
+    testing.AssertFalse(s.dispatch(key("a")))
+    testing.AssertFalse(s.dirty)
+    // An explicitly installed empty map is inert too.
+    s.set_keymap(basalam.NewKeymap())
+    testing.AssertFalse(s.dispatch(key("a")))
+end
+
+func test_dispatch_keymap_fallback():
+    mut s := basalam.NewScreen(Root {}, 20, 5)
+    defer s.close()
+    w1 := s.add(basalam.RootId, Field {})
+    w2 := s.add(basalam.RootId, Field {})
+    s.keymap.bind(term.Decode("\t"), action_focus(w2))
+
+    testing.AssertEqInt(s.focused_id(), w1)
+    s.dirty = false
+    // No widget consumes Tab, so the keymap fallback consumes it and the
+    // screen is marked dirty.
+    testing.AssertTrue(s.dispatch(key("\t")))
+    testing.AssertEqInt(s.focused_id(), w2)
+    testing.AssertTrue(s.dirty)
+    // An unbound key still falls through to nothing.
+    s.dirty = false
+    testing.AssertFalse(s.dispatch(key("z")))
+    testing.AssertFalse(s.dirty)
+end
+
+func test_widget_consumption_beats_keymap():
+    mut s := basalam.NewScreen(Grab {}, 20, 5)
+    defer s.close()
+    w1 := s.add(basalam.RootId, Field {})
+    w2 := s.add(basalam.RootId, Field {})
+    s.keymap.bind(term.Decode("r"), action_focus(w2))
+
+    // Grab (the root) consumes "r", so the keymap fallback never runs and the
+    // action does not move the focus.
+    testing.AssertTrue(s.dispatch(key("r")))
+    testing.AssertEqInt(s.focused_id(), w1)
+end
+
+func test_scoped_binding_through_dispatch():
+    mut s := basalam.NewScreen(Root {}, 40, 10)
+    defer s.close()
+    outer := s.add(basalam.RootId, Field {})
+    inner := s.add(outer, Field {})
+    other := s.add(basalam.RootId, Field {})
+    t_inner := s.add(basalam.RootId, Field {})
+    t_outer := s.add(basalam.RootId, Field {})
+    t_global := s.add(basalam.RootId, Field {})
+    mut km := basalam.NewKeymap()
+    km.bind(term.Decode("a"), action_focus(t_global))
+    km.bind_for(outer, term.Decode("a"), action_focus(t_outer))
+    km.bind_for(inner, term.Decode("a"), action_focus(t_inner))
+    s.set_keymap(km)
+
+    // Focus inside inner: the nearest scope (inner) wins.
+    testing.AssertTrue(s.focus(inner))
+    testing.AssertTrue(s.dispatch(key("a")))
+    testing.AssertEqInt(s.focused_id(), t_inner)
+    // Focus on outer directly: outer beats the global binding.
+    testing.AssertTrue(s.focus(outer))
+    testing.AssertTrue(s.dispatch(key("a")))
+    testing.AssertEqInt(s.focused_id(), t_outer)
+    // Focus outside both scopes: only the global binding applies.
+    testing.AssertTrue(s.focus(other))
+    testing.AssertTrue(s.dispatch(key("a")))
+    testing.AssertEqInt(s.focused_id(), t_global)
+end
+
+func test_ctrl_c_with_pending_is_unconsumed():
+    mut s := basalam.NewScreen(Root {}, 20, 5)
+    defer s.close()
+    w1 := s.add(basalam.RootId, Field {})
+    w2 := s.add(basalam.RootId, Field {})
+    s.keymap.bind_seq("gg", action_focus(w2))
+
+    testing.AssertFalse(s.dispatch(key("g")))
+    // Ctrl+C is unbound: dispatch returns false, so run()'s auto-stop fires.
+    testing.AssertFalse(s.dispatch(key("\x03")))
+    testing.AssertEqInt(s.focused_id(), w1)
+    // The pending prefix was reset cleanly: a fresh gg completes.
+    testing.AssertFalse(s.dispatch(key("g")))
+    testing.AssertTrue(s.dispatch(key("g")))
+    testing.AssertEqInt(s.focused_id(), w2)
+end
+
+func test_non_key_events_leave_pending():
+    mut s := basalam.NewScreen(Root {}, 20, 5)
+    defer s.close()
+    w1 := s.add(basalam.RootId, Field {})
+    w2 := s.add(basalam.RootId, Field {})
+    s.keymap.bind_seq("gg", action_focus(w2))
+
+    testing.AssertFalse(s.dispatch(key("g")))
+    testing.AssertFalse(s.dispatch(basalam.Event { kind = basalam.TickEvent }))
+    testing.AssertFalse(s.dispatch(basalam.Event { kind = basalam.ResizeEvent, width = 21, height = 6 }))
+    testing.AssertFalse(s.dispatch(basalam.Event { kind = basalam.MouseEvent }))
+    testing.AssertEqInt(s.focused_id(), w1)
+    // The tick, resize, and mouse never reached the keymap: gg still completes.
+    testing.AssertTrue(s.dispatch(key("g")))
+    testing.AssertEqInt(s.focused_id(), w2)
+end
+
+func test_mode_switch_in_action_consumes():
+    mut s := basalam.NewScreen(Root {}, 20, 5)
+    defer s.close()
+    w1 := s.add(basalam.RootId, Field {})
+    w3 := s.add(basalam.RootId, Field {})
+    s.keymap.bind(term.Decode("a"), (screen: basalam.Screen*, event: basalam.Event): ret swap_consume(screen, w3) end)
+
+    testing.AssertTrue(s.dispatch(key("a")))
+    testing.AssertEqInt(s.focused_id(), w1)
+    // The swapped-in map is intact and routes the next event.
+    testing.AssertTrue(s.dispatch(key("b")))
+    testing.AssertEqInt(s.focused_id(), w3)
+    // The old map (and its "a" binding) is gone.
+    testing.AssertFalse(s.dispatch(key("a")))
+end
+
+func test_mode_switch_in_action_declines():
+    mut s := basalam.NewScreen(Root {}, 20, 5)
+    defer s.close()
+    w1 := s.add(basalam.RootId, Field {})
+    w3 := s.add(basalam.RootId, Field {})
+    s.keymap.bind(term.Decode("a"), (screen: basalam.Screen*, event: basalam.Event): ret swap_decline(screen, w3) end)
+
+    // The action frees the map it is running on and then declines; dispatch
+    // must not crash and must return false.
+    testing.AssertFalse(s.dispatch(key("a")))
+    testing.AssertEqInt(s.focused_id(), w1)
+    // The swapped-in map is uncorrupted and routes the next event.
+    testing.AssertTrue(s.dispatch(key("b")))
+    testing.AssertEqInt(s.focused_id(), w3)
+    testing.AssertFalse(s.dispatch(key("a")))
+end
+
+func test_run_with_tick_uses_keymap():
+    mut s := basalam.NewScreen(Root {}, 20, 5)
+    defer s.close()
+    _ := s.add(basalam.RootId, Field {})
+    w2 := s.add(basalam.RootId, Field {})
+    s.keymap.bind(term.Decode("\t"), action_focus(w2))
+    _ := s.post(key("\t"))
+    // An unconsumed Ctrl+C ends the loop, so the keymap moves the focus and
+    // then run_with_tick stops.
+    _ := s.post(key("\x03"))
+    s.run_with_tick((): ret end)
+
+    testing.AssertFalse(s.running)
+    testing.AssertEqInt(s.focused_id(), w2)
+end
+
 func main:
     test_single_hit_and_miss()
     test_rebind_last_write_wins()
@@ -415,5 +608,14 @@ func main:
     test_space_is_not_ctrl_space()
     test_declined_mismatch_stops()
     test_declined_completion_stops()
+    test_dispatch_empty_keymap_inert()
+    test_dispatch_keymap_fallback()
+    test_widget_consumption_beats_keymap()
+    test_scoped_binding_through_dispatch()
+    test_ctrl_c_with_pending_is_unconsumed()
+    test_non_key_events_leave_pending()
+    test_mode_switch_in_action_consumes()
+    test_mode_switch_in_action_declines()
+    test_run_with_tick_uses_keymap()
     ret testing.Summary()
 end

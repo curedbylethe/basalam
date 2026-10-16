@@ -47,8 +47,18 @@
  * buf.focused set. Every focus change marks the screen dirty, so the next
  * present() redraws both the old and the new focus indicator. Linear
  * (focus_next/prev) and spatial (focus_up/down/left/right, see
- * focus.salam) navigation are methods here; binding them to keys is the
- * application's job.
+ * focus.salam) navigation are methods here; an application binds them to
+ * keys through the opt-in keymap.
+ *
+ * Keymap fallback. A screen carries an opt-in Keymap (see keymap.salam). For
+ * an event the widget chain does not consume, dispatch offers KeyEvents to
+ * the keymap; nothing else, and never before the widgets. That order means
+ * the keymap sees only keys no widget consumed, scoped bindings included:
+ * bind_for(input_id, Enter, ...) never fires, because Input consumes Enter.
+ * Non-key events (tick, resize, mouse) never reach the keymap, so a pending
+ * key sequence survives them. An empty keymap is inert. Install or replace a
+ * whole map with set_keymap; binding through the keymap field extends the
+ * current map in place.
  *
  * Mouse routing. A decoded MouseEvent starts at the widget under the
  * cursor instead of the focused one: hit_test finds the topmost widget
@@ -74,9 +84,9 @@
  * one size query per wakeup. If Salam gains signal support, only
  * input_loop needs to change.
  *
- * Deliberate gaps: no key bindings (the application decides what Tab or q
- * mean; a keymap is a later epic), no vim-style modes (an application
- * concern).
+ * Deliberate gaps: no key bindings are installed by default (NewScreen and
+ * start() add none; an application installs or extends a keymap itself), no
+ * vim-style modes (an application concern, built on set_keymap).
  *
  * Compiler workaround. The issue specifies `events: chan Event`. Salam
  * 0.4.9 and the 0.5.0 nightly cannot spell chan.Chan<Event> inside the
@@ -163,6 +173,14 @@ pub struct Screen:
     /// When true, start() enables mouse reporting and clicks arrive as
     /// MouseEvents. Set it before start().
     pub mouse: bool = false
+
+    @en "keymap"
+    /// The opt-in key bindings, consulted as a dispatch fallback for KeyEvents
+    /// no widget consumed. Empty by default, so an app that never touches it
+    /// behaves exactly as before. Bind through this field to extend it in
+    /// place, or install a whole map with set_keymap. Never assign a Keymap
+    /// directly: it would leak the current map's buffers.
+    pub keymap: Keymap = Keymap {}
 
     @en "dirty"
     /// True when the next present() has something new to show. Set by
@@ -337,8 +355,9 @@ pub struct Screen:
     /// screen. A decoded MouseEvent then goes to the widget under the
     /// cursor (see hit_test); every other event, and a mouse event with no
     /// widget under it, goes to the focused widget. From that first widget
-    /// the event bubbles up the tree. Returns true when a widget consumed
-    /// it.
+    /// the event bubbles up the tree. An unconsumed KeyEvent is then offered
+    /// to the keymap fallback. Returns true when a widget or the keymap
+    /// consumed it.
     pub func dispatch(event: Event): bool:
         if event.kind == ResizeEvent:
             this.resize(event.width, event.height)
@@ -351,11 +370,26 @@ pub struct Screen:
                 from = hit
             end
         end
-        consumed := this.tree.dispatch(from, event) != NoWidget
+        mut consumed := this.tree.dispatch(from, event) != NoWidget
+        if not consumed and event.kind == KeyEvent:
+            consumed = this.keymap.handle(this, event)
+        end
         if consumed:
             this.dirty = true
         end
         ret consumed
+    end
+
+    @en "set_keymap"
+    /// Replaces the screen's keymap with km. Frees the current map's buffers
+    /// first, so this is the only safe way to swap a Keymap (assigning to the
+    /// field directly leaks the old one). The new map starts with no pending
+    /// sequence. Ownership of km transfers to the screen: the caller must not
+    /// free or use it afterward. Intended for mode switches and for installing
+    /// a freshly built map.
+    pub func set_keymap(km: Keymap):
+        this.keymap.free()
+        this.keymap = km
     end
 
     @en "draw"
@@ -469,6 +503,7 @@ pub struct Screen:
         this.tree.free()
         this.buffer.free()
         this.focus_stack.free()
+        this.keymap.free()
     end
 
     @en "run"
