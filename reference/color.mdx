@@ -1,0 +1,202 @@
+---
+title: "Color"
+description: "The terminal color value type: the four color kinds, their SGR encodings, capability detection, and the downgrade ladder."
+keywords: ["color", "colour", "sgr", "ansi", "truecolor", "rgb", "256 color", "palette", "tier", "downgrade"]
+---
+
+`Color` is the terminal color value type. It covers the four kinds a terminal understands — its own default, the 16-color ANSI palette, the 256-color palette, and 24-bit truecolor — and encodes each to the exact escape sequence the terminal reads. It is the value half of the styling work; nothing carries it yet.
+
+<Note>
+  The `Color` type exists, but cells and widgets do not use it yet: `Cell.style` and the widget style fields are still raw SGR strings built with `std/term`. The [Style](/reference/text#style) struct that will carry colors is still to come.
+</Note>
+
+## Color
+
+`Color` is a payload enum: each value carries only the data its kind needs.
+
+```salam
+pub enum Color:
+    Default
+    Ansi(n: int)
+    Indexed(n: int)
+    Rgb(r: int, g: int, b: int)
+end
+```
+
+| Kind | Payload | Meaning |
+| --- | --- | --- |
+| `Color.Default` | none | The terminal's own foreground or background (SGR 39 / 49). It is not white. |
+| `Color.Ansi(n)` | index 0–15 | The 16-color palette: 0–7 the normal colors, 8–15 their bright variants. |
+| `Color.Indexed(n)` | index 0–255 | The 256-color palette (SGR `38;5;n` / `48;5;n`). |
+| `Color.Rgb(r, g, b)` | three channels, 0–255 | 24-bit truecolor (SGR `38;2;r;g;b`). |
+
+There is no validation. `Color.Ansi(n)` is documented for `0`–`15`, but any integer follows the same encoding arithmetic; the same is true for `Indexed` and each `Rgb` channel.
+
+## Palette
+
+The 16 ANSI colors are exposed as `Color` constants, so you write a name instead of an index.
+
+| Constant | Index | xterm reference |
+| --- | --- | --- |
+| `Color.Black` | 0 | `#000000` |
+| `Color.Red` | 1 | `#cd0000` |
+| `Color.Green` | 2 | `#00cd00` |
+| `Color.Yellow` | 3 | `#cdcd00` |
+| `Color.Blue` | 4 | `#0000ee` |
+| `Color.Magenta` | 5 | `#cd00cd` |
+| `Color.Cyan` | 6 | `#00cdcd` |
+| `Color.White` | 7 | `#e5e5e5` |
+| `Color.BrightBlack` | 8 | `#7f7f7f` |
+| `Color.BrightRed` | 9 | `#ff0000` |
+| `Color.BrightGreen` | 10 | `#00ff00` |
+| `Color.BrightYellow` | 11 | `#ffff00` |
+| `Color.BrightBlue` | 12 | `#5c5cff` |
+| `Color.BrightMagenta` | 13 | `#ff00ff` |
+| `Color.BrightCyan` | 14 | `#00ffff` |
+| `Color.BrightWhite` | 15 | `#ffffff` |
+
+Each constant equals the matching index, so `Color.BrightCyan == Color.Ansi(6 + 8)`. The hex values are the xterm reference values, shown only for illustration: an entry is an **index** into the terminal's palette, not an RGB value, and the terminal theme decides the real color. `Color.Indexed` values in `0`–`15` stay indexed on the wire and are never rewritten to the ANSI form.
+
+## SGR encodings
+
+`FgSeq` and `BgSeq` return the full-fidelity escape sequence for a color: the exact bytes its kind encodes to, with no tier involved. Every sequence is built with `std/term`; no escape is written by hand.
+
+```salam
+pub func FgSeq(c: Color): str
+pub func BgSeq(c: Color): str
+```
+
+| Kind | Foreground | Background |
+| --- | --- | --- |
+| `Default` | `\x1b[39m` | `\x1b[49m` |
+| `Ansi` 0–7 | `\x1b[30+n m` | `\x1b[40+n m` |
+| `Ansi` 8–15 | `\x1b[90+(n-8) m` | `\x1b[100+(n-8) m` |
+| `Indexed` | `\x1b[38;5;n m` | `\x1b[48;5;n m` |
+| `Rgb` | `\x1b[38;2;r;g;b m` | `\x1b[48;2;r;g;b m` |
+
+`\x1b` is the escape character. Only the semicolon sub-parameter form is emitted, never the colon form. For example, `FgSeq(Color.Rgb(255, 135, 0))` is `\x1b[38;2;255;135;0m`, and `BgSeq(Color.BrightCyan)` is `\x1b[106m`.
+
+## Capability detection
+
+`DetectTier` reports how much color the terminal can show, reading only the environment. It is pure and uncached — it reads no tty and remembers nothing — so a per-frame caller detects once and passes the tier around.
+
+```salam
+pub enum ColorTier:
+    Off
+    Ansi16
+    Indexed256
+    TrueColor
+end
+
+pub func DetectTier(): ColorTier
+```
+
+The rules are checked in order; the first match wins.
+
+| Signal | Tier |
+| --- | --- |
+| `NO_COLOR` is set and non-empty | `ColorTier.Off` |
+| `TERM` is `dumb`, unless `CLICOLOR_FORCE` is set to a non-empty value other than `"0"` | `ColorTier.Off` |
+| `COLORTERM` is `truecolor` or `24bit` | `ColorTier.TrueColor` |
+| `TERM` contains `256color`, or `COLORTERM` is any other non-empty value | `ColorTier.Indexed256` |
+| otherwise | `ColorTier.Ansi16` |
+
+`NO_COLOR` beats `CLICOLOR_FORCE`. A bare environment — nothing set — is `ColorTier.Ansi16`, not `Off`: whether an unset `TERM` means "not a terminal" is a tty question, and detection is env-only.
+
+## Downgrade
+
+`Lower` returns the same color at a lower tier. It is the emission-time step that keeps a truecolor palette readable on a weaker terminal, and it is pure: it returns a new value and never mutates its input.
+
+```salam
+pub func Lower(c: Color, tier: ColorTier): Color
+```
+
+| Tier | Effect |
+| --- | --- |
+| `ColorTier.Off` | Every color becomes `Color.Default`. |
+| `ColorTier.Ansi16` | `Default` and `Ansi` are unchanged; `Indexed` `0`–`15` becomes the same `Ansi`; `Indexed` `16`–`255` becomes the nearest ANSI color; `Rgb` becomes the nearest ANSI color. |
+| `ColorTier.Indexed256` | `Default`, `Ansi`, and `Indexed` are unchanged; `Rgb` becomes the nearest 256-color index. |
+| `ColorTier.TrueColor` | Unchanged. |
+
+`Rgb` lowers to ANSI directly, never by rounding through `Indexed`, so a color does not drift twice.
+
+| Color | Tier | Result |
+| --- | --- | --- |
+| `Color.Rgb(255, 0, 0)` | `ColorTier.Indexed256` | `Color.Indexed(196)` |
+| `Color.Rgb(128, 128, 128)` | `ColorTier.Indexed256` | `Color.Indexed(244)` |
+| `Color.Rgb(30, 144, 255)` | `ColorTier.Indexed256` | `Color.Indexed(33)` |
+| `Color.Rgb(100, 110, 105)` | `ColorTier.Indexed256` | `Color.Indexed(242)` |
+| `Color.Indexed(196)` | `ColorTier.Ansi16` | `Color.Ansi(9)` |
+| `Color.Indexed(244)` | `ColorTier.Ansi16` | `Color.Ansi(8)` |
+| `Color.Indexed(33)` | `ColorTier.Ansi16` | `Color.Ansi(6)` |
+| any color | `ColorTier.Off` | `Color.Default` |
+
+<Note>
+  The nearest-match uses the xterm reference values above, because basalam cannot read the terminal's real palette. Your theme may remap the 16 ANSI slots, so the chosen slot can render differently than the reference value suggests. The 256-color cube and grayscale slots (`16`–`255`) are used for RGB-to-256 matching; slots `0`–`15` are never chosen, since the theme can remap them.
+</Note>
+
+## Equality
+
+`Color` has value equality: `==` compares the kind and the payload, so two colors are equal only when both match.
+
+- Equal payloads are equal: `Color.Ansi(1) == Color.Ansi(1)`, `Color.Rgb(255, 0, 0) == Color.Rgb(255, 0, 0)`.
+- Different kinds are never equal, even when they render alike: `Color.Indexed(196) != Color.Rgb(255, 0, 0)`.
+- `Color.Default` is not white and not any palette entry: `Color.Default != Color.Ansi(7)`.
+
+This is the equality the dirty-cell comparison will rely on once cells carry colors.
+
+## Encoding at a tier
+
+`FgSeqAt` and `BgSeqAt` lower a color to a tier and encode it in one call — they are exactly `FgSeq` / `BgSeq` of `Lower(c, tier)`, so no separate sequence code exists.
+
+```salam
+pub func FgSeqAt(c: Color, tier: ColorTier): str
+pub func BgSeqAt(c: Color, tier: ColorTier): str
+```
+
+`FgSeqAt(Color.Rgb(255, 0, 0), ColorTier.Indexed256)` is `FgSeq(Color.Indexed(196))`, and `FgSeqAt(Color.Rgb(255, 0, 0), ColorTier.TrueColor)` is the original `\x1b[38;2;255;0;0m`.
+
+## API
+
+The 16 palette constants — `Color.Black` through `Color.BrightWhite` — are `Color` values; see [Palette](#palette) for the full list.
+
+```salam
+pub enum Color:
+    Default
+    Ansi(n: int)
+    Indexed(n: int)
+    Rgb(r: int, g: int, b: int)
+end
+
+pub enum ColorTier:
+    Off
+    Ansi16
+    Indexed256
+    TrueColor
+end
+
+pub func FgSeq(c: Color): str
+pub func BgSeq(c: Color): str
+pub func DetectTier(): ColorTier
+pub func Lower(c: Color, tier: ColorTier): Color
+pub func FgSeqAt(c: Color, tier: ColorTier): str
+pub func BgSeqAt(c: Color, tier: ColorTier): str
+```
+
+## Example
+
+Colors are plain values, so you can detect the tier and downgrade without a terminal:
+
+```salam
+include "basalam/basalam.salam"
+
+func main:
+    // Detect once per program, then encode every color at that tier.
+    tier := basalam.DetectTier()
+
+    fg := basalam.FgSeq(basalam.BrightCyan)
+    println fg.len() // 5 — the bytes of ESC[96m
+
+    println basalam.Lower(basalam.Color.Rgb(255, 0, 0), tier) == basalam.Color.Indexed(196) // true on a 256-color terminal
+end
+```
