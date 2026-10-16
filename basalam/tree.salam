@@ -18,7 +18,7 @@
  *
  * The tree records which widgets exist and who is whose parent. It lives
  * outside the widgets on purpose: a widget never needs to know where it
- * sits, and the Widget interface stays at its five methods.
+ * sits, and the tree does not add methods to the Widget interface.
  *
  * Identity is an integer ID. Salam's `dyn` values cannot be compared
  * (E021) and cannot be downcast, so "is this the focused widget?" can only

@@ -51,11 +51,11 @@ Every method returns `true` when the focus moved. Each focus change marks the sc
 
 ### Linear: focus_next and focus_prev
 
-Linear navigation walks the focusable widgets in ID order, the same order they paint in, and wraps around at the ends. Unfocusable widgets are skipped. With nothing focused, `focus_next` focuses the first focusable widget and `focus_prev` the last.
+Linear navigation walks the focus order and wraps inside it. That order is the focusable widgets in the topmost raised layer, ascending ID, or every focusable widget in ID order when nothing is raised or that layer has no focusable widget. It matches paint order only while nothing is raised. Unfocusable widgets are skipped. With nothing focused, `focus_next` focuses the first widget in that order and `focus_prev` the last. A focus that sits outside the order jumps to the first on `focus_next` and the last on `focus_prev`.
 
 ### Spatial: focus_up, focus_down, focus_left, focus_right
 
-Spatial navigation moves to the nearest focusable widget in a direction. The search is `basalam.Nearest(from, candidates, dir)`, a pure function over rects that looks at each candidate once (O(n)). With nothing focused, spatial moves fall back to `focus_next`.
+Spatial navigation moves to the nearest widget in a direction, chosen from the same focus order, not from every focusable widget on the screen. The search is `basalam.Nearest(from, candidates, dir)`, a pure function over rects that looks at each candidate once (O(n)). With nothing focused, spatial moves fall back to `focus_next`.
 
 ## The spatial rule
 
@@ -89,7 +89,7 @@ Among the candidates that qualify:
 
 1. **Nearest edge wins.** The smallest gap between the current widget's edge and the candidate's facing edge.
 2. **On equal gaps, best alignment wins.** The smallest distance between the two widgets' centers on the perpendicular axis.
-3. **On a full tie, the earliest wins.** The candidate with the lowest ID, which is the one earliest in focus and paint order.
+3. **On a full tie, the earliest wins.** The candidate with the lowest ID, which is the earliest candidate in the focus order. The search does not use paint order. Once a widget is raised, paint order and focus order are not the same sequence.
 
 ```text
 moving up from the wide panel W:

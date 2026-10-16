@@ -26,12 +26,14 @@
  * (R2).
  *
  * Two structures, one tree. A container owns the ordered `items` list that
- * defines layout; the Screen's registry is still what paints, dispatches
- * events, and orders focus. A child handed to a container's add() must also
- * be added to the Screen, or it is positioned but never drawn. Painting is
- * registry id order, later on top, so a Stack overlaps and two children in
- * one grid cell paint in registration order; layout order and paint order are
- * independent.
+ * defines layout. The Screen paints, dispatches events, and orders focus.
+ * A child handed to a container's add() must also
+ * be added to the Screen, or it is positioned but never drawn. Layout order
+ * and paint order are independent. Screen paints in ascending (stamp, id)
+ * order. With nothing raised every stamp is 0, so that is registry id
+ * order, later on top. A Stack overlaps, and two children in one grid cell
+ * share a rect; which one draws on top is Screen's paint order, not the
+ * container's.
  *
  * Measurement. A pass measures before it positions. The outermost set_bounds
  * clears the memo; a nested set_bounds does not. The container stores its own
@@ -58,8 +60,9 @@
  * the pass through its existing fit_root path. Nothing here changes Screen,
  * Tree or Buffer.
  *
- * Deliberately absent. No stack z-order beyond registry id order, and no
- * focus-to-topmost. Containers position; they never paint their children.
+ * Deliberately absent. Layout containers do not paint and do not raise
+ * widgets. Z-order and focus-to-topmost live on Screen (raise, unraise).
+ * A Stack only overlaps rects.
  */
 
 package basalam
@@ -533,9 +536,9 @@ end
 
 @en "Stack"
 /// A container that gives every child the content box minus its own margin
-/// (R11), so children overlap exactly. Size and alignment fields are ignored;
-/// later registry ids paint on top. A zero-margin child is exactly the
-/// content box.
+/// (R11), so children overlap exactly. Size and alignment fields are ignored.
+/// The container does not paint or raise; Screen's paint order decides which
+/// child draws on top. A zero-margin child is exactly the content box.
 pub struct Stack:
     pub use BaseWidget
 

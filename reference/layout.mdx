@@ -1,7 +1,7 @@
 ---
 title: "Layout"
 description: "The Row, Column, Grid, and Stack containers, the slot API that sizes and places their children, and the box math behind them."
-keywords: ["layout", "row", "column", "grid", "stack", "container", "padding", "margin", "alignment", "preferred_size", "set_bounds"]
+keywords: ["layout", "row", "column", "grid", "stack", "container", "padding", "margin", "alignment", "weight", "gap", "span", "measure", "preferred_size", "set_bounds"]
 ---
 
 `Row`, `Column`, `Grid`, and `Stack` are containers. A container owns an ordered list of slots, one per child, and turns its own bounds into one [rect](/reference/rect) per slot. Widgets never compute their own position: a container's `set_bounds` stores its own rect, works out its content box, and calls `set_bounds` on each child in slot order, so a single call on the root lays out the whole tree. Containers position; they never paint. Register every child with the [screen's tree](/reference/tree) as well, or it is placed but never drawn.
@@ -33,7 +33,7 @@ end
 <ResponseField name="End" type="CrossAlign">The child ends at the box's trailing edge, with the free space before it.</ResponseField>
 <ResponseField name="Stretch" type="CrossAlign">The child fills the whole axis. The default; any size request on that axis is ignored.</ResponseField>
 
-`free` is the box length minus the child's natural size, clamped into the box: `n = clamp(natural, 0, avail)` and `free = avail - n`. The natural size comes from the child's size request on that axis: `Fixed(n)` gives `n` cells, while `Fill` and `Pref` both mean the child's [`preferred_size`](/reference/widget#preferred_size). `Stretch` takes the whole axis instead. A child that cannot measure fills the axis.
+`free` is the box length minus the child's natural size, clamped into the box: `n = clamp(natural, 0, avail)` and `free = avail - n`. The natural size comes from the child's size request on that axis: `Fixed(n)` gives `n` cells, while `Fill` and `Pref` both take the measured extent. [`measure`](/reference/widget#measure) that cannot measure falls through to [`preferred_size`](/reference/widget#preferred_size). `Stretch` takes the whole axis instead, and the weight is ignored. A child that cannot measure fills the axis.
 
 ## SizeKind
 
@@ -47,9 +47,9 @@ pub enum SizeKind:
 end
 ```
 
-<ResponseField name="Fill" type="SizeKind">An equal share of what is left after the `Fixed` children. On a main axis, `Fill` and `Pref` divide the remainder equally; on a cross axis, `Fill` behaves like `Pref`. The default.</ResponseField>
-<ResponseField name="Fixed" type="SizeKind">Exactly `cells` cells long. A negative value clamps to `0`.</ResponseField>
-<ResponseField name="Pref" type="SizeKind">The child's preferred size, as read by the cross axis. On a main axis it is reserved and behaves as `Fill`.</ResponseField>
+<ResponseField name="Fill" type="SizeKind">A weighted share of what is left on a main axis after `Fixed` children, measured main-axis `Pref`s, and the gap budget. The weight defaults to `1`, so equal weights split the leftover equally and the remainder goes to the earliest slot. On a cross axis, `Fill` behaves like `Pref` and the weight is ignored. The default.</ResponseField>
+<ResponseField name="Fixed" type="SizeKind">Exactly `cells` cells long. A negative value clamps to `0`. Weight is ignored, and a `Fixed` child is not shrunk when the row or column overflows.</ResponseField>
+<ResponseField name="Pref" type="SizeKind">The child's measured size. On a main axis a `Pref` that can measure is reserved like `Fixed` before the share, and its weight is not used. A `Pref` that cannot measure becomes `Fill` with weight `1`. On a cross axis it is the measured natural size.</ResponseField>
 
 ## LayoutSize
 
@@ -59,11 +59,13 @@ A child's requested size on one axis.
 pub struct LayoutSize:
     pub kind: SizeKind = SizeKind.Fill
     pub cells: int = 0
+    pub weight: int = 1
 end
 ```
 
 <ResponseField name="kind" type="SizeKind">How the size is resolved. Defaults to `SizeKind.Fill`.</ResponseField>
 <ResponseField name="cells" type="int">The requested length. Read only when `kind` is `SizeKind.Fixed`. A negative value clamps to `0`.</ResponseField>
+<ResponseField name="weight" type="int" default="1">Share of the main-axis leftover for a `Fill`. A negative value clamps to `0` when used. `Fixed` ignores it. `Grid`, `Stack`, and cross-axis alignment ignore it too. A measured main-axis `Pref` is turned into `Fixed` before the share, so this weight is not that slot's weight. A `Pref` that cannot measure becomes `Fill` weight `1` instead of using this field.</ResponseField>
 
 ## Insets
 
@@ -106,6 +108,8 @@ pub struct LayoutSlot:
     pub align_y: CrossAlign = CrossAlign.Stretch
     pub row: int = 0
     pub col: int = 0
+    pub row_span: int = 1
+    pub col_span: int = 1
 end
 ```
 
@@ -117,8 +121,10 @@ end
 <ResponseField name="align_y" type="CrossAlign">Cross-axis alignment on y. `Stretch` by default.</ResponseField>
 <ResponseField name="row" type="int">The Grid row this child occupies. `0` by default.</ResponseField>
 <ResponseField name="col" type="int">The Grid column this child occupies. `0` by default.</ResponseField>
+<ResponseField name="row_span" type="int" default="1">How many Grid rows this child covers from `row`. A value of `0` or less means `1`. Grid clamps it to the rows that remain. Read by Grid only.</ResponseField>
+<ResponseField name="col_span" type="int" default="1">How many Grid columns this child covers from `col`. A value of `0` or less means `1`. Grid clamps it to the columns that remain. Read by Grid only.</ResponseField>
 
-A container reads the size request on its main axis: a [Row](#row) splits `width`, a [Column](#column) splits `height`. On the cross axis the alignment decides placement: `Stretch` fills the axis, `Fixed(n)` gives `n` cells, and `Fill` or `Pref` mean the child's preferred size. A [Grid](#grid) has no main axis and places children this way on both axes; a [Stack](#stack) ignores the size request entirely.
+A container reads the size request on its main axis: a [Row](#row) splits `width`, a [Column](#column) splits `height`. On the cross axis the alignment decides placement: `Stretch` fills the axis, `Fixed(n)` gives `n` cells, and `Fill` or `Pref` take the measured size. A [Grid](#grid) has no main axis and places children this way on both axes; a [Stack](#stack) ignores the size request entirely.
 
 ## Row
 
@@ -128,14 +134,20 @@ Lays its children left to right along the `x` axis.
 pub struct Row:
     pub use BaseWidget
     pub pad: Insets = Insets {}
+    pub gap: int = 0
     pub items: Vector<LayoutSlot> = Vector {}
 end
 ```
 
 <ResponseField name="pad" type="Insets">The inset between the container's bounds and its content box. `Insets {}` by default.</ResponseField>
+<ResponseField name="gap" type="int" default="0">Cells between adjacent slots on the main axis. A negative value clamps to `0`.</ResponseField>
 <ResponseField name="items" type="Vector<LayoutSlot>">The children in placement order, one slot each. Manage it with `add` and the slot methods.</ResponseField>
 
-Row splits the content width. A `Fixed(n)` slot takes exactly `n` cells, and the `Fill` slots (and a main-axis `Pref`, which behaves as `Fill`) share what is left equally, the remainder going to the earliest of them one cell each. Slots are packed from the content start with no gaps. On the cross axis the child fills the content height unless `align_y` places it otherwise, and a non-`Stretch` child takes its cross-axis request: `Fixed(n)` cells, or its preferred height for `Fill` or `Pref`.
+Row splits the content width. A `Fixed(n)` slot takes exactly `n` cells. A main-axis `Pref` that can measure is reserved the same way, at its measured width, and does not join the share. A `Pref` that cannot measure becomes `Fill` weight `1`. The `Fill` slots then share what is left after those reservations and the gap budget, by `weight`, using largest remainder. Slots pack from the content start. The next slot starts at the previous end plus `gap`. There is no gap before the first slot, and the gap is not added after the last. A zero-size slot still counts: with `gap` of `0` the next child starts on the same cell, and with a positive gap the empty slot still consumes one gap.
+
+On the cross axis the child fills the content height unless `align_y` places it otherwise. A non-`Stretch` child takes its cross-axis request: `Fixed(n)` cells, or the measured height for `Fill` or `Pref`. Weight and gap do not apply on the cross axis.
+
+Three `Fill` slots of weight `2`, `1`, and `1` in a content width of `10` and a gap of `0` take `5`, `3`, and `2`. The floors are `5`, `2`, and `2`; the one leftover cell goes to the earliest of the tied remainders. The same three weights in a `Row` of bounds `(0, 0, 10, 3)` place the children at `x` `0`, `5`, and `8`. A single measurable `Pref` of `4` in a row `10` wide takes `4` and leaves the other `6` unused. The same `Pref` on a child that cannot measure takes the whole `10`.
 
 ### add
 
@@ -164,19 +176,31 @@ pub func set_padding(pad: Insets)
 
 Sets the padding between the container's bounds and its content box. The content box is the bounds inset by `pad`; children are laid out inside it and clipped to it.
 
+### Gap
+
+```salam
+pub func set_gap(gap: int)
+```
+
+Sets the cells between adjacent slots on the main axis. A negative value clamps to `0`. The budget is `gap * max(0, k - 1)`, where `k` is the slot count, including zero-size slots. One slot or none charges nothing. The gap is not part of a child's size and is not given back when the fixed sizes and the budget already use up the content length.
+
+A content width of `20`, a gap of `2`, and four weight-`1` `Fill` slots leaves `14` to share, so the widths are `4`, `4`, `3`, and `3`, starting at `x` `0`, `6`, `12`, and `17`. A gap of `5` between a `Fill` and a `Fixed(3)` in a width of `9` leaves `1` for the `Fill`; the fixed child starts at `x` `6`.
+
 ## Column
 
-Lays its children top to bottom along the `y` axis. It is the mirror of Row: each slot takes a `Fixed` or `Fill` share of the content height, and fills the content width unless `align_x` places it otherwise. The method signatures are identical to Row's, with `height` as the split axis.
+Lays its children top to bottom along the `y` axis. It is the mirror of Row: a measured main-axis `Pref` is reserved like `Fixed`, then `Fill` shares the content height left after that reservation and the gap budget. A child fills the content width unless `align_x` places it otherwise. The method signatures are identical to Row's, with `height` as the split axis. While arranging, a Column measures a main-axis `Pref` at the content width, not at the column's height, because [`preferred_size`](/reference/widget#preferred_size) takes a width.
 
 ```salam
 pub struct Column:
     pub use BaseWidget
     pub pad: Insets = Insets {}
+    pub gap: int = 0
     pub items: Vector<LayoutSlot> = Vector {}
 end
 ```
 
 <ResponseField name="pad" type="Insets">The inset between the container's bounds and its content box. `Insets {}` by default.</ResponseField>
+<ResponseField name="gap" type="int" default="0">Cells between adjacent slots on the main axis. A negative value clamps to `0`.</ResponseField>
 <ResponseField name="items" type="Vector<LayoutSlot>">The children in placement order, one slot each.</ResponseField>
 
 ### add
@@ -206,6 +230,14 @@ pub func set_padding(pad: Insets)
 
 Sets the padding between the container's bounds and its content box.
 
+### Gap
+
+```salam
+pub func set_gap(gap: int)
+```
+
+Sets the cells between adjacent slots on the main axis, the same rule as Row's `set_gap`. In a column `10` tall with a gap of `3`, `Fixed(2)`, `Fill`, and `Fixed(2)` leave nothing for the `Fill`: the heights are `2`, `0`, and `2`, at `y` `0`, `5`, and `8`. The zero-height slot is a `0x0` rect.
+
 ## Grid
 
 Divides its content box into a fixed `rows` x `cols` grid and places each child in an explicit cell.
@@ -225,7 +257,7 @@ end
 <ResponseField name="rows" type="int">The number of grid rows. Set by `NewGrid`.</ResponseField>
 <ResponseField name="cols" type="int">The number of grid columns. Set by `NewGrid`.</ResponseField>
 
-Columns share the content width equally and rows share the content height equally, the remainder going to the earliest track, so the tracks sum to the content box exactly. Each cell behaves like a slot: the child's margin insets it, then `align_x` and `align_y` place the child — a `Stretch` axis fills the cell, and a non-`Stretch` axis takes the child's size request on that axis (`Fixed(n)` cells, or its preferred size for `Fill` or `Pref`). An out-of-range or negative cell is a `0x0` slot at the content origin, and the child is still visited. Two children in one cell share it and overlap; registry order decides what paints on top.
+Columns share the content width equally and rows share the content height equally, the remainder going to the earliest track, so the tracks sum to the content box exactly. Weight is ignored. Each cell behaves like a slot: the child's margin insets it, then `align_x` and `align_y` place the child — a `Stretch` axis fills the cell, and a non-`Stretch` axis takes the child's size request on that axis (`Fixed(n)` cells, or the measured size for `Fill` or `Pref`). An out-of-range or negative cell is a `0x0` slot at the content origin, the span is ignored, and the child is still visited. Two children in one cell share it and overlap. Grid does not paint or raise them. With nothing raised, the later registry id paints on top; after a [`raise`](/reference/screen#raise), paint order is the screen's `(stamp, id)` order.
 
 `NewGrid(rows, cols)` creates an empty grid; a non-positive count leaves every child without a cell.
 
@@ -256,6 +288,16 @@ pub func set_cell(i: int, row: int, col: int)
 
 Sets the slot's grid cell, 0-based, `row` then `col`. Every child carries its own cell; a child left at the default `(0, 0)` sits in the top-left cell. An out-of-range or negative cell gives the child an empty rect at the content origin, and the child is still laid out once.
 
+### Span
+
+```salam
+pub func set_span(i: int, rows: int, cols: int)
+```
+
+Sets how many rows and columns the slot at `i` covers, starting at its cell. A count of `0` or less is stored as `1`. An out-of-range index is ignored. At layout time the span is the sum of that many tracks. It is clamped to the tracks that remain, so a span does not wrap and does not resize the tracks. The child's margin and alignment then apply to that spanned rect, not to a single cell.
+
+In a `21` by `12` grid of `2` rows and `3` columns the tracks are `7`, `7`, `7` and `6`, `6`. A `col_span` of `2` from `(0, 0)` is `14` by `6`. A `row_span` of `2` from `(0, 2)` is `7` by `12`. A `col_span` of `5` from column `1` of a `10`-wide, `3`-column grid clamps to the two tracks that remain (`3 + 3`).
+
 ### Padding
 
 ```salam
@@ -279,7 +321,7 @@ end
 <ResponseField name="pad" type="Insets">The inset between the container's bounds and its content box. `Insets {}` by default.</ResponseField>
 <ResponseField name="items" type="Vector<LayoutSlot>">The children in placement order, one slot each.</ResponseField>
 
-A zero-margin child is exactly the content box. Size and alignment fields are ignored. With no children nothing is placed; the stack still receives its own bounds. Later registry ids paint on top, so the last child added draws over the others.
+A zero-margin child is exactly the content box. Size and alignment fields are ignored. With no children nothing is placed; the stack still receives its own bounds. Stack does not paint or raise its children. With nothing raised, later registry ids paint on top, so the last child added draws over the others. [`raise`](/reference/screen#raise) can put an earlier child above a later one.
 
 ### add
 
@@ -308,13 +350,40 @@ pub func set_padding(pad: Insets)
 
 Sets the padding between the container's bounds and its content box.
 
+## Measurement
+
+A pass measures before it positions. The container stores its own rect, measures what it needs, then calls each child's `set_bounds` in slot order. Measurement never calls `set_bounds`. The outermost `set_bounds` starts a new pass. A nested `set_bounds` stays in that pass, and a child is measured at most once for a given axis and width. A width of `0` or less yields `0` and calls nothing.
+
+```salam
+pub enum Axis:
+    X
+    Y
+end
+
+pub struct Measure:
+    pub ok: bool = false
+    pub extent: int = 0
+end
+```
+
+<ResponseField name="X" type="Axis">The horizontal axis.</ResponseField>
+<ResponseField name="Y" type="Axis">The vertical axis.</ResponseField>
+<ResponseField name="ok" type="bool">True when `extent` is a real measurement. False means the widget cannot measure.</ResponseField>
+<ResponseField name="extent" type="int">The measured length in cells when `ok` is true. A negative value clamps to `0`. Ignored when `ok` is false.</ResponseField>
+
+[`Widget.measure`](/reference/widget#measure) is the hook. When it cannot measure, the engine reads [`preferred_size`](/reference/widget#preferred_size) at that width. A negative component on the axis means the child cannot measure.
+
+Row and Column override `measure`. On the main axis the natural extent is the padding, plus each `Fixed` size or the measured size of a `Fill` or `Pref`, plus the gap budget. On the cross axis it is the padding plus the largest measured child. A child that cannot measure makes the container unable to measure, except a main-axis `Fixed` size, which does not ask the child. A childless Row or Column measures as its padding. Grid and Stack leave `measure` at the default, so they cannot measure. A main-axis `Pref` of a Grid or Stack becomes `Fill` weight `1` and shares like any other `Fill`.
+
+On the cross axis the engine measures x at the slot width, then y at the resolved width. A Column's main axis is y, but a main-axis `Pref` is still measured at the content width, because `preferred_size` takes a width. It is not measured at the column's height. A measured `Pref` is reserved like `Fixed` before the share. A `Pref` that cannot measure becomes `Fill` weight `1`.
+
 ## Recursion
 
 A layout pass starts at a node with an assigned rect. The node's own `set_bounds` runs first, then its content box is computed, then its children are laid out in slot order. Every node is visited exactly once, in pre-order depth-first; a leaf only stores its rect. Layout runs against the nominal slot and clips last, so a child that starts beyond the content box is empty and a partially visible child is cut at the edge.
 
 The screen enters the pass through `fit_root`: it gives the root the whole buffer with one `set_bounds` call, and a container root recurses from there. A widget you place by hand keeps whatever bounds you gave it.
 
-An empty rect or an empty content box gives every descendant an empty rect, but the recursion still visits them all. Two passes over the same tree with the same root rect give identical rects: layout depends only on the tree, the root rect, and the children's size requests and preferred sizes, never on previous bounds.
+An empty rect or an empty content box gives every descendant an empty rect, but the recursion still visits them all. Two passes over the same tree with the same root rect give identical rects: layout depends only on the tree, the root rect, the weights, the gaps, the spans, and the children's size requests and measurements, never on previous bounds.
 
 ## Box math
 
@@ -323,7 +392,7 @@ The pure helpers behind the containers. They hold no state and are useful when y
 ```salam
 pub func FitRect(r: Rect, box: Rect): Rect
 pub func InsetRect(r: Rect, i: Insets): Rect
-pub func SplitMain(length: int, sizes: Vector<LayoutSize>): Vector<int>
+pub func SplitMain(length: int, sizes: Vector<LayoutSize>, gap: int): Vector<int>
 pub func TrackSizes(total: int, n: int): Vector<int>
 pub func PlaceAxisSize(avail: int, align: CrossAlign, natural: int): int
 pub func PlaceAxisOffset(avail: int, align: CrossAlign, natural: int): int
@@ -333,14 +402,14 @@ pub func PlaceAxisOffset(avail: int, align: CrossAlign, natural: int): int
 | --- | --- |
 | `FitRect(r, box)` | The cells `r` and `box` share. When they do not meet, a `0x0` rect at the nearest point of `box` to `r`, so a rect leaving this function is non-empty or exactly `0x0`, never negative. |
 | `InsetRect(r, i)` | `r` inset by `i`, clipped back inside `r`. Each side clamps to `0` first; padding larger than `r` gives an empty content box inside it. |
-| `SplitMain(length, sizes)` | One length per size. `Fixed` takes `max(0, cells)`; `Fill` and `Pref` share the rest equally, the remainder to the earliest. With no shares, the leftover stays unused. |
+| `SplitMain(length, sizes, gap)` | One length per size. `Fixed` takes `max(0, cells)` and ignores weight. The gap budget is `max(0, gap) * max(0, k - 1)` and is not part of the returned sizes. `Fill` and `Pref` share `R = max(0, length - fixed sum - budget)` by weight: `floor(R * weight / sum)`, then one extra cell each to the largest `(R * weight) mod sum`, ties to the earliest pool slot. A weight sum of `0`, or an `R` of `0`, gives every pool entry `0` and does not shrink `Fixed`. This function does not measure. Row and Column turn a measured `Pref` into `Fixed`, and a `Pref` that cannot measure into `Fill` weight `1`, before they call it. A `Pref` still in the vector stays in the weight pool. |
 | `TrackSizes(total, n)` | `n` tracks that sum to `total`: `floor(total / n)` each, plus one for the earliest `total mod n`. A non-positive `n` gives an empty vector. |
 | `PlaceAxisSize(avail, align, natural)` | The length a child takes on one axis. `Stretch` (or a non-positive `avail`) gives `max(0, avail)`; otherwise `natural` clamped into `[0, avail]`. |
 | `PlaceAxisOffset(avail, align, natural)` | The child's offset from the box start. `Stretch` (or a non-positive `avail`) gives `0`; otherwise `Start` is `0`, `Center` is `floor(free / 2)`, and `End` is `free`. |
 
 ## Example
 
-A Column with a fixed header and a Row. The Row's second child stretches in `x` and centres in `y`, so it takes its preferred height — the cross-axis `Pref` path:
+A Column with a fixed header and a Row, no gap, and no main-axis `Pref`. The Row's second child stretches in `x` and centres in `y`. Its height request is the default `Fill`, which on the cross axis measures like `Pref`, so `"right"` is one line tall. The content box is `(1, 1, 38, 8)`. The header takes `1` and the row takes the remaining `7`, so the centred line starts at `y` `2 + floor(6 / 2)`.
 
 ```salam
 include "basalam/basalam.salam"

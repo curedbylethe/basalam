@@ -1,10 +1,10 @@
 ---
 title: "Widget and BaseWidget"
 description: "The interface every widget satisfies, and the struct that supplies its defaults."
-keywords: ["widget", "basewidget", "interface", "dyn", "render", "handle_event"]
+keywords: ["widget", "basewidget", "interface", "dyn", "render", "handle_event", "hits", "measure"]
 ---
 
-A widget is anything with the six methods of the `Widget` interface. Salam interfaces are structural: there is no `implements` keyword, so a struct that has the methods is a widget. A list, a button, and a panel are all `Widget`s, and the screen stores them side by side as `dyn basalam.Widget`.
+A widget is anything with the eight methods of the `Widget` interface. Salam interfaces are structural: there is no `implements` keyword, so a struct that has the methods is a widget. A list, a button, and a panel are all `Widget`s, and the screen stores them side by side as `dyn basalam.Widget`.
 
 ## Widget
 
@@ -13,9 +13,11 @@ pub interface Widget:
     func render(buf: Buffer, bounds: Rect)
     func handle_event(event: Event): bool
     func focusable(): bool
+    func hits(): bool
     func bounds(): Rect
     func set_bounds(bounds: Rect)
     func preferred_size(max_width: int): Rect
+    func measure(axis: Axis, max_width: int): Measure
 end
 ```
 
@@ -43,6 +45,14 @@ func focusable(): bool
 
 Returns `true` when the widget can take keyboard focus. Only focusable widgets take part in focus navigation.
 
+### hits
+
+```salam
+func hits(): bool
+```
+
+Returns `true` when hit-testing may land on this widget. The default is `true`. Override it to return `false` when the widget may paint and still refuse hits. The screen then skips it and keeps scanning the widgets under it. Refusing hits does not remove the widget from paint order or from focus.
+
 ### bounds and set_bounds
 
 ```salam
@@ -58,7 +68,15 @@ func set_bounds(bounds: Rect)
 func preferred_size(max_width: int): Rect
 ```
 
-The size the widget wants at `max_width`, as a `Rect` at `(0, 0)`. `max_width <= 0` means unbounded. The [layout engine](/reference/layout) reads it to size a child on the cross axis: a widget that cannot measure returns a rect with negative width and height as a sentinel, and the engine fills the axis instead. The `BaseWidget` default does exactly that, so a container or placeholder fills the axis.
+The size the widget wants at `max_width`, as a `Rect` at `(0, 0)`. `max_width <= 0` means unbounded. The [layout engine](/reference/layout) reads it when [`measure`](#measure) cannot measure: a main-axis `Pref` that cannot measure, and a cross-axis natural size. A widget that cannot measure returns a rect with negative width and height as a sentinel, and the engine fills the axis instead. The `BaseWidget` default does exactly that, so a container or placeholder fills the axis.
+
+### measure
+
+```salam
+func measure(axis: Axis, max_width: int): Measure
+```
+
+The natural extent along `axis` at `max_width`. `ok` is false when this widget cannot measure, and the layout engine then reads `preferred_size`. `extent` is the length in cells when `ok` is true. The `BaseWidget` default cannot measure (`ok` false, `extent` `0`). [Row and Column](/reference/layout#measurement) override it. Grid and Stack do not. Must not call `set_bounds`.
 
 ## Rules for implementations
 
@@ -89,13 +107,15 @@ end
 | `render` | Draws nothing. |
 | `handle_event` | Returns `false`, so every event bubbles on. |
 | `focusable` | Returns `false`. |
+| `hits` | Returns `true`. Override it to paint without accepting hits. |
 | `bounds` | Returns `rect`. |
 | `set_bounds` | Stores the rect in `rect`. |
 | `preferred_size` | Returns the negative sentinel, so the layout engine fills the axis. |
+| `measure` | Cannot measure: `ok` is false and `extent` is `0`. Row and Column override it. |
 
 <ResponseField name="rect" type="Rect">Storage for `bounds` and `set_bounds`. An embedding widget can read it directly as `this.rect`.</ResponseField>
 
-On its own, a `BaseWidget` is an invisible, unfocusable widget that ignores every event. That makes it a handy container or placeholder.
+On its own, a `BaseWidget` is an invisible, unfocusable widget that ignores every event and still accepts hits. That makes it a handy container or placeholder. A click on its rect lands on it unless you override `hits`.
 
 ## Storing widgets
 
@@ -109,7 +129,7 @@ println w.bounds().width // 12: both copies share the widget
 ```
 
 <Warning>
-  Salam has no downcast from `dyn` back to the concrete type, and `dyn` values cannot be compared with `==`. Once a widget is stored as `dyn basalam.Widget`, you reach it only through the six interface methods.
+  Salam has no downcast from `dyn` back to the concrete type, and `dyn` values cannot be compared with `==`. Once a widget is stored as `dyn basalam.Widget`, you reach it only through the eight interface methods.
 </Warning>
 
 ## Example

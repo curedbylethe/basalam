@@ -1,7 +1,7 @@
 ---
 title: "Screen"
 description: "The terminal session: widget tree, buffer, input thread, and the event loop."
-keywords: ["screen", "event loop", "next_event", "run", "run_with_tick", "start", "close", "dispatch", "hit_test", "mouse"]
+keywords: ["screen", "event loop", "next_event", "run", "run_with_tick", "start", "close", "dispatch", "hit_test", "mouse", "raise", "unraise", "hits"]
 ---
 
 A `Screen` owns the terminal session. It holds the widget [tree](/reference/tree), the [buffer](/reference/buffer), and the channel the input thread sends [events](/reference/event) on. You create one per program.
@@ -38,14 +38,14 @@ pub func NewTerminalScreen(root: dyn Widget): Screen
 <ResponseField name="tick_ms" type="int" default="0">Interval of `TickEvent`s in milliseconds. `0` sends none. Set it before `start()`.</ResponseField>
 <ResponseField name="mouse" type="bool" default="false">When `true`, `start()` enables mouse reporting and clicks arrive as `MouseEvent`s. Set it before `start()`.</ResponseField>
 <ResponseField name="keymap" type="Keymap" default="Keymap {}">The opt-in [keymap](/reference/keymap) consulted as a fallback for a `KeyEvent` no widget consumed. Empty by default, so a screen behaves exactly as before until you install or extend it. Bind through this field to extend the map in place, or use `set_keymap` to replace it. Never assign a `Keymap` directly.</ResponseField>
-<ResponseField name="dirty" type="bool">`true` when the next `present()` has something new to show. Set by consumed events, resizes, focus changes, and added widgets.</ResponseField>
+<ResponseField name="dirty" type="bool">`true` when the next `present()` has something new to show. Set by consumed events, resizes, focus changes, added widgets, and `raise` / `unraise`.</ResponseField>
 <ResponseField name="focus_stack" type="Vector<int>">Widget IDs; the last entry is the focused widget. Change it only through the focus methods, which keep `focused` and `dirty` in sync.</ResponseField>
 
 ## Building the tree
 
 | Method | Description |
 | --- | --- |
-| `add(parent: int, w: dyn Widget): int` | Adds `w` under `parent` (`RootId` for top level) and returns its ID. Widgets paint in the order you add them. The first focusable widget added while nothing has focus receives it. |
+| `add(parent: int, w: dyn Widget): int` | Adds `w` under `parent` (`RootId` for top level) and returns its ID. Unraised widgets paint in the order you add them. The first focusable widget added while nothing has focus receives it. |
 | `widget(id: int): dyn Widget` | The widget with this ID; the root for an invalid ID. |
 | `focused_id(): int` | The ID of the focused widget, or `NoWidget` when nothing has focus (events then start at the root). |
 | `hit_test(x: int, y: int): int` | The ID of the widget drawn at cell (`x`, `y`), or `NoWidget`. See [Hit testing](#hit-testing). |
@@ -62,10 +62,27 @@ See [Focus](/concepts/focus) for the rules behind these methods.
 | `push_focus(id: int): bool` | Focuses `id` and remembers the previous focus underneath it. |
 | `pop_focus(): bool` | Returns to the focus before the last `push_focus`. `false` if the stack is empty. |
 | `can_focus(id: int): bool` | Whether `id` names a focusable widget. |
-| `focus_next(): bool` / `focus_prev(): bool` | Next or previous focusable widget in ID order, wrapping around. |
-| `focus_up(): bool` / `focus_down(): bool` / `focus_left(): bool` / `focus_right(): bool` | Nearest focusable widget in that direction. |
+| `focus_next(): bool` / `focus_prev(): bool` | Next or previous widget in the [focus order](#raise), wrapping inside it. Not always ID order. |
+| `focus_up(): bool` / `focus_down(): bool` / `focus_left(): bool` / `focus_right(): bool` | Nearest widget in that direction, chosen from the focus order. |
 
 Each returns `true` when the focus moved, and every change marks the screen dirty so the focus indicators are redrawn.
+
+`push_focus` and `pop_focus` are unchanged by raise. They push and pop any focusable id. They do not raise the widget, and they do not walk the focus order.
+
+## Raise
+
+```salam
+pub func raise(ids: Vector<int>)
+pub func unraise(ids: Vector<int>)
+```
+
+`raise` assigns every id in the call one fresh stamp, shared by the whole call, so those widgets are one layer above everything raised earlier and above every unraised widget. Within the layer, paint order stays ID order. Paint order overall is ascending `(stamp, id)`: a lower stamp paints first, and the same stamp paints in ID order. An id that is not in the tree is recorded and does not crash. It affects painting only once that id is registered.
+
+The focus order is the focusable widgets in the topmost stamp layer, ascending id. When nothing is raised, or that layer has no focusable widget, the order is every focusable widget, ascending id. `focus_next` and `focus_prev` wrap inside that order. A focus outside the order jumps to the first entry on `focus_next` and the last on `focus_prev`. The spatial methods search the same order.
+
+When that order is non-empty and the current focus is outside it, `raise` saves one restore id (the current focus) and moves to the first id of the new order. There is only one saved id. A later `raise` that also moves the focus replaces it. Otherwise `raise` leaves the focus and the saved id unchanged. The move uses `focus`, so it replaces the top of the stack. It does not `push_focus`.
+
+`unraise` writes stamp `0` on every id, so those widgets return to plain ID order. It is idempotent: an id that was not raised, or that is not in the tree, stays at `0`. It does not rewind the stamp counter, so a later `raise` is still a new layer. When nothing remains raised, it focuses the saved id if that widget is still focusable, otherwise the first focusable widget, and then clears the saved id. If the saved id is not focusable and nothing else is, it clears the focus. While a layer remains, it leaves the focus alone when the current focus is still in the new order. Otherwise it focuses the first id of that order, or clears the focus when the order is empty.
 
 ## Terminal lifecycle
 
@@ -81,7 +98,7 @@ Each returns `true` when the focus moved, and every change marks the screen dirt
 | --- | --- |
 | `next_event(event &: Event): bool` | Waits for the next event. Returns `false` once the screen is stopped and every queued event was delivered. |
 | `dispatch(event: Event): bool` | Handles one event synchronously. A `ResizeEvent` first resizes the screen. Then the event goes to a starting widget and bubbles up: the widget under the cursor for a mouse event, the focused widget for everything else. An unconsumed `KeyEvent` is then offered to the [keymap](/reference/keymap) fallback. Returns `true` if a widget or the keymap consumed it. See [Hit testing](#hit-testing). |
-| `draw()` | Renders every widget into the buffer's back grid, in ID order, each clipped to its visible bounds. |
+| `draw()` | Renders every widget into the buffer's back grid in ascending `(stamp, id)` order, each clipped to its visible bounds. With nothing raised, that is ID order. |
 | `present()` | `draw()`, then, once attached, writes only the cells that changed since the last frame. Clears `dirty`. |
 | `post(event: Event): bool` | Queues an event as if the input thread had produced it. Safe from any thread. |
 | `run()` | Runs the loop until `stop()`. Redraws only when something changed. An unconsumed Ctrl+C stops it. |
@@ -93,13 +110,13 @@ Each returns `true` when the focus moved, and every change marks the screen dirt
 pub func hit_test(x: int, y: int): int
 ```
 
-`hit_test` returns the ID of the widget drawn at the 0-based cell (`x`, `y`), or `NoWidget` when no widget covers it. Where widgets overlap, the one painted last (the highest ID) wins, so a child beats its parent and a later sibling beats an earlier one. Widgets with empty bounds never match. The root covers the whole buffer, so inside the screen the answer is never `NoWidget` unless you shrank the root yourself.
+`hit_test` returns the ID of the widget drawn at the 0-based cell (`x`, `y`), or `NoWidget` when no widget covers it. The scan is reverse paint order: higher stamp first, and within a stamp the higher ID first. The first widget whose rect contains the cell and whose [`hits`](/reference/widget#hits) returns `true` wins. A widget may paint and still refuse hits; the scan then continues to the widget under it. With nothing raised, paint order is ID order, so a child beats its parent and a later sibling beats an earlier one. A raised widget beats every widget in an earlier layer, whatever its ID. Widgets with empty bounds never match. The root covers the whole buffer and accepts hits by default, so inside the screen the answer is never `NoWidget` unless you shrank the root or every widget on that cell refuses hits.
 
 `dispatch` uses it for mouse routing:
 
 | Event | First widget offered the event |
 | --- | --- |
-| `MouseEvent` with `mouse.ok`, a widget under the cursor | That widget (`hit_test` of `mouse_point()`). |
+| `MouseEvent` with `mouse.ok`, a widget under the cursor whose `hits()` is true | That widget (`hit_test` of `mouse_point()`). |
 | `MouseEvent` with no widget under the cursor, or `mouse.ok` false | The focused widget. |
 | `KeyEvent`, `TickEvent`, `ResizeEvent` | The focused widget. |
 
