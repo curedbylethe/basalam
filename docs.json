@@ -44,6 +44,7 @@
           "reference/tree",
           "reference/buffer",
           "reference/color",
+          "reference/style",
           "reference/keymap",
           "reference/screen"
         ]
