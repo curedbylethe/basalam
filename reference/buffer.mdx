@@ -7,7 +7,7 @@ keywords: ["buffer", "cell", "draw", "clip", "style"]
 A `Buffer` is a grid of `Cell`s. Widgets draw into it; they never write to the terminal. Every write outside the grid or outside the buffer's clip rect is silently dropped, so drawing can never fail.
 
 <Warning>
-  A `Buffer` holds two grids: a back grid widgets draw into and a front grid of what the terminal currently shows. `flush()` diffs the two and writes only the cells that changed. What is still absent: dirty-region and rectangle tracking, structured styles (styles are raw SGR strings today, epic 7), and wide-character support (each cell holds one codepoint and is assumed to be one column wide, epic 2).
+  A `Buffer` holds two grids: a back grid widgets draw into and a front grid of what the terminal currently shows. `flush()` diffs the two and writes only the cells that changed. What is still absent: dirty-region and rectangle tracking, structured styles (styles are raw SGR strings today; the [Color](/reference/color) type exists but cells do not carry it yet), and wide-character support (each cell holds one codepoint and is assumed to be one column wide, epic 2).
 </Warning>
 
 ## Cell
@@ -20,7 +20,7 @@ end
 ```
 
 <ResponseField name="ch" type="str">Exactly one codepoint. A blank cell holds `" "`.</ResponseField>
-<ResponseField name="style" type="str">SGR escape sequences built with `std/term`, for example `term.Sgr(term.StyleBold) + term.Sgr(term.FgRed)`. `""` is the terminal's default style.</ResponseField>
+<ResponseField name="style" type="str">SGR escape sequences built with `std/term`, for example `term.Sgr(term.StyleBold) + term.Sgr(term.FgRed)`. `""` is the terminal's default style. The [Color](/reference/color) value type exists, but cells do not carry it yet.</ResponseField>
 
 ## Buffer
 
