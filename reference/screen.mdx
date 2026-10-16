@@ -88,9 +88,9 @@ When that order is non-empty and the current focus is outside it, `raise` saves 
 
 | Method | Description |
 | --- | --- |
-| `start()` | Raw mode, alternate screen, hidden cursor, mouse reporting if `mouse` is set, a buffer sized to the terminal, and the input thread. |
+| `start()` | Raw mode, alternate screen, hidden cursor, mouse reporting if `mouse` is set, a buffer sized to the terminal, the input thread, and, on POSIX, the resize watcher. |
 | `stop()` | Ends the loop. `next_event` returns `false` once the queue is drained. Safe to call more than once. |
-| `close()` | Stops the loop, restores the terminal exactly as `start()` found it, joins the input thread, and frees the screen's storage, including its keymap. Safe to call more than once. |
+| `close()` | Stops the loop, restores the terminal exactly as `start()` found it, joins the input thread and the resize watcher, and frees the screen's storage, including its keymap. Safe to call more than once. |
 
 ## The event loop
 
@@ -173,7 +173,7 @@ end
 
 | Constant | Value | Meaning |
 | --- | --- | --- |
-| `PollMs` | `20` | The longest the input thread sleeps between checks. Bounds resize-detection and `stop()` latency. |
+| `PollMs` | `20` | How often, at most, the input thread wakes when no key arrives. Bounds `stop()` latency and, on Windows, the size poll; on POSIX a resize arrives as `SIGWINCH` instead. |
 | `EventCapacity` | `256` | Events the channel buffers before the input thread waits. |
 
 ## The channel wrapper
