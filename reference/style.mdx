@@ -1,0 +1,201 @@
+---
+title: "Style"
+description: "The terminal style value type: a foreground and a background color, four attributes, border kinds, merge and equality, and the SGR sequences it emits."
+keywords: ["style", "sgr", "bold", "dim", "italic", "underline", "merge", "border", "color"]
+---
+
+`Style` is the value type a cell is drawn with: a foreground and a background [`Color`](/reference/color), and the four attributes `bold`, `dim`, `italic`, and `underline`. The field set is closed — no reverse, strikethrough, blink, or hidden — and a field with no effect is its neutral value, so a style never carries "is this set" metadata.
+
+<Note>
+  `Style` is the value half of the styling work and the [`Text`](/reference/text) widget carries it. Cells are still different: `Cell.style` is a raw SGR string built with `std/term`, and the other widgets (`Input`, `List`) still pass strings. Migrating cells to `Style` is a follow-up.
+</Note>
+
+## Style
+
+A style is a plain value: copied, compared, and passed by value. Two fields are `Color`, four are `bool`, all defaulting to their neutral value.
+
+```salam
+pub struct Style:
+    pub fg: Color = Color.Default
+    pub bg: Color = Color.Default
+    pub bold: bool = false
+    pub dim: bool = false
+    pub italic: bool = false
+    pub underline: bool = false
+end
+```
+
+| Field | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `fg` | `Color` | `Color.Default` | Glyph foreground. `Color.Default` leaves the terminal's own foreground. |
+| `bg` | `Color` | `Color.Default` | Cell background. `Color.Default` leaves the terminal's own background. |
+| `bold` | `bool` | `false` | Bold weight only; never brightens the foreground slot. |
+| `dim` | `bool` | `false` | Reduced intensity. |
+| `italic` | `bool` | `false` | Slanted glyphs. |
+| `underline` | `bool` | `false` | A single underline. |
+
+Colors are `Color`, not `Option<Color>`: `Color.Default` already means "no color chosen". A partial struct literal fills the rest with defaults, so `Style { bold = true }` is bold on the terminal's own colors.
+
+## Border style
+
+`BorderStyle` is the kind of border a container draws. It is a sibling enum, never a field of `Style`, so a border is a per-widget choice that is not inherited or merged.
+
+```salam
+pub enum BorderStyle:
+    None
+    Single
+    Double
+    Rounded
+end
+```
+
+| Value | Effect |
+| --- | --- |
+| `BorderStyle.None` | No border; the content area is the full area. The default. |
+| `BorderStyle.Single` | A one-cell ring of light lines with square corners. |
+| `BorderStyle.Double` | A one-cell ring of double lines. |
+| `BorderStyle.Rounded` | A one-cell ring of light lines with arc corners. |
+
+`BorderInset` reports the cells a border costs on each side, so a container can shrink its content area by it:
+
+```salam
+pub func BorderInset(b: BorderStyle): int
+```
+
+It returns `0` for `BorderStyle.None` and `1` for every other kind. `BorderStyle` and `BorderInset` are values only; drawing the ring — its code points, corners, and titles — is a later release.
+
+## StyleDefault
+
+`StyleDefault` is the constant of a style that asks for nothing: both colors the terminal's default and all four attributes off.
+
+```salam
+pub const StyleDefault := Style {}
+```
+
+It is the zero value of `Style`, so an all-zero struct equals it. It is the identity of `StyleMerge`, and it emits nothing: `StyleSgr(StyleDefault, tier)` is `""` for every tier. Test whether a style is unstyled with `StyleEq(s, StyleDefault)`; there is no separate `is_default`.
+
+## Merge
+
+`StyleMerge` returns the style a child ends up with under a parent, by sentinel patch: a child's color is used unless it is `Color.Default` (then the parent's is inherited), and each attribute is the OR of the two. It is pure — it returns a new value and never mutates its inputs.
+
+```salam
+pub func StyleMerge(parent: Style, child: Style): Style
+```
+
+| Parent | Child | Result | Why |
+| --- | --- | --- | --- |
+| `StyleDefault` | `{ fg = Color.Ansi(2) }` | `{ fg = Color.Ansi(2) }` | `StyleDefault` as parent is the identity. |
+| `{ fg = Color.Ansi(2) }` | `{ fg = Color.Ansi(1) }` | `{ fg = Color.Ansi(1) }` | The child's color wins. Swap the operands and the result is `Ansi(2)`; merge is not commutative. |
+| `{ fg = Color.Ansi(2), bg = Color.Indexed(237) }` | `{ fg = Color.Rgb(255, 135, 0) }` | `{ fg = Color.Rgb(255, 135, 0), bg = Color.Indexed(237) }` | The child overrides `fg`; `bg` is inherited. |
+| `{ bold = true }` | `{ italic = true }` | `{ bold = true, italic = true }` | Attributes are the OR. |
+
+The result of merging into `StyleDefault` is a fully resolved style, so a cell write always receives an absolute style.
+
+<Warning>
+  Sentinel merge has two limitations. A child cannot remove an inherited attribute — a child's `false` is indistinguishable from "unset", so the parent's `bold` survives. And a child cannot force the terminal-default color under a colored parent, because `Color.Default` means "inherit".
+</Warning>
+
+Neither limitation matters when a widget wants a clean slate: merging is the caller's choice, so a widget that needs one passes its own style without calling `StyleMerge`.
+
+## Equality
+
+`StyleEq` is value equality over the six stored fields — colors by kind and payload, attributes directly. It needs no tier.
+
+```salam
+pub func StyleEq(a: Style, b: Style): bool
+```
+
+- Same six values are equal, so `StyleEq(Style {}, StyleDefault)` is `true`.
+- Different kinds are never equal, even when they render alike: `Color.Ansi(1) != Color.Indexed(1)`, and `Color.Rgb(255, 0, 0) != Color.Indexed(196)`.
+- A tier never enters the comparison, so a tier change invalidates every cell.
+
+The contract with emission is sound but not complete: equal styles emit identical bytes at every tier, but unequal styles can emit the same bytes at `ColorTier.Off`, where every color is dropped. `StyleEq` therefore errs toward "different", so a cell is never wrongly skipped.
+
+## SGR emission
+
+`StyleSgr` is the sequence that takes a terminal from its default state to a style at a tier; `StyleSgrOff` is the mirror that takes it back. Both are pure — they read no terminal state and hold none.
+
+```salam
+pub func StyleSgr(style: Style, tier: ColorTier): str
+pub func StyleSgrOff(style: Style, tier: ColorTier): str
+```
+
+| Attribute | On (`StyleSgr`) | Off (`StyleSgrOff`) |
+| --- | --- | --- |
+| `bold` | `\x1b[1m` | `\x1b[22m` |
+| `dim` | `\x1b[2m` | `\x1b[22m` |
+| `italic` | `\x1b[3m` | `\x1b[23m` |
+| `underline` | `\x1b[4m` | `\x1b[24m` |
+| `fg` non-default | Color encoder | `\x1b[39m` |
+| `bg` non-default | Color encoder | `\x1b[49m` |
+
+`\x1b` is the escape character. SGR 22 clears bold **and** dim together, so `StyleSgrOff` emits it once when either is set. Every sequence is built with `std/term`; none is written by hand.
+
+- **Order.** Attributes first, in the fixed order bold, dim, italic, underline, then the foreground, then the background. Order has no effect on the terminal; it makes the bytes deterministic and testable.
+- **Colors lower first.** Each color is lowered to the tier with [`Lower`](/reference/color#downgrade), then encoded with the color encoders; a color that is `Default` after lowering is skipped, so a tier-off stream carries no color SGR.
+- **Attributes ignore the tier.** The tier lowers colors only. `NO_COLOR` asks for no color, not for no bold.
+- **Empty when nothing is set.** `StyleSgr(StyleDefault, tier)` is `""`, and so is `StyleSgrOff(StyleDefault, tier)`.
+- **No reset.** Neither function emits `\x1b[0m`. A reset would discard terminal state instead of describing this style, so clearing a previous cell is the caller's job.
+
+| Style | Tier | `StyleSgr` | `StyleSgrOff` |
+| --- | --- | --- | --- |
+| `StyleDefault` | any | (empty) | (empty) |
+| `{ bold = true }` | any | `\x1b[1m` | `\x1b[22m` |
+| `{ fg = Color.Ansi(2), bold = true }` | `TrueColor` | `\x1b[1m\x1b[32m` | `\x1b[22m\x1b[39m` |
+| `{ bold, dim, italic, underline }` | any | `\x1b[1m\x1b[2m\x1b[3m\x1b[4m` | `\x1b[22m\x1b[23m\x1b[24m` |
+| `{ fg = Color.Rgb(255, 135, 0), bg = Color.Indexed(237), underline = true }` | `TrueColor` | `\x1b[4m\x1b[38;2;255;135;0m\x1b[48;5;237m` | `\x1b[24m\x1b[39m\x1b[49m` |
+| same | `Indexed256` | `\x1b[4m\x1b[38;5;208m\x1b[48;5;237m` | `\x1b[24m\x1b[39m\x1b[49m` |
+| same | `Ansi16` | `\x1b[4m\x1b[33m\x1b[40m` | `\x1b[24m\x1b[39m\x1b[49m` |
+| same | `Off` | `\x1b[4m` | `\x1b[24m` |
+
+### Between two cells
+
+The conversion holds no state, so the caller owns the transition. When the next cell's style is not equal to the previous one, emit `StyleSgrOff(prev)` then `StyleSgr(next)`. Any shorter sequence that leaves the terminal in the same state is allowed. The first cell of a frame assumes the terminal's default, and the caller emits `StyleSgrOff(last)` at the end of the frame.
+
+## API
+
+```salam
+pub const StyleDefault := Style {}
+
+pub enum BorderStyle:
+    None
+    Single
+    Double
+    Rounded
+end
+
+pub struct Style:
+    pub fg: Color = Color.Default
+    pub bg: Color = Color.Default
+    pub bold: bool = false
+    pub dim: bool = false
+    pub italic: bool = false
+    pub underline: bool = false
+end
+
+pub func BorderInset(b: BorderStyle): int
+pub func StyleMerge(parent: Style, child: Style): Style
+pub func StyleEq(a: Style, b: Style): bool
+pub func StyleSgr(style: Style, tier: ColorTier): str
+pub func StyleSgrOff(style: Style, tier: ColorTier): str
+```
+
+## Example
+
+Styles are plain values, so you can merge and encode one without a terminal:
+
+```salam
+include "basalam/basalam.salam"
+
+func main:
+    // Build a style, then resolve it over a parent's background.
+    child := basalam.Style { fg = basalam.Green, bold = true }
+    merged := basalam.StyleMerge(basalam.Style { bg = basalam.Color.Indexed(237) }, child)
+    println basalam.StyleEq(merged, basalam.Style { fg = basalam.Green, bg = basalam.Color.Indexed(237), bold = true }) // true
+
+    // Encode it at a tier; the default style emits nothing.
+    tier := basalam.ColorTier.TrueColor
+    println basalam.StyleSgr(basalam.StyleDefault, tier) == "" // true
+    println basalam.StyleSgr(child, tier) // ESC[1mESC[32m
+end
+```
