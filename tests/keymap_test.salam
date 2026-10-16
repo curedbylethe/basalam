@@ -1,0 +1,419 @@
+/*
+ * basalam - a terminal user interface library for Salam (2026)
+ *
+ *   +-------------------+
+ *   |   B A S A L A M   |
+ *   +-------------------+
+ *
+ * Built on the Salam standard library's std/term package
+ * Salam: https://github.com/SalamLang/Salam
+ *
+ * Repository: https://github.com/curedbylethe/basalam
+ * License: GPL-3.0-or-later
+ *
+ */
+
+// Standalone tests for the keymap core: key identity, single-trie bindings
+// and rebinds, sequence deferral and mismatch reprocessing, per-widget scope
+// resolution, and the inert/non-key edges. No widget or Screen code is
+// exercised beyond building a headless screen; the keymap itself is the unit
+// under test. Actions move focus to a chosen widget, because a closure cannot
+// write a captured local (closures capture by value), so focused_id is the
+// observable effect of an action running.
+
+import testing
+import term
+
+include "../basalam/basalam.salam"
+
+// The screen root: an unfocusable placeholder so each test controls which
+// widget holds the focus.
+struct Root:
+    pub use basalam.BaseWidget
+end
+
+// A focusable widget with no behavior; only its focusability and ID matter.
+struct Field:
+    pub use basalam.BaseWidget
+    pub focus: bool = true
+
+    pub func focusable(): bool:
+        ret this.focus
+    end
+end
+
+// A headless screen the keymap can be pointed at. handle takes a
+// basalam.Screen*; a free function cannot take `&screen` and Vector.ref is
+// the only way to address a value in Salam, so the screen lives in a
+// one-element vector and every call goes through the pointer into it.
+struct Rig:
+    pub screens: Vector<basalam.Screen> = Vector {}
+
+    pub func open(w: int, h: int):
+        this.screens.push(basalam.NewScreen(Root {}, w, h))
+    end
+
+    pub func ptr(): basalam.Screen*:
+        ret this.screens.ref(0)
+    end
+
+    pub func add(parent: int, focus: bool): int:
+        ret this.ptr()[0].add(parent, Field { focus = focus })
+    end
+
+    pub func focus(id: int): bool:
+        ret this.ptr()[0].focus(id)
+    end
+
+    pub func focused(): int:
+        ret this.ptr()[0].focused_id()
+    end
+
+    pub func release():
+        this.ptr()[0].close()
+        this.screens.free()
+    end
+end
+
+func key(seq: str): basalam.Event:
+    ret basalam.Event { kind = basalam.KeyEvent, key = term.Decode(seq) }
+end
+
+// action_focus returns an action that moves the focus to id, so a test can
+// tell which binding ran by reading focused_id. The closure captures id by
+// value, baking it in.
+func action_focus(id: int): func (basalam.Screen*, basalam.Event) bool:
+    ret (screen: basalam.Screen*, event: basalam.Event): ret screen[0].focus(id) end
+end
+
+// focus_next_decline advances the focus one step and reports the key as
+// unconsumed, so a test can see that a declined action still resolved the key.
+func focus_next_decline(screen: basalam.Screen*): bool:
+    _ := screen[0].focus_next()
+    ret false
+end
+
+// act_next_decline returns an action that advances the focus once and returns
+// false (declines the key).
+func act_next_decline(): func (basalam.Screen*, basalam.Event) bool:
+    ret (screen: basalam.Screen*, event: basalam.Event): ret focus_next_decline(screen) end
+end
+
+// act_next_consume returns an action that advances the focus and returns true.
+func act_next_consume(): func (basalam.Screen*, basalam.Event) bool:
+    ret (screen: basalam.Screen*, event: basalam.Event): ret screen[0].focus_next() end
+end
+
+func test_single_hit_and_miss():
+    mut r := Rig {}
+    defer r.release()
+    r.open(20, 5)
+    w1 := r.add(basalam.RootId, true)
+    w2 := r.add(basalam.RootId, true)
+    mut km := basalam.NewKeymap()
+    defer km.free()
+    km.bind(term.Decode("a"), action_focus(w2))
+
+    testing.AssertEqInt(r.focused(), w1)
+    testing.AssertTrue(km.handle(r.ptr(), key("a")))
+    testing.AssertEqInt(r.focused(), w2)
+    testing.AssertFalse(km.handle(r.ptr(), key("b")))
+    testing.AssertEqInt(r.focused(), w2)
+end
+
+func test_rebind_last_write_wins():
+    mut r := Rig {}
+    defer r.release()
+    r.open(20, 5)
+    r.add(basalam.RootId, true)
+    w2 := r.add(basalam.RootId, true)
+    w3 := r.add(basalam.RootId, true)
+    mut km := basalam.NewKeymap()
+    defer km.free()
+    km.bind(term.Decode("a"), action_focus(w2))
+    km.bind(term.Decode("a"), action_focus(w3))
+
+    testing.AssertTrue(km.handle(r.ptr(), key("a")))
+    testing.AssertEqInt(r.focused(), w3)
+end
+
+func test_unbind():
+    mut r := Rig {}
+    defer r.release()
+    r.open(20, 5)
+    w1 := r.add(basalam.RootId, true)
+    w2 := r.add(basalam.RootId, true)
+    mut km := basalam.NewKeymap()
+    defer km.free()
+    km.bind(term.Decode("a"), action_focus(w2))
+    km.unbind(term.Decode("a"))
+
+    testing.AssertFalse(km.handle(r.ptr(), key("a")))
+    testing.AssertEqInt(r.focused(), w1)
+end
+
+func test_sequence_across_two_events():
+    mut r := Rig {}
+    defer r.release()
+    r.open(20, 5)
+    w1 := r.add(basalam.RootId, true)
+    w2 := r.add(basalam.RootId, true)
+    mut km := basalam.NewKeymap()
+    defer km.free()
+    km.bind_seq("gg", action_focus(w2))
+
+    testing.AssertFalse(km.handle(r.ptr(), key("g")))
+    testing.AssertEqInt(r.focused(), w1)
+    testing.AssertTrue(km.handle(r.ptr(), key("g")))
+    testing.AssertEqInt(r.focused(), w2)
+end
+
+func test_deferral_fires_on_break():
+    mut r := Rig {}
+    defer r.release()
+    r.open(20, 5)
+    w1 := r.add(basalam.RootId, true)
+    w2 := r.add(basalam.RootId, true)
+    w3 := r.add(basalam.RootId, true)
+    mut km := basalam.NewKeymap()
+    defer km.free()
+    km.bind(term.Decode("g"), action_focus(w2))
+    km.bind_seq("gg", action_focus(w3))
+
+    // g has both a binding and a child: it defers.
+    testing.AssertFalse(km.handle(r.ptr(), key("g")))
+    testing.AssertEqInt(r.focused(), w1)
+    // The continuation wins.
+    testing.AssertTrue(km.handle(r.ptr(), key("g")))
+    testing.AssertEqInt(r.focused(), w3)
+    // A breaking key fires the deferred single binding.
+    testing.AssertFalse(km.handle(r.ptr(), key("g")))
+    testing.AssertTrue(km.handle(r.ptr(), key("x")))
+    testing.AssertEqInt(r.focused(), w2)
+end
+
+func test_mismatch_reprocesses_from_root():
+    mut r := Rig {}
+    defer r.release()
+    r.open(20, 5)
+    r.add(basalam.RootId, true)
+    w2 := r.add(basalam.RootId, true)
+    mut km := basalam.NewKeymap()
+    defer km.free()
+    km.bind_seq("gg", action_focus(w2))
+    km.bind(term.Decode("x"), action_focus(w2))
+
+    // "g" starts a pending prefix; "x" does not continue it and is then
+    // reprocessed from the root, where it is bound.
+    testing.AssertFalse(km.handle(r.ptr(), key("g")))
+    testing.AssertTrue(km.handle(r.ptr(), key("x")))
+    testing.AssertEqInt(r.focused(), w2)
+end
+
+func test_direct_two_key_sequence():
+    mut r := Rig {}
+    defer r.release()
+    r.open(20, 5)
+    w1 := r.add(basalam.RootId, true)
+    w2 := r.add(basalam.RootId, true)
+    mut km := basalam.NewKeymap()
+    defer km.free()
+    km.bind_seq("ab", action_focus(w2))
+
+    testing.AssertFalse(km.handle(r.ptr(), key("a")))
+    testing.AssertEqInt(r.focused(), w1)
+    testing.AssertTrue(km.handle(r.ptr(), key("b")))
+    testing.AssertEqInt(r.focused(), w2)
+end
+
+func test_nearest_scope_wins():
+    mut r := Rig {}
+    defer r.release()
+    r.open(40, 10)
+    outer := r.add(basalam.RootId, true)
+    inner := r.add(outer, true)
+    t_inner := r.add(basalam.RootId, true)
+    t_outer := r.add(basalam.RootId, true)
+    t_global := r.add(basalam.RootId, true)
+    mut km := basalam.NewKeymap()
+    defer km.free()
+    km.bind(term.Decode("a"), action_focus(t_global))
+    km.bind_for(outer, term.Decode("a"), action_focus(t_outer))
+    km.bind_for(inner, term.Decode("a"), action_focus(t_inner))
+
+    testing.AssertTrue(r.focus(inner))
+    testing.AssertTrue(km.handle(r.ptr(), key("a")))
+    testing.AssertEqInt(r.focused(), t_inner)
+end
+
+func test_outer_scope_beats_global():
+    mut r := Rig {}
+    defer r.release()
+    r.open(40, 10)
+    outer := r.add(basalam.RootId, true)
+    t_outer := r.add(basalam.RootId, true)
+    t_global := r.add(basalam.RootId, true)
+    mut km := basalam.NewKeymap()
+    defer km.free()
+    km.bind(term.Decode("a"), action_focus(t_global))
+    km.bind_for(outer, term.Decode("a"), action_focus(t_outer))
+
+    // Focus on outer directly: the chain is outer -> root, so outer's
+    // binding applies and the global one does not.
+    testing.AssertTrue(r.focus(outer))
+    testing.AssertTrue(km.handle(r.ptr(), key("a")))
+    testing.AssertEqInt(r.focused(), t_outer)
+end
+
+func test_global_fallback_when_unscoped():
+    mut r := Rig {}
+    defer r.release()
+    r.open(40, 10)
+    outer := r.add(basalam.RootId, true)
+    other := r.add(basalam.RootId, true)
+    t_outer := r.add(basalam.RootId, true)
+    t_global := r.add(basalam.RootId, true)
+    mut km := basalam.NewKeymap()
+    defer km.free()
+    km.bind(term.Decode("a"), action_focus(t_global))
+    km.bind_for(outer, term.Decode("a"), action_focus(t_outer))
+
+    // Focus is outside outer's subtree, so only the global binding applies.
+    testing.AssertTrue(r.focus(other))
+    testing.AssertTrue(km.handle(r.ptr(), key("a")))
+    testing.AssertEqInt(r.focused(), t_global)
+end
+
+func test_scoped_only_outside_scope_misses():
+    mut r := Rig {}
+    defer r.release()
+    r.open(40, 10)
+    outer := r.add(basalam.RootId, true)
+    other := r.add(basalam.RootId, true)
+    target := r.add(basalam.RootId, true)
+    mut km := basalam.NewKeymap()
+    defer km.free()
+    km.bind_for(outer, term.Decode("a"), action_focus(target))
+
+    testing.AssertTrue(r.focus(other))
+    testing.AssertFalse(km.handle(r.ptr(), key("a")))
+    testing.AssertEqInt(r.focused(), other)
+end
+
+func test_empty_map_is_inert():
+    mut r := Rig {}
+    defer r.release()
+    r.open(10, 3)
+    w1 := r.add(basalam.RootId, true)
+
+    mut bare := basalam.Keymap {}
+    defer bare.free()
+    testing.AssertFalse(bare.handle(r.ptr(), key("a")))
+
+    mut empty := basalam.NewKeymap()
+    defer empty.free()
+    testing.AssertFalse(empty.handle(r.ptr(), key("a")))
+    testing.AssertEqInt(r.focused(), w1)
+end
+
+func test_non_key_event_leaves_pending():
+    mut r := Rig {}
+    defer r.release()
+    r.open(20, 5)
+    r.add(basalam.RootId, true)
+    w2 := r.add(basalam.RootId, true)
+    mut km := basalam.NewKeymap()
+    defer km.free()
+    km.bind_seq("gg", action_focus(w2))
+
+    testing.AssertFalse(km.handle(r.ptr(), key("g")))
+    testing.AssertFalse(km.handle(r.ptr(), basalam.Event { kind = basalam.TickEvent }))
+    testing.AssertTrue(km.handle(r.ptr(), key("g")))
+    testing.AssertEqInt(r.focused(), w2)
+end
+
+func test_space_is_not_ctrl_space():
+    mut r := Rig {}
+    defer r.release()
+    r.open(20, 5)
+    r.add(basalam.RootId, true)
+    w2 := r.add(basalam.RootId, true)
+    mut km := basalam.NewKeymap()
+    defer km.free()
+    km.bind(term.Decode(" "), action_focus(w2))
+
+    // Ctrl+Space decodes to a KeyChar with ch " "; plain space is KeySpace.
+    // The canonical identity keeps them apart.
+    testing.AssertFalse(km.handle(r.ptr(), basalam.Event { kind = basalam.KeyEvent, key = term.Decode("\x00") }))
+    testing.AssertTrue(km.handle(r.ptr(), key(" ")))
+    testing.AssertEqInt(r.focused(), w2)
+end
+
+func test_declined_mismatch_stops():
+    mut r := Rig {}
+    defer r.release()
+    r.open(20, 5)
+    w1 := r.add(basalam.RootId, true)
+    w2 := r.add(basalam.RootId, true)
+    _ := r.add(basalam.RootId, true)
+    mut km := basalam.NewKeymap()
+    defer km.free()
+    km.bind(term.Decode("g"), act_next_decline())
+    km.bind_seq("gg", act_next_consume())
+    km.bind(term.Decode("x"), act_next_consume())
+
+    testing.AssertEqInt(r.focused(), w1)
+    // g has both a binding and a child, so it defers.
+    testing.AssertFalse(km.handle(r.ptr(), key("g")))
+    testing.AssertEqInt(r.focused(), w1)
+    // x breaks the prefix: the deferred g action runs (focus moves to the
+    // second widget) and reports the key unconsumed. The key is resolved, so
+    // x is not also run from the root: handle returns false and the focus
+    // stays put (the old fall-through would have moved it to the third).
+    testing.AssertFalse(km.handle(r.ptr(), key("x")))
+    testing.AssertEqInt(r.focused(), w2)
+end
+
+func test_declined_completion_stops():
+    mut r := Rig {}
+    defer r.release()
+    r.open(20, 5)
+    w1 := r.add(basalam.RootId, true)
+    w2 := r.add(basalam.RootId, true)
+    _ := r.add(basalam.RootId, true)
+    mut km := basalam.NewKeymap()
+    defer km.free()
+    km.bind_seq("gg", act_next_decline())
+
+    testing.AssertFalse(km.handle(r.ptr(), key("g")))
+    testing.AssertEqInt(r.focused(), w1)
+    // Completing the sequence runs the action, which advances the focus and
+    // declines the key. The key is resolved even though the action returned
+    // false.
+    testing.AssertFalse(km.handle(r.ptr(), key("g")))
+    testing.AssertEqInt(r.focused(), w2)
+    // A fresh g defers again; it must not re-run the action (the old
+    // fall-through re-parked pending at the g node and the third g re-fired).
+    testing.AssertFalse(km.handle(r.ptr(), key("g")))
+    testing.AssertEqInt(r.focused(), w2)
+end
+
+func main:
+    test_single_hit_and_miss()
+    test_rebind_last_write_wins()
+    test_unbind()
+    test_sequence_across_two_events()
+    test_deferral_fires_on_break()
+    test_mismatch_reprocesses_from_root()
+    test_direct_two_key_sequence()
+    test_nearest_scope_wins()
+    test_outer_scope_beats_global()
+    test_global_fallback_when_unscoped()
+    test_scoped_only_outside_scope_misses()
+    test_empty_map_is_inert()
+    test_non_key_event_leaves_pending()
+    test_space_is_not_ctrl_space()
+    test_declined_mismatch_stops()
+    test_declined_completion_stops()
+    ret testing.Summary()
+end
