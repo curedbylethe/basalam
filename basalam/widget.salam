@@ -18,7 +18,7 @@
  *
  * basalam is retained mode: a widget is a long-lived value that holds its
  * own state, and the screen asks it to draw itself and to react to events.
- * The Widget interface is the whole contract; anything that has these six
+ * The Widget interface is the whole contract; anything that has these seven
  * methods is a widget (Salam interfaces are structural: there is no
  * `implements`). A list, a button, and a panel are all Widgets, so the
  * screen stores them side by side as `dyn Widget`.
@@ -78,6 +78,12 @@ pub interface Widget:
     /// take part in focus navigation.
     func focusable(): bool
 
+    @en "hits"
+    /// True when hit-testing may land on this widget. A widget may paint
+    /// and still refuse hits; the screen then skips it and keeps scanning
+    /// the widgets under it.
+    func hits(): bool
+
     @en "bounds"
     /// The widget's rect on the screen, as last set by set_bounds.
     func bounds(): Rect
@@ -124,6 +130,13 @@ pub struct BaseWidget:
     /// Returns false. Override it to return true for interactive widgets.
     pub func focusable(): bool:
         ret false
+    end
+
+    @en "hits"
+    /// Returns true. Override it to return false when the widget may paint
+    /// and still refuse hits.
+    pub func hits(): bool:
+        ret true
     end
 
     @en "bounds"
