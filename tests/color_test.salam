@@ -1,0 +1,190 @@
+/*
+ * basalam - a terminal user interface library for Salam (2026)
+ *
+ *   +-------------------+
+ *   |   B A S A L A M   |
+ *   +-------------------+
+ *
+ * Built on the Salam standard library's std/term package
+ * Salam: https://github.com/SalamLang/Salam
+ *
+ * Repository: https://github.com/curedbylethe/basalam
+ * License: GPL-3.0-or-later
+ *
+ */
+
+// Unit tests for the Color value type and its raw SGR encoding: all four
+// kinds construct and their payloads round-trip through a match, the 16
+// palette constants equal Color.Ansi(0..15), and FgSeq / BgSeq encode every
+// kind to the exact escape its kind specifies (Default 39/49, Ansi 0-7
+// 30+n/40+n, Ansi 8-15 90+(n-8)/100+(n-8), Indexed 38;5;n / 48;5;n, Rgb
+// 38;2;r;g;b / 48;2;r;g;b). Expected strings are built with term's own
+// sequence builders, so no escape appears by hand. Finally the equality
+// truth table: equal payloads are equal, and different kinds or payloads
+// never are (including Indexed(1) vs Rgb(205,0,0) and Indexed(196) vs
+// Rgb(255,0,0)).
+
+import testing
+import term
+
+include "../basalam/basalam.salam"
+
+func kind(c: basalam.Color): int:
+    ret match c:
+        Default => 0
+        Ansi(_) => 1
+        Indexed(_) => 2
+        Rgb(_, _, _) => 3
+    end
+end
+
+func ansi_n(c: basalam.Color): int:
+    ret match c:
+        Ansi(n) => n
+        else => -1
+    end
+end
+
+func indexed_n(c: basalam.Color): int:
+    ret match c:
+        Indexed(n) => n
+        else => -1
+    end
+end
+
+func rgb_r(c: basalam.Color): int:
+    ret match c:
+        Rgb(r, _, _) => r
+        else => -1
+    end
+end
+
+func rgb_g(c: basalam.Color): int:
+    ret match c:
+        Rgb(_, g, _) => g
+        else => -1
+    end
+end
+
+func rgb_b(c: basalam.Color): int:
+    ret match c:
+        Rgb(_, _, b) => b
+        else => -1
+    end
+end
+
+func test_construct_kind():
+    testing.AssertEqInt(kind(basalam.Color.Default), 0)
+    testing.AssertEqInt(kind(basalam.Color.Ansi(3)), 1)
+    testing.AssertEqInt(kind(basalam.Color.Indexed(196)), 2)
+    testing.AssertEqInt(kind(basalam.Color.Rgb(255, 135, 0)), 3)
+end
+
+func test_payload_round_trip():
+    testing.AssertEqInt(ansi_n(basalam.Color.Ansi(3)), 3)
+    testing.AssertEqInt(ansi_n(basalam.Color.Ansi(15)), 15)
+    testing.AssertEqInt(indexed_n(basalam.Color.Indexed(196)), 196)
+    testing.AssertEqInt(indexed_n(basalam.Color.Indexed(0)), 0)
+    testing.AssertEqInt(rgb_r(basalam.Color.Rgb(255, 135, 0)), 255)
+    testing.AssertEqInt(rgb_g(basalam.Color.Rgb(255, 135, 0)), 135)
+    testing.AssertEqInt(rgb_b(basalam.Color.Rgb(255, 135, 0)), 0)
+end
+
+func test_palette_constants():
+    testing.AssertTrue(basalam.Black == basalam.Color.Ansi(0))
+    testing.AssertTrue(basalam.Red == basalam.Color.Ansi(1))
+    testing.AssertTrue(basalam.Green == basalam.Color.Ansi(2))
+    testing.AssertTrue(basalam.Yellow == basalam.Color.Ansi(3))
+    testing.AssertTrue(basalam.Blue == basalam.Color.Ansi(4))
+    testing.AssertTrue(basalam.Magenta == basalam.Color.Ansi(5))
+    testing.AssertTrue(basalam.Cyan == basalam.Color.Ansi(6))
+    testing.AssertTrue(basalam.White == basalam.Color.Ansi(7))
+    testing.AssertTrue(basalam.BrightBlack == basalam.Color.Ansi(8))
+    testing.AssertTrue(basalam.BrightRed == basalam.Color.Ansi(9))
+    testing.AssertTrue(basalam.BrightGreen == basalam.Color.Ansi(10))
+    testing.AssertTrue(basalam.BrightYellow == basalam.Color.Ansi(11))
+    testing.AssertTrue(basalam.BrightBlue == basalam.Color.Ansi(12))
+    testing.AssertTrue(basalam.BrightMagenta == basalam.Color.Ansi(13))
+    testing.AssertTrue(basalam.BrightCyan == basalam.Color.Ansi(14))
+    testing.AssertTrue(basalam.BrightWhite == basalam.Color.Ansi(15))
+end
+
+func test_fg_seq_ansi_range():
+    mut n := 0
+    until n < 8:
+        testing.AssertEqStr(basalam.FgSeq(basalam.Color.Ansi(n)), term.Sgr(30 + n))
+        n += 1
+    end
+    until n < 16:
+        testing.AssertEqStr(basalam.FgSeq(basalam.Color.Ansi(n)), term.Sgr(90 + (n - 8)))
+        n += 1
+    end
+end
+
+func test_bg_seq_ansi_range():
+    mut n := 0
+    until n < 8:
+        testing.AssertEqStr(basalam.BgSeq(basalam.Color.Ansi(n)), term.Sgr(40 + n))
+        n += 1
+    end
+    until n < 16:
+        testing.AssertEqStr(basalam.BgSeq(basalam.Color.Ansi(n)), term.Sgr(100 + (n - 8)))
+        n += 1
+    end
+end
+
+func test_fg_seq_other_kinds():
+    testing.AssertEqStr(basalam.FgSeq(basalam.Color.Default), term.Sgr(term.FgDefault))
+    testing.AssertEqStr(basalam.FgSeq(basalam.Color.Indexed(0)), term.SeqFg256(0))
+    testing.AssertEqStr(basalam.FgSeq(basalam.Color.Indexed(196)), term.SeqFg256(196))
+    testing.AssertEqStr(basalam.FgSeq(basalam.Color.Indexed(15)), term.SeqFg256(15))
+    testing.AssertEqStr(basalam.FgSeq(basalam.Color.Rgb(255, 135, 0)), term.SeqFgRGB(255, 135, 0))
+    testing.AssertEqStr(basalam.FgSeq(basalam.Color.Rgb(0, 0, 0)), term.SeqFgRGB(0, 0, 0))
+end
+
+func test_bg_seq_other_kinds():
+    testing.AssertEqStr(basalam.BgSeq(basalam.Color.Default), term.Sgr(term.BgDefault))
+    testing.AssertEqStr(basalam.BgSeq(basalam.Color.Indexed(0)), term.SeqBg256(0))
+    testing.AssertEqStr(basalam.BgSeq(basalam.Color.Indexed(196)), term.SeqBg256(196))
+    testing.AssertEqStr(basalam.BgSeq(basalam.Color.Indexed(15)), term.SeqBg256(15))
+    testing.AssertEqStr(basalam.BgSeq(basalam.Color.Rgb(255, 135, 0)), term.SeqBgRGB(255, 135, 0))
+    testing.AssertEqStr(basalam.BgSeq(basalam.Color.Rgb(0, 0, 0)), term.SeqBgRGB(0, 0, 0))
+end
+
+func test_fg_seq_palette():
+    testing.AssertEqStr(basalam.FgSeq(basalam.Black), term.Sgr(30))
+    testing.AssertEqStr(basalam.FgSeq(basalam.White), term.Sgr(37))
+    testing.AssertEqStr(basalam.FgSeq(basalam.BrightBlack), term.Sgr(90))
+    testing.AssertEqStr(basalam.FgSeq(basalam.BrightWhite), term.Sgr(97))
+end
+
+func test_equality_equal():
+    testing.AssertTrue(basalam.Color.Default == basalam.Color.Default)
+    testing.AssertTrue(basalam.Color.Ansi(1) == basalam.Color.Ansi(1))
+    testing.AssertTrue(basalam.Color.Indexed(196) == basalam.Color.Indexed(196))
+    testing.AssertTrue(basalam.Color.Rgb(255, 0, 0) == basalam.Color.Rgb(255, 0, 0))
+    testing.AssertTrue(basalam.Black == basalam.Color.Ansi(0))
+end
+
+func test_equality_unequal():
+    testing.AssertFalse(basalam.Color.Ansi(1) == basalam.Color.Ansi(9))
+    testing.AssertFalse(basalam.Color.Default == basalam.Color.Ansi(7))
+    testing.AssertFalse(basalam.Color.Ansi(1) == basalam.Color.Indexed(1))
+    testing.AssertFalse(basalam.Color.Indexed(1) == basalam.Color.Rgb(205, 0, 0))
+    testing.AssertFalse(basalam.Color.Indexed(196) == basalam.Color.Rgb(255, 0, 0))
+    testing.AssertFalse(basalam.Color.Rgb(255, 0, 0) == basalam.Color.Rgb(255, 0, 1))
+end
+
+func main:
+    test_construct_kind()
+    test_payload_round_trip()
+    test_palette_constants()
+    test_fg_seq_ansi_range()
+    test_bg_seq_ansi_range()
+    test_fg_seq_other_kinds()
+    test_bg_seq_other_kinds()
+    test_fg_seq_palette()
+    test_equality_equal()
+    test_equality_unequal()
+    ret testing.Summary()
+end
