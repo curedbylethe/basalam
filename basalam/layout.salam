@@ -46,8 +46,8 @@
  * the pass through its existing fit_root path. Nothing here changes Screen,
  * Tree or Buffer.
  *
- * Deliberately absent. No flex weights, no two-pass measure-then-position, no
- * gap between slots. No grid row/column spanning. No stack z-order beyond
+ * Deliberately absent. No two-pass measure-then-position, no gap between
+ * slots. No grid row/column spanning. No stack z-order beyond
  * registry id order, and no focus-to-topmost. Containers position; they never
  * paint their children.
  */
@@ -78,8 +78,8 @@ end
 /// How a child resolves its size on one axis.
 pub enum SizeKind:
     @en "Fill"
-    /// An equal share of whatever is left after the Fixed children (R5). On
-    /// a cross axis, Fill behaves like Pref (R8).
+    /// A weighted share of whatever is left after the Fixed children (R5).
+    /// On a cross axis, Fill behaves like Pref and the weight is ignored (R8).
     Fill
     @en "Fixed"
     /// Exactly `cells` long. A negative value clamps to 0.
@@ -92,7 +92,7 @@ end
 
 @en "LayoutSize"
 /// A child's requested size on one axis. `cells` is read only when `kind` is
-/// Fixed.
+/// Fixed. `weight` is read only when a main-axis Fill or Pref joins the share.
 pub struct LayoutSize:
     @en "kind"
     /// How the size is resolved. Defaults to Fill.
@@ -102,6 +102,12 @@ pub struct LayoutSize:
     /// The requested length, read only when kind is Fixed. Negative values
     /// clamp to 0 when used.
     pub cells: int = 0
+
+    @en "weight"
+    /// Share of the main-axis leftover for a Fill or Pref. Defaults to 1. A
+    /// negative value clamps to 0 when used. Fixed ignores it, and so do Grid,
+    /// Stack, and cross-axis alignment.
+    pub weight: int = 1
 end
 
 @en "Insets"
@@ -604,11 +610,15 @@ func _slotCell(items &: Vector<LayoutSlot>, i: int, row: int, col: int):
     items.set(i, s)
 end
 
-// R5/R6/R7: the shared Row and Column engine. Slots are packed along the main
-// axis from the content start with no gaps; each child fills its margin box
-// on the main axis and is placed on the cross axis by its alignment (Stretch
-// by default). main_is_width selects Row (true) or Column (false). Every
-// resulting rect is clipped to content last (R6).
+// R5/R6/R7: the shared Row and Column engine. SplitMain reserves each Fixed
+// size at max(0, cells) and shares the leftover by weight among Fill and
+// Pref. Shares are largest-remainder, and a tie goes to the earliest pool
+// slot. A weight sum of 0, or Fixed sizes that already use up the length,
+// gives every pool entry 0 and does not shrink Fixed. Slots stay in list
+// order and pack from the content start with no gaps. Each child fills its
+// margin box on the main axis. The cross axis uses alignment (Stretch by
+// default) and ignores weight. main_is_width selects Row (true) or Column
+// (false). Every resulting rect is clipped to content last (R6).
 func _arrangeLinear(content: Rect, items: Vector<LayoutSlot>, main_is_width: bool): Vector<Rect>:
     sizes := _slotSizes(items, main_is_width)
     lengths := SplitMain(main_is_width ? content.width : content.height, sizes)
@@ -733,41 +743,68 @@ end
 
 @en "SplitMain"
 /// Splits a main-axis length of `length` cells between sizes, in order (R5).
-/// A Fixed size takes max(0, cells); the rest is shared equally among the
-/// Fill and Pref entries, with the remainder going to the earliest of them,
-/// one cell each. The leftover stays unused when there are no Fill or Pref
-/// entries, or when Fixed sizes alone overflow length (Fixed requests are
-/// kept); the vector always has one entry per input size.
+/// Fixed takes max(0, cells) and ignores weight. Fill and Pref share the
+/// leftover R = max(0, length - sum of those Fixed sizes). Each pool entry's
+/// weight is max(0, weight). The share is floor(R * weight / sum of weights),
+/// then one extra cell goes to each remaining cell, given to the pool entries
+/// with the largest (R * weight) mod sum of weights. Ties go to the earliest
+/// pool slot. A weight sum of 0 gives every pool entry 0 and leaves R unused,
+/// with no division. Fixed overflow makes R 0, so every pool entry is 0 and
+/// Fixed is not shrunk. The vector has one entry per input. Weight 1 on every
+/// pool entry is an equal split, remainder to the earliest entries.
 pub func SplitMain(length: int, sizes: Vector<LayoutSize>): Vector<int>:
-    mut fixed := 0
-    mut fills := 0
+    mut reserved := 0
+    mut sum_w := 0
     repeat sizes.len() in idx:
         s := sizes.get(idx)
         if s.kind == SizeKind.Fixed:
-            fixed = fixed + _clampNeg(s.cells)
+            reserved = reserved + _clampNeg(s.cells)
         else:
-            fills = fills + 1
+            sum_w = sum_w + _clampNeg(s.weight)
         end
     end
-    share := _clampNeg(length - fixed)
-    mut base := 0
-    mut rem := 0
-    if fills > 0:
-        base = share / fills
-        rem = share % fills
-    end
+    rest := _clampNeg(length - reserved)
     out := Vector {} as Vector<int>
-    mut k := 0
+    mut used := 0
     repeat sizes.len() in idx:
         s := sizes.get(idx)
         if s.kind == SizeKind.Fixed:
             out.push(_clampNeg(s.cells))
         else:
-            extra := k < rem ? 1 : 0
-            out.push(base + extra)
-            k = k + 1
+            mut part := 0
+            if sum_w > 0:
+                part = (rest * _clampNeg(s.weight)) / sum_w
+                used = used + part
+            end
+            out.push(part)
         end
     end
+    spare := rest - used
+    if sum_w == 0 or spare <= 0:
+        ret out
+    end
+    taken := Vector {} as Vector<int>
+    repeat sizes.len():
+        taken.push(0)
+    end
+    repeat spare:
+        mut best := -1
+        mut best_frac := -1
+        repeat sizes.len() in idx:
+            s := sizes.get(idx)
+            if s.kind != SizeKind.Fixed and taken.get(idx) == 0:
+                frac := (rest * _clampNeg(s.weight)) % sum_w
+                // Equal remainders keep the earlier slot.
+                if best < 0 or frac > best_frac:
+                    best = idx
+                    best_frac = frac
+                end
+            end
+        end
+        taken.set(best, 1)
+        out.set(best, out.get(best) + 1)
+    end
+    taken.free()
     ret out
 end
 
