@@ -24,13 +24,13 @@
 //   - the event loop: the input thread produces events, this main loop
 //     consumes them with next_event and dispatches them synchronously;
 //   - tick events (once a second) driving a counter;
-//   - focus: Tab moves to the next panel (linear order), the arrow keys
-//     move to the nearest panel in that direction (spatial navigation), and
-//     the focused panel draws a highlighted border;
-//   - Enter or Space is consumed by the focused panel; every other key
-//     bubbles up to the main loop, which decides what it means;
-//   - q (or Ctrl+C) quits, and `defer screen.close()` restores the terminal
-//     on every exit path.
+//   - focus: the opt-in default keymap is installed, so Tab moves to the next
+//     panel (linear order) and the arrow keys move to the nearest panel in
+//     that direction (spatial navigation); the focused panel draws a
+//     highlighted border;
+//   - Enter or Space is consumed by the focused panel; q (or Ctrl+C), which
+//     nothing handles, bubbles up to the main loop and quits;
+//   - `defer screen.close()` restores the terminal on every exit path.
 
 import term
 
@@ -142,27 +142,6 @@ func arrange(screen: basalam.Screen, left: int, right: int, bottom: int):
     screen.widget(bottom).set_bounds(basalam.Rect { x = 1, y = 2 + top_h, width = w - 2, height = h - top_h })
 end
 
-// The application's own key bindings for focus. The library provides the
-// navigation; which keys trigger it is the application's choice.
-func move_focus(screen &: basalam.Screen, ev: basalam.Event): bool:
-    if ev.is_key(term.KeyTab):
-        ret screen.focus_next()
-    end
-    if ev.is_key(term.KeyUp):
-        ret screen.focus_up()
-    end
-    if ev.is_key(term.KeyDown):
-        ret screen.focus_down()
-    end
-    if ev.is_key(term.KeyLeft):
-        ret screen.focus_left()
-    end
-    if ev.is_key(term.KeyRight):
-        ret screen.focus_right()
-    end
-    ret false
-end
-
 func main:
     if not term.IsTTY(term.StdinFd) or not term.IsTerminal():
         printerrln "demo: needs an interactive terminal"
@@ -171,6 +150,9 @@ func main:
 
     mut screen := basalam.NewTerminalScreen(App {})
     screen.tick_ms = 1000
+    // Opt in to the library's default focus bindings: Tab and the four arrow
+    // keys are handled by the keymap as a dispatch fallback, after the panels.
+    screen.set_keymap(basalam.NewDefaultKeymap())
     left := screen.add(basalam.RootId, Panel { label = "Left" })
     right := screen.add(basalam.RootId, Panel { label = "Right" })
     bottom := screen.add(basalam.RootId, Panel { label = "Bottom" })
@@ -194,11 +176,12 @@ func main:
         if ev.kind == basalam.KeyEvent:
             last_key = describe(ev.key)
         end
+        // Tab and the arrows are consumed by the keymap, and Enter/Space by
+        // the focused panel, so only q and Ctrl+C reach here unconsumed, and
+        // they quit.
         if not consumed:
             if ev.is_char("q") or ev.is_ctrl("c"):
                 screen.stop()
-            else:
-                _ := move_focus(screen, ev)
             end
         end
         screen.present()
