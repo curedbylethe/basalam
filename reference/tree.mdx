@@ -1,10 +1,10 @@
 ---
 title: "Tree"
-description: "The widget registry: integer IDs, parent links, paint order, and event bubbling."
+description: "The widget registry: integer IDs, parent links, and event bubbling."
 keywords: ["tree", "widget id", "parent", "dispatch", "bubbling", "z-order"]
 ---
 
-A `Tree` records which widgets exist and who is whose parent. It lives outside the widgets, so a widget never needs to know where it sits and the `Widget` interface stays at five methods.
+A `Tree` records which widgets exist and who is whose parent. It lives outside the widgets, so a widget never needs to know where it sits. Parent links are not part of the `Widget` interface. The tree does not store paint order or focus order.
 
 ## Why integer IDs
 
@@ -14,17 +14,21 @@ Salam's `dyn` values cannot be compared with `==`, and cannot be cast back to th
 - `add` appends, so IDs stay stable for the tree's lifetime.
 - A parent's ID is always smaller than its children's. That makes bubbling loop-free by construction.
 
-## Order is z-order
+## Registry order
 
-ID order is also paint order and focus order. Widgets paint in ID order, so a child (added after its parent) paints over the parent, and a later sibling paints over an earlier one. Linear focus navigation follows the same order.
+ID order is the order widgets were added. A parent's ID is always smaller than its children's. That order is what the tree stores. It is not, by itself, paint order or focus order.
+
+With nothing raised, the [screen](/reference/screen) paints in this ID order and walks focus in it, so a child paints over its parent and a later sibling paints over an earlier one. After `raise`, paint order is ascending `(stamp, id)` and focus stays in the topmost layer that has a focusable widget. Stamps live on the screen, not in the tree.
 
 ```text
-root(0)                paints first
+root(0)                added first
 |-- panel(1)
 |   |-- left(2)
 |   `-- right(3)
-`-- footer(4)          paints last, on top
+`-- footer(4)          added last
 ```
+
+With nothing raised, `footer` paints last and draws on top. `raise` can put an earlier id above it.
 
 ## Constants
 

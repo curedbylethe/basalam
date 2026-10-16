@@ -94,9 +94,9 @@ end
 A key press belongs to whoever has the focus. A click belongs to whatever is under the cursor. So `dispatch` routes the two differently:
 
 1. For a `MouseEvent`, the screen converts the report to a 0-based cell with `event.mouse_point()` and calls `hit_test(x, y)`.
-2. `hit_test` returns the topmost widget whose bounds contain that cell. Topmost means painted last, which is the highest ID: a child beats its parent, and a later sibling beats an earlier one. It is always what the user sees on that cell.
+2. `hit_test` returns the topmost widget whose bounds contain that cell and whose `hits()` is true. Topmost means last in paint order. Paint order is ascending `(stamp, id)`, and the scan walks it in reverse. With nothing raised, that is the highest ID, so a child beats its parent and a later sibling beats an earlier one. A raised widget beats every widget in an earlier layer. A widget that paints and returns `hits() == false` is skipped, and the scan continues under it. The winner is what you see on that cell only when the widget on top accepts hits.
 3. The event starts at that widget and [bubbles up](/reference/event#dispatch-and-bubbling) through its ancestors.
-4. If no widget contains the cell (a click outside the buffer, or a report that did not decode), the event starts at the focused widget, like every other event.
+4. If no widget contains the cell, every widget on the cell refuses hits, or the report did not decode, the event starts at the focused widget, like every other event.
 
 Every other event kind (keys, ticks, resizes) still starts at the focused widget.
 
