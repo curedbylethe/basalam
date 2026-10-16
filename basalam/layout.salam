@@ -46,10 +46,9 @@
  * the pass through its existing fit_root path. Nothing here changes Screen,
  * Tree or Buffer.
  *
- * Deliberately absent. No two-pass measure-then-position, no gap between
- * slots. No grid row/column spanning. No stack z-order beyond
- * registry id order, and no focus-to-topmost. Containers position; they never
- * paint their children.
+ * Deliberately absent. No two-pass measure-then-position. No grid
+ * row/column spanning. No stack z-order beyond registry id order, and no
+ * focus-to-topmost. Containers position; they never paint their children.
  */
 
 package basalam
@@ -177,17 +176,23 @@ end
 
 @en "Row"
 /// A container that lays its children left to right along the x axis. Slots
-/// are packed from the content start with no gaps; each takes a Fixed or Fill
-/// share of the content width (R5) and fills the content height unless its
-/// align_y places it otherwise. Set padding with set_padding; a child's
-/// margin, size and alignment with the slot methods. Children are positioned,
-/// not painted, so add them to the Screen's tree too.
+/// are packed from the content start; set_gap inserts that many cells between
+/// them. Each takes a Fixed or Fill share of the content width left after the
+/// gap budget (R5) and fills the content height unless its align_y places it
+/// otherwise. Set padding with set_padding; a child's margin, size and
+/// alignment with the slot methods. Children are positioned, not painted, so
+/// add them to the Screen's tree too.
 pub struct Row:
     pub use BaseWidget
 
     @en "pad"
     /// The inset between the container's bounds and its content box (R3).
     pub pad: Insets = Insets {}
+
+    @en "gap"
+    /// Cells between adjacent slots on the main axis (R5). Zero by default.
+    /// A negative value clamps to 0.
+    pub gap: int = 0
 
     @en "items"
     /// The children in placement order, one slot each.
@@ -231,13 +236,20 @@ pub struct Row:
         this.pad = pad
     end
 
+    @en "set_gap"
+    /// Sets the main-axis gap between slots (R5). A negative value clamps
+    /// to 0.
+    pub func set_gap(gap: int):
+        this.gap = _clampNeg(gap)
+    end
+
     @en "set_bounds"
     /// Stores the container's own rect (normalised), then lays out and moves
     /// every child in slot order (R1). Overrides the BaseWidget default.
     pub func set_bounds(bounds: Rect):
         r := FitRect(bounds, bounds)
         this.BaseWidget.set_bounds(r)
-        rects := _arrangeLinear(InsetRect(r, this.pad), this.items, true)
+        rects := _arrangeLinear(InsetRect(r, this.pad), this.items, true, this.gap)
         repeat this.items.len() in i:
             this.items.get(i).child.set_bounds(rects.get(i))
         end
@@ -248,14 +260,20 @@ end
 @en "Column"
 /// A container that lays its children top to bottom along the y axis. The
 /// mirror of Row: each child takes a Fixed or Fill share of the content
-/// height (R5) and fills the content width unless its align_x places it
-/// otherwise. See Row for the slot and padding methods.
+/// height left after the gap budget (R5) and fills the content width unless
+/// its align_x places it otherwise. See Row for the slot, padding and gap
+/// methods.
 pub struct Column:
     pub use BaseWidget
 
     @en "pad"
     /// The inset between the container's bounds and its content box (R3).
     pub pad: Insets = Insets {}
+
+    @en "gap"
+    /// Cells between adjacent slots on the main axis (R5). Zero by default.
+    /// A negative value clamps to 0.
+    pub gap: int = 0
 
     @en "items"
     /// The children in placement order, one slot each.
@@ -299,13 +317,20 @@ pub struct Column:
         this.pad = pad
     end
 
+    @en "set_gap"
+    /// Sets the main-axis gap between slots (R5). A negative value clamps
+    /// to 0.
+    pub func set_gap(gap: int):
+        this.gap = _clampNeg(gap)
+    end
+
     @en "set_bounds"
     /// Stores the container's own rect (normalised), then lays out and moves
     /// every child in slot order (R1). Overrides the BaseWidget default.
     pub func set_bounds(bounds: Rect):
         r := FitRect(bounds, bounds)
         this.BaseWidget.set_bounds(r)
-        rects := _arrangeLinear(InsetRect(r, this.pad), this.items, false)
+        rects := _arrangeLinear(InsetRect(r, this.pad), this.items, false, this.gap)
         repeat this.items.len() in i:
             this.items.get(i).child.set_bounds(rects.get(i))
         end
@@ -611,17 +636,23 @@ func _slotCell(items &: Vector<LayoutSlot>, i: int, row: int, col: int):
 end
 
 // R5/R6/R7: the shared Row and Column engine. SplitMain reserves each Fixed
-// size at max(0, cells) and shares the leftover by weight among Fill and
-// Pref. Shares are largest-remainder, and a tie goes to the earliest pool
-// slot. A weight sum of 0, or Fixed sizes that already use up the length,
-// gives every pool entry 0 and does not shrink Fixed. Slots stay in list
-// order and pack from the content start with no gaps. Each child fills its
+// size at max(0, cells), subtracts gap * max(0, k - 1) (k counts every slot,
+// including zero-size ones; a negative gap clamps to 0), and shares the
+// leftover by weight among Fill and Pref. Shares are largest-remainder, and
+// a tie goes to the earliest pool slot. A weight sum of 0, or Fixed sizes
+// plus the gap budget that already use up the length, gives every pool entry
+// 0 and does not shrink Fixed. The gap is not refunded on overflow. Slots
+// stay in list order and pack from the content start. The next slot starts
+// at pos + length + gap; there is no gap before the first slot, and the
+// trailing step after the last slot adds no child. Each child fills its
 // margin box on the main axis. The cross axis uses alignment (Stretch by
-// default) and ignores weight. main_is_width selects Row (true) or Column
-// (false). Every resulting rect is clipped to content last (R6).
-func _arrangeLinear(content: Rect, items: Vector<LayoutSlot>, main_is_width: bool): Vector<Rect>:
+// default), ignores weight, and is not inset by gap. main_is_width selects
+// Row (true) or Column (false). Every resulting rect is clipped to content
+// last (R6).
+func _arrangeLinear(content: Rect, items: Vector<LayoutSlot>, main_is_width: bool, gap: int): Vector<Rect>:
+    g := _clampNeg(gap)
     sizes := _slotSizes(items, main_is_width)
-    lengths := SplitMain(main_is_width ? content.width : content.height, sizes)
+    lengths := SplitMain(main_is_width ? content.width : content.height, sizes, g)
     out := Vector {} as Vector<Rect>
     mut pos := main_is_width ? content.x : content.y
     repeat items.len() in i:
@@ -633,7 +664,7 @@ func _arrangeLinear(content: Rect, items: Vector<LayoutSlot>, main_is_width: boo
         else:
             slot = Rect { x = content.x, y = pos, width = content.width, height = length }
         end
-        pos = pos + length
+        pos = pos + length + g
         box := InsetRect(slot, s.margin)
         mut n := 0
         mut rect := Rect {}
@@ -743,16 +774,21 @@ end
 
 @en "SplitMain"
 /// Splits a main-axis length of `length` cells between sizes, in order (R5).
-/// Fixed takes max(0, cells) and ignores weight. Fill and Pref share the
-/// leftover R = max(0, length - sum of those Fixed sizes). Each pool entry's
+/// Fixed takes max(0, cells) and ignores weight. `gap` is the cells between
+/// adjacent slots. A negative gap clamps to 0. The budget is
+/// gap * max(0, k - 1), where k is the slot count, including zero-size slots;
+/// k <= 1 charges nothing. Fill and Pref share the leftover
+/// R = max(0, length - sum of those Fixed sizes - budget). Each pool entry's
 /// weight is max(0, weight). The share is floor(R * weight / sum of weights),
 /// then one extra cell goes to each remaining cell, given to the pool entries
 /// with the largest (R * weight) mod sum of weights. Ties go to the earliest
 /// pool slot. A weight sum of 0 gives every pool entry 0 and leaves R unused,
-/// with no division. Fixed overflow makes R 0, so every pool entry is 0 and
-/// Fixed is not shrunk. The vector has one entry per input. Weight 1 on every
-/// pool entry is an equal split, remainder to the earliest entries.
-pub func SplitMain(length: int, sizes: Vector<LayoutSize>): Vector<int>:
+/// with no division. Fixed overflow, or a budget that uses up the length,
+/// makes R 0, so every pool entry is 0 and Fixed is not shrunk. The gap is
+/// not part of the returned sizes and is not refunded. The vector has one
+/// entry per input. Weight 1 on every pool entry is an equal split, remainder
+/// to the earliest entries.
+pub func SplitMain(length: int, sizes: Vector<LayoutSize>, gap: int): Vector<int>:
     mut reserved := 0
     mut sum_w := 0
     repeat sizes.len() in idx:
@@ -763,7 +799,12 @@ pub func SplitMain(length: int, sizes: Vector<LayoutSize>): Vector<int>:
             sum_w = sum_w + _clampNeg(s.weight)
         end
     end
-    rest := _clampNeg(length - reserved)
+    g := _clampNeg(gap)
+    mut budget := 0
+    if sizes.len() > 1:
+        budget = g * (sizes.len() - 1)
+    end
+    rest := _clampNeg(length - reserved - budget)
     out := Vector {} as Vector<int>
     mut used := 0
     repeat sizes.len() in idx:
