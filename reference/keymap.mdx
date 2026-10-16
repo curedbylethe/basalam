@@ -1,0 +1,152 @@
+---
+title: "Keymap"
+description: "Opt-in key and key-sequence bindings, consulted as a dispatch fallback for keys no widget consumed."
+keywords: ["keymap", "key binding", "key sequence", "bindings", "defaults"]
+---
+
+`Keymap` is an opt-in table that maps keys and key sequences to actions. basalam installs none of its own: a screen carries an empty map until you fill it. When an event bubbles to the root without a widget consuming it, the screen offers it to the keymap — but only [`KeyEvent`s](/reference/event). Tick, resize, and mouse events never reach the keymap.
+
+That order means widgets always win. A key a widget consumes never reaches a binding, scoped bindings included. Install the defaults for Tab and the arrows in one line:
+
+```salam
+screen.set_keymap(basalam.NewDefaultKeymap())
+```
+
+See [`dispatch`](/reference/screen#the-event-loop) for where the fallback sits in the event loop.
+
+## Keymap
+
+A keymap is self-contained: it never holds a screen or a widget. The screen arrives at call time as the `screen` argument to `handle`, which is how an action reaches live screen state.
+
+```salam
+pub struct Keymap:
+```
+
+Build one with `NewKeymap`, fill it with `bind` and its variants, feed events to `handle`, and release it with `free`.
+
+### Constructors
+
+```salam
+pub func NewKeymap(): Keymap
+pub func NewDefaultKeymap(): Keymap
+```
+
+| Constructor | Description |
+| --- | --- |
+| `NewKeymap(): Keymap` | Creates an empty keymap. The root node is created on the first bind, so a zero-valued `Keymap {}` (a `Screen` field default) is usable directly. |
+| `NewDefaultKeymap(): Keymap` | Creates a map with the [five default focus bindings](#default-bindings). |
+
+Each call returns an independent map: rebinding one does not touch another.
+
+<Warning>
+  Never copy a `Keymap` value. Salam has no move semantics and the fields hold raw `Vector` and `HashMap` pointers, so `mut b := a` makes two owners alias the same buffers and double-free. Create it with `NewKeymap`, install it with [`set_keymap`](#installing-and-extending), and release it with `free`.
+</Warning>
+
+## Binding
+
+An action is a `func (screen: basalam.Screen*, event: basalam.Event): bool`. Only lambda literals can be stored in a function value, so every action — yours and the library's defaults — is a lambda. The screen is a pointer so an action can move focus and mark the screen dirty:
+
+```salam
+(screen: basalam.Screen*, event: basalam.Event): ret screen[0].focus_next() end
+```
+
+| Method | Description |
+| --- | --- |
+| `bind(key: term.Key, action: func (Screen*, Event) bool)` | Binds one key in the global scope. A later `bind` of the same key replaces this one (last write wins). |
+| `bind_for(widget_id: int, key: term.Key, action: func (Screen*, Event) bool)` | Binds one key for the widget with this ID: the action runs when that widget, or one of its descendants, has the focus. `NoWidget` binds globally. |
+| `bind_seq(seq: str, action: func (Screen*, Event) bool)` | Binds a key sequence in the global scope. |
+| `bind_for_seq(widget_id: int, seq: str, action: func (Screen*, Event) bool)` | Binds a key sequence for the widget with this ID. `NoWidget` binds globally. |
+| `unbind(key: term.Key)` | Removes the global binding for one key. A no-op when there is none. Scoped bindings are not touched; use `bind_for` to replace one. |
+| `handle(screen: Screen*, event: Event): bool` | Offers one event to the map. Only `KeyEvent`s are handled; any other kind returns `false` and leaves a pending sequence untouched. Returns whether the matched action reported the key consumed. |
+| `free()` | Releases every node's children map and binding vector, then the node storage. Call once. |
+
+`bind_seq` and `bind_for_seq` decode `seq` one rune at a time, so `"gg"` is two keys. An empty string is ignored and binds nothing.
+
+A key's identity includes its code, the `Ctrl`/`Alt`/`Shift` modifiers, and — for a character key — the character. `Space` (code `KeySpace`) and `Ctrl+Space` (a character key whose `ch` is `" "`) are therefore two different bindings.
+
+## Default bindings
+
+`NewDefaultKeymap` builds exactly five rows. Nothing installs it for you: `NewScreen` and `start()` touch no bindings.
+
+| Key | Action |
+| --- | --- |
+| `Tab` | `focus_next()` |
+| `Up` | `focus_up()` |
+| `Down` | `focus_down()` |
+| `Left` | `focus_left()` |
+| `Right` | `focus_right()` |
+
+`q` and every other key stay unbound, so they bubble to your loop for the quit pattern.
+
+<Note>
+  Shift+Tab is deliberately not bound. Salam 0.4.9 decodes the backtab sequence (`ESC [ Z`) to `KeyUnknown`, so binding it would need an escape literal. If your terminal sends a Shift+Tab sequence you can decode, bind it yourself with `term.Decode`.
+</Note>
+
+## Resolution
+
+When a `KeyEvent` reaches the keymap, basalam resolves it in this order:
+
+1. The key walks a single trie keyed by a canonical key string. A single key is one hash probe at the root; a sequence walks one node per event.
+2. At the matched node, the focused widget and its ancestors are checked nearest-first: the closest scope with a binding for that node wins.
+3. If no scoped binding applies, the global (`NoWidget`) binding runs.
+4. If neither applies, `handle` returns `false` and the key bubbles on.
+
+The scope walk is O(tree depth) and only runs at nodes that carry scoped bindings; a global-only map is strictly one probe per key.
+
+## Sequences
+
+- A node that has both a binding and children defers: its single-key binding fires only when the next key breaks the path. While a longer sequence keeps matching, the longer one wins.
+- A key that does not continue a pending prefix resets it and is reprocessed from the root, so a sequence followed by an unrelated bound key still triggers that key.
+- There is no timeout. If you bind both a key and a longer sequence that starts with it, the single-key binding waits for the next key to decide.
+- Non-key events (tick, resize, mouse) never reach the keymap, so a pending sequence survives them.
+- An invoked action resolves the key: nothing is reprocessed after an action runs, even when the action returns `false`.
+- An unbound `Esc` or `Ctrl+C` leaves the pending state reset and returns `false`, so the loop's auto-stop still works.
+
+## Installing and extending
+
+A screen exposes its map as the [`keymap` field](/reference/screen#fields). Install a whole map with `set_keymap`, or extend the current one in place through the field.
+
+```salam
+screen.set_keymap(basalam.NewDefaultKeymap()) // replace with the defaults
+screen.keymap.bind(term.Decode("q"), my_quit) // extend the installed map in place
+```
+
+`set_keymap(km)` frees the current map's buffers and then installs `km`. It is the only safe way to swap a map, and it leaves the new map with no pending sequence. Ownership of `km` transfers to the screen, so do not free or use it afterward.
+
+- **Replace**: pass a freshly built map. Pass `NewKeymap()` to clear every binding.
+- **Extend**: bind through `screen.keymap`. This adds to the installed map with no copy, and rebinding a default key replaces it (last write wins).
+
+[`close()`](/reference/screen#terminal-lifecycle) frees the screen's keymap. A map you build and never install is yours to `free`.
+
+<Warning>
+  Never assign to `screen.keymap` directly. The field holds raw buffers, so assigning would leak the current map's storage and then double-free on `close()`. Use `set_keymap` to replace the map, or `screen.keymap.bind` to extend it.
+</Warning>
+
+## Example
+
+Install the defaults before the loop. The keymap consumes Tab and the arrows before the loop sees them, so the loop only has to handle `q`:
+
+```salam
+include "basalam/basalam.salam"
+
+func main:
+    mut screen := basalam.NewTerminalScreen(MyRoot {})
+    screen.start()
+    defer screen.close()
+
+    screen.set_keymap(basalam.NewDefaultKeymap()) // Tab + arrows move the focus
+
+    screen.present()
+    mut ev := basalam.Event {}
+    until screen.next_event(ev):
+        if not screen.dispatch(ev) and ev.is_char("q"):
+            screen.stop()
+        end
+        screen.present()
+    end
+end
+```
+
+## Modes
+
+basalam ships no modes and no presets: modes are application territory. Your app can wrap the library in its own state and an action can call `set_keymap` to swap the whole map — for example a normal map that binds `i` to an insert map, and an insert map that binds `Esc` back. The swapped-in map starts with no pending sequence. See [Focus](/concepts/focus) for the navigation methods your actions call.
