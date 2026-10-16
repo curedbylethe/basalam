@@ -1,0 +1,282 @@
+/*
+ * basalam - a terminal user interface library for Salam (2026)
+ *
+ *   +-------------------+
+ *   |   B A S A L A M   |
+ *   +-------------------+
+ *
+ * Built on the Salam standard library's std/term package
+ * Salam: https://github.com/SalamLang/Salam
+ *
+ * Repository: https://github.com/curedbylethe/basalam
+ * License: GPL-3.0-or-later
+ *
+ */
+
+// Unit tests for the Style value type: its six fields and their defaults, the
+// sibling BorderStyle enum and BorderInset, StyleMerge's sentinel-patch table
+// (including its two documented limitations), StyleEq's truth table and its
+// sound-but-incomplete contract with emission, and the SGR bytes StyleSgr /
+// StyleSgrOff produce (order, tier lowering, the shared 22, and no reset).
+// Expected strings are built with term's own sequence builders, so no escape
+// appears by hand.
+
+import str
+import testing
+import term
+
+include "../basalam/basalam.salam"
+
+func test_default_fields():
+    s := basalam.Style {}
+    testing.AssertTrue(s.fg == basalam.Color.Default)
+    testing.AssertTrue(s.bg == basalam.Color.Default)
+    testing.AssertFalse(s.bold)
+    testing.AssertFalse(s.dim)
+    testing.AssertFalse(s.italic)
+    testing.AssertFalse(s.underline)
+    testing.AssertTrue(basalam.StyleEq(s, basalam.StyleDefault))
+end
+
+func test_partial_literal():
+    s := basalam.Style { bold = true }
+    testing.AssertTrue(s.bold)
+    testing.AssertTrue(s.fg == basalam.Color.Default)
+    testing.AssertFalse(s.italic)
+    testing.AssertFalse(basalam.StyleEq(s, basalam.StyleDefault))
+end
+
+func test_border_inset():
+    testing.AssertEqInt(basalam.BorderInset(basalam.BorderStyle.None), 0)
+    testing.AssertEqInt(basalam.BorderInset(basalam.BorderStyle.Single), 1)
+    testing.AssertEqInt(basalam.BorderInset(basalam.BorderStyle.Double), 1)
+    testing.AssertEqInt(basalam.BorderInset(basalam.BorderStyle.Rounded), 1)
+end
+
+func test_merge_m1():
+    got := basalam.StyleMerge(basalam.Style { fg = basalam.Color.Ansi(2) }, basalam.Style {})
+    testing.AssertTrue(basalam.StyleEq(got, basalam.Style { fg = basalam.Color.Ansi(2) }))
+end
+
+func test_merge_m2():
+    got := basalam.StyleMerge(basalam.Style { fg = basalam.Color.Ansi(2) }, basalam.Style { fg = basalam.Color.Ansi(1) })
+    testing.AssertTrue(basalam.StyleEq(got, basalam.Style { fg = basalam.Color.Ansi(1) }))
+end
+
+func test_merge_m3():
+    parent := basalam.Style { fg = basalam.Color.Ansi(2), bg = basalam.Color.Indexed(237) }
+    got := basalam.StyleMerge(parent, basalam.Style { fg = basalam.Color.Rgb(255, 135, 0) })
+    want := basalam.Style { fg = basalam.Color.Rgb(255, 135, 0), bg = basalam.Color.Indexed(237) }
+    testing.AssertTrue(basalam.StyleEq(got, want))
+end
+
+func test_merge_m4():
+    got := basalam.StyleMerge(basalam.Style { bold = true }, basalam.Style { italic = true })
+    testing.AssertTrue(basalam.StyleEq(got, basalam.Style { bold = true, italic = true }))
+end
+
+func test_merge_m5_limitation():
+    // A child cannot remove an inherited attribute: false is indistinguishable
+    // from unset, so the parent's bold survives.
+    got := basalam.StyleMerge(basalam.Style { bold = true }, basalam.Style {})
+    testing.AssertTrue(basalam.StyleEq(got, basalam.Style { bold = true }))
+end
+
+func test_merge_m6_limitation():
+    // A child cannot force the terminal default under a colored parent:
+    // Default means inherit.
+    got := basalam.StyleMerge(basalam.Style { fg = basalam.Color.Ansi(2) }, basalam.Style { fg = basalam.Color.Default })
+    testing.AssertTrue(basalam.StyleEq(got, basalam.Style { fg = basalam.Color.Ansi(2) }))
+end
+
+func test_merge_m7():
+    got := basalam.StyleMerge(basalam.Style { dim = true }, basalam.Style { bold = true })
+    testing.AssertTrue(basalam.StyleEq(got, basalam.Style { bold = true, dim = true }))
+end
+
+func test_merge_m8():
+    child := basalam.Style { bg = basalam.Color.Ansi(4), underline = true }
+    got := basalam.StyleMerge(basalam.StyleDefault, child)
+    testing.AssertTrue(basalam.StyleEq(got, child))
+end
+
+func test_merge_m9_not_commutative():
+    parent := basalam.Style { fg = basalam.Color.Ansi(1) }
+    child := basalam.Style { fg = basalam.Color.Ansi(2) }
+    testing.AssertTrue(basalam.StyleEq(basalam.StyleMerge(parent, child), basalam.Style { fg = basalam.Color.Ansi(2) }))
+    testing.AssertTrue(basalam.StyleEq(basalam.StyleMerge(child, parent), basalam.Style { fg = basalam.Color.Ansi(1) }))
+end
+
+func test_merge_identity():
+    s := basalam.Style { fg = basalam.Color.Ansi(2), bg = basalam.Color.Indexed(237), bold = true }
+    testing.AssertTrue(basalam.StyleEq(basalam.StyleMerge(basalam.StyleDefault, s), s))
+    testing.AssertTrue(basalam.StyleEq(basalam.StyleMerge(s, basalam.StyleDefault), s))
+end
+
+func test_merge_m7_emits_bold_then_dim():
+    got := basalam.StyleMerge(basalam.Style { dim = true }, basalam.Style { bold = true })
+    testing.AssertEqStr(basalam.StyleSgr(got, basalam.ColorTier.TrueColor), term.Sgr(term.StyleBold) + term.Sgr(term.StyleDim))
+    testing.AssertEqStr(basalam.StyleSgrOff(got, basalam.ColorTier.TrueColor), term.Sgr(22))
+end
+
+func test_default_emits_nothing_at_every_tier():
+    testing.AssertEqStr(basalam.StyleSgr(basalam.StyleDefault, basalam.ColorTier.Off), "")
+    testing.AssertEqStr(basalam.StyleSgr(basalam.StyleDefault, basalam.ColorTier.Ansi16), "")
+    testing.AssertEqStr(basalam.StyleSgr(basalam.StyleDefault, basalam.ColorTier.Indexed256), "")
+    testing.AssertEqStr(basalam.StyleSgr(basalam.StyleDefault, basalam.ColorTier.TrueColor), "")
+    testing.AssertEqStr(basalam.StyleSgrOff(basalam.StyleDefault, basalam.ColorTier.Off), "")
+    testing.AssertEqStr(basalam.StyleSgrOff(basalam.StyleDefault, basalam.ColorTier.Ansi16), "")
+    testing.AssertEqStr(basalam.StyleSgrOff(basalam.StyleDefault, basalam.ColorTier.Indexed256), "")
+    testing.AssertEqStr(basalam.StyleSgrOff(basalam.StyleDefault, basalam.ColorTier.TrueColor), "")
+end
+
+func test_sgr_bold():
+    s := basalam.Style { bold = true }
+    testing.AssertEqStr(basalam.StyleSgr(s, basalam.ColorTier.TrueColor), term.Sgr(term.StyleBold))
+    testing.AssertEqStr(basalam.StyleSgrOff(s, basalam.ColorTier.TrueColor), term.Sgr(22))
+end
+
+func test_sgr_fg_bold_truecolor():
+    s := basalam.Style { fg = basalam.Color.Ansi(2), bold = true }
+    testing.AssertEqStr(basalam.StyleSgr(s, basalam.ColorTier.TrueColor), term.Sgr(term.StyleBold) + term.Sgr(term.FgGreen))
+    testing.AssertEqStr(basalam.StyleSgrOff(s, basalam.ColorTier.TrueColor), term.Sgr(22) + term.Sgr(term.FgDefault))
+end
+
+func test_sgr_all_attrs():
+    s := basalam.Style { bold = true, dim = true, italic = true, underline = true }
+    attrs := term.Sgr(term.StyleBold) + term.Sgr(term.StyleDim) + term.Sgr(term.StyleItalic) + term.Sgr(term.StyleUnderline)
+    testing.AssertEqStr(basalam.StyleSgr(s, basalam.ColorTier.Off), attrs)
+    testing.AssertEqStr(basalam.StyleSgr(s, basalam.ColorTier.TrueColor), attrs)
+    testing.AssertEqStr(basalam.StyleSgrOff(s, basalam.ColorTier.TrueColor), term.Sgr(22) + term.Sgr(23) + term.Sgr(24))
+end
+
+func test_sgr_colors_truecolor():
+    s := basalam.Style { fg = basalam.Color.Rgb(255, 135, 0), bg = basalam.Color.Indexed(237), underline = true }
+    attrs := term.Sgr(term.StyleUnderline) + term.SeqFgRGB(255, 135, 0) + term.SeqBg256(237)
+    testing.AssertEqStr(basalam.StyleSgr(s, basalam.ColorTier.TrueColor), attrs)
+    testing.AssertEqStr(basalam.StyleSgrOff(s, basalam.ColorTier.TrueColor), term.Sgr(24) + term.Sgr(term.FgDefault) + term.Sgr(term.BgDefault))
+end
+
+func test_sgr_colors_indexed256():
+    s := basalam.Style { fg = basalam.Color.Rgb(255, 135, 0), bg = basalam.Color.Indexed(237), underline = true }
+    attrs := term.Sgr(term.StyleUnderline) + term.SeqFg256(208) + term.SeqBg256(237)
+    testing.AssertEqStr(basalam.StyleSgr(s, basalam.ColorTier.Indexed256), attrs)
+    testing.AssertEqStr(basalam.StyleSgrOff(s, basalam.ColorTier.Indexed256), term.Sgr(24) + term.Sgr(term.FgDefault) + term.Sgr(term.BgDefault))
+end
+
+func test_sgr_colors_ansi16():
+    s := basalam.Style { fg = basalam.Color.Rgb(255, 135, 0), bg = basalam.Color.Indexed(237), underline = true }
+    attrs := term.Sgr(term.StyleUnderline) + term.Sgr(term.FgYellow) + term.Sgr(term.BgBlack)
+    testing.AssertEqStr(basalam.StyleSgr(s, basalam.ColorTier.Ansi16), attrs)
+    testing.AssertEqStr(basalam.StyleSgrOff(s, basalam.ColorTier.Ansi16), term.Sgr(24) + term.Sgr(term.FgDefault) + term.Sgr(term.BgDefault))
+end
+
+func test_sgr_colors_off():
+    s := basalam.Style { fg = basalam.Color.Rgb(255, 135, 0), bg = basalam.Color.Indexed(237), underline = true }
+    testing.AssertEqStr(basalam.StyleSgr(s, basalam.ColorTier.Off), term.Sgr(term.StyleUnderline))
+    testing.AssertEqStr(basalam.StyleSgrOff(s, basalam.ColorTier.Off), term.Sgr(24))
+end
+
+func test_sgr_fg_default_skipped():
+    // A non-Default color that lowers to Default is dropped, not emitted as 39.
+    s := basalam.Style { fg = basalam.Color.Ansi(1) }
+    testing.AssertEqStr(basalam.StyleSgr(s, basalam.ColorTier.Off), "")
+    testing.AssertEqStr(basalam.StyleSgrOff(s, basalam.ColorTier.Off), "")
+end
+
+func test_sgr_off_bold_dim_single_22():
+    s := basalam.Style { bold = true, dim = true }
+    testing.AssertEqStr(basalam.StyleSgrOff(s, basalam.ColorTier.TrueColor), term.Sgr(22))
+end
+
+func test_sgr_off_order():
+    s := basalam.Style { bold = true, italic = true, underline = true, fg = basalam.Color.Ansi(1), bg = basalam.Color.Ansi(4) }
+    want := term.Sgr(22) + term.Sgr(23) + term.Sgr(24) + term.Sgr(term.FgDefault) + term.Sgr(term.BgDefault)
+    testing.AssertEqStr(basalam.StyleSgrOff(s, basalam.ColorTier.TrueColor), want)
+end
+
+func test_eq_true():
+    testing.AssertTrue(basalam.StyleEq(basalam.Style {}, basalam.StyleDefault))
+    a := basalam.Style { fg = basalam.Color.Ansi(1), bold = true }
+    b := basalam.Style { fg = basalam.Color.Ansi(1), bold = true }
+    testing.AssertTrue(basalam.StyleEq(a, b))
+end
+
+func test_eq_false():
+    testing.AssertFalse(basalam.StyleEq(basalam.Style { bold = true }, basalam.Style {}))
+    testing.AssertFalse(basalam.StyleEq(basalam.Style { dim = true }, basalam.Style { bold = true }))
+    testing.AssertFalse(basalam.StyleEq(basalam.Style { fg = basalam.Color.Ansi(1) }, basalam.Style { fg = basalam.Color.Indexed(1) }))
+    testing.AssertFalse(basalam.StyleEq(basalam.Style { fg = basalam.Color.Rgb(255, 0, 0) }, basalam.Style { fg = basalam.Color.Indexed(196) }))
+    testing.AssertFalse(basalam.StyleEq(basalam.Style { fg = basalam.Color.Ansi(1) }, basalam.Style {}))
+end
+
+func test_eq_merge_results():
+    m1 := basalam.StyleMerge(basalam.Style { bold = true }, basalam.Style {})
+    m2 := basalam.StyleMerge(basalam.Style {}, basalam.Style { bold = true })
+    testing.AssertFalse(basalam.StyleEq(basalam.Style {}, m1))
+    testing.AssertTrue(basalam.StyleEq(m1, m2))
+end
+
+func test_eq_implies_same_bytes():
+    a := basalam.Style { fg = basalam.Color.Ansi(1), bold = true }
+    b := basalam.Style { fg = basalam.Color.Ansi(1), bold = true }
+    testing.AssertTrue(basalam.StyleEq(a, b))
+    testing.AssertEqStr(basalam.StyleSgr(a, basalam.ColorTier.TrueColor), basalam.StyleSgr(b, basalam.ColorTier.TrueColor))
+    testing.AssertEqStr(basalam.StyleSgr(a, basalam.ColorTier.Indexed256), basalam.StyleSgr(b, basalam.ColorTier.Indexed256))
+    testing.AssertEqStr(basalam.StyleSgr(a, basalam.ColorTier.Ansi16), basalam.StyleSgr(b, basalam.ColorTier.Ansi16))
+    testing.AssertEqStr(basalam.StyleSgr(a, basalam.ColorTier.Off), basalam.StyleSgr(b, basalam.ColorTier.Off))
+end
+
+func test_eq_incomplete_at_off():
+    // Unequal styles, identical bytes at tier Off: documented behavior.
+    a := basalam.Style { fg = basalam.Color.Ansi(1) }
+    testing.AssertFalse(basalam.StyleEq(a, basalam.StyleDefault))
+    testing.AssertEqStr(basalam.StyleSgr(a, basalam.ColorTier.Off), basalam.StyleSgr(basalam.StyleDefault, basalam.ColorTier.Off))
+end
+
+func test_no_reset_in_output():
+    s := basalam.Style { fg = basalam.Color.Ansi(1), bg = basalam.Color.Rgb(1, 2, 3), bold = true, dim = true, italic = true, underline = true }
+    testing.AssertFalse(str.Contains(basalam.StyleSgr(s, basalam.ColorTier.TrueColor), term.Reset))
+    testing.AssertFalse(str.Contains(basalam.StyleSgr(s, basalam.ColorTier.Indexed256), term.Reset))
+    testing.AssertFalse(str.Contains(basalam.StyleSgr(s, basalam.ColorTier.Ansi16), term.Reset))
+    testing.AssertFalse(str.Contains(basalam.StyleSgr(s, basalam.ColorTier.Off), term.Reset))
+    testing.AssertFalse(str.Contains(basalam.StyleSgrOff(s, basalam.ColorTier.TrueColor), term.Reset))
+    testing.AssertFalse(str.Contains(basalam.StyleSgrOff(s, basalam.ColorTier.Indexed256), term.Reset))
+    testing.AssertFalse(str.Contains(basalam.StyleSgrOff(s, basalam.ColorTier.Ansi16), term.Reset))
+    testing.AssertFalse(str.Contains(basalam.StyleSgrOff(s, basalam.ColorTier.Off), term.Reset))
+end
+
+func main:
+    test_default_fields()
+    test_partial_literal()
+    test_border_inset()
+    test_merge_m1()
+    test_merge_m2()
+    test_merge_m3()
+    test_merge_m4()
+    test_merge_m5_limitation()
+    test_merge_m6_limitation()
+    test_merge_m7()
+    test_merge_m8()
+    test_merge_m9_not_commutative()
+    test_merge_identity()
+    test_merge_m7_emits_bold_then_dim()
+    test_default_emits_nothing_at_every_tier()
+    test_sgr_bold()
+    test_sgr_fg_bold_truecolor()
+    test_sgr_all_attrs()
+    test_sgr_colors_truecolor()
+    test_sgr_colors_indexed256()
+    test_sgr_colors_ansi16()
+    test_sgr_colors_off()
+    test_sgr_fg_default_skipped()
+    test_sgr_off_bold_dim_single_22()
+    test_sgr_off_order()
+    test_eq_true()
+    test_eq_false()
+    test_eq_merge_results()
+    test_eq_implies_same_bytes()
+    test_eq_incomplete_at_off()
+    test_no_reset_in_output()
+    ret testing.Summary()
+end
