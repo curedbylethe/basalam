@@ -68,11 +68,6 @@ end
 /// the watch is enabled on.
 pub const WinchSignal := 28
 
-@en "SignalBlock"
-/// The how argument of sigprocmask that adds a signal to the blocked set
-/// (SIG_BLOCK), the same value on macOS and Linux.
-pub const SignalBlock := 1
-
 if not SALAM_OS_WINDOWS:
     export:
         func winch_noop(_sig: int):
@@ -140,7 +135,15 @@ pub func BlockWinch():
     else:
         set := NewWinchSet()
         if set == null: ret end
-        _ := sigprocmask(SignalBlock, set, null)
+        // The SIG_BLOCK value of sigprocmask is not portable: Darwin and
+        // the BSDs use 1, Linux uses 0. The wrong value turns the block
+        // into an unblock, so resolve it per platform here rather than
+        // sharing a single constant.
+        mut how := 0
+        if SALAM_OS_MAC or SALAM_OS_BSD:
+            how = 1
+        end
+        _ := sigprocmask(how, set, null)
         mem.Free(set)
     end
 end
