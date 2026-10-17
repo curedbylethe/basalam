@@ -8,9 +8,11 @@
 // The Panel decorator: a single child framed by a border ring. It owns the
 // border kind, the frame's style and the title, insets its child by the
 // border's cost, and paints only the frame. It is not a layout engine: it
-// holds exactly one child, never lays out several, and gives no style or
-// focus opinion to that child. Several children compose as one Column or
-// Row inside the Panel.
+// holds exactly one child and never lays out several. Several children
+// compose as one Column or Row inside the Panel. Focus is opt-in: with
+// takes_focus the Panel is the focus stop, forwards keys to its child, and
+// paints its frame in focus_style while focused. The child is never a focus
+// stop of its own, so a framed child is focused once, through its frame.
 
 package basalam
 
@@ -24,7 +26,7 @@ package basalam
 /// Screen's tree to be painted, like any other child.
 ///
 /// Panel reports no natural size, so it fills the space its parent gives it.
-/// It is not focusable.
+/// It is not focusable unless takes_focus is set.
 pub struct Panel:
     pub use BaseWidget
 
@@ -41,6 +43,18 @@ pub struct Panel:
     @en "title"
     /// Text on the top edge. Empty or whitespace-only means no title.
     pub title: str = ""
+
+    @en "takes_focus"
+    /// When true the Panel is focusable: it takes focus and passes every
+    /// event to its child. The child is not focusable and gets no focus of
+    /// its own. False by default, so a Panel is never a focus stop.
+    pub takes_focus: bool = false
+
+    @en "focus_style"
+    /// The frame's style while the Panel has focus. StyleDefault, the
+    /// default, means no focus style: the frame keeps border_style. Only the
+    /// foreground is used, as for border_style.
+    pub focus_style: Style = StyleDefault
 
     @en "slot"
     /// The child, held as the one layout slot. Empty until add is called.
@@ -73,10 +87,32 @@ pub struct Panel:
         _leave_pass()
     end
 
+    @en "focusable"
+    /// True only when takes_focus is set.
+    pub func focusable(): bool:
+        ret this.takes_focus
+    end
+
+    @en "handle_event"
+    /// Passes the event to the child and returns what the child returns.
+    /// Only a focused Panel receives events, so this is the child's key
+    /// path.
+    pub func handle_event(event: Event): bool:
+        if this.slot.len() > 0:
+            ret this.slot.get(0).child.handle_event(event)
+        end
+        ret false
+    end
+
     @en "render"
-    /// Paints the frame over the Panel's rect. The child paints itself: the
-    /// Screen draws every widget in its tree.
+    /// Paints the frame over the Panel's rect. While the Panel has focus
+    /// and focus_style is set, the frame uses focus_style. The child paints
+    /// itself: the Screen draws every widget in its tree.
     pub func render(buf: Buffer, bounds: Rect):
-        DrawBorder(buf, bounds, this.border, this.border_style, this.title)
+        mut style := this.border_style
+        if buf.focused and not StyleEq(this.focus_style, StyleDefault):
+            style = this.focus_style
+        end
+        DrawBorder(buf, bounds, this.border, style, this.title)
     end
 end
