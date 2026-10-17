@@ -118,7 +118,7 @@ pub func preferred_width(): int
 
 `preferred_width` is the longest explicit line of the content, in cells — the unbounded width.
 
-Neither includes a border or padding, because the widget has none.
+Neither includes a border or padding: the widget draws no frame of its own. To frame text, wrap it in a [`Panel`](/reference/panel).
 
 <Note>
   Preferred size always measures with the wrap rules above, whatever `wrap` is set to.

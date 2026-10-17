@@ -202,6 +202,18 @@ The first counter is focused automatically, because it is the first focusable wi
   ```
 </Accordion>
 
+## Draw a frame
+
+To draw a box around your widget, call `DrawBorder` from `render`, instead of writing the corners and edges yourself. It draws the same ring that [`Panel`](/reference/panel) draws, with the same corner, title, and color rules:
+
+```salam
+pub func render(buf: basalam.Buffer, bounds: basalam.Rect):
+    basalam.DrawBorder(buf, bounds, basalam.BorderStyle.Single, basalam.Style { fg = basalam.Color.Ansi(4) }, "Log")
+end
+```
+
+The ring is one cell wide, so draw your content inside `bounds` inset by one cell on each side. See [Border](/reference/border) for the glyphs and the rules for small rectangles.
+
 ## Things to keep in mind
 
 - **Store the `dyn` value, not the struct.** Converting to `dyn basalam.Widget` boxes the widget, and every copy of the `dyn` value shares that box. A copy of the plain struct does not.

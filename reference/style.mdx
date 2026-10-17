@@ -38,7 +38,7 @@ Colors are `Color`, not `Option<Color>`: `Color.Default` already means "no color
 
 ## Border style
 
-`BorderStyle` is the kind of border a container draws. It is a sibling enum, never a field of `Style`, so a border is a per-widget choice that is not inherited or merged.
+`BorderStyle` is the kind of border a [`Panel`](/reference/panel) draws. It is a sibling enum, never a field of `Style`, so a border is a per-widget choice that is not inherited or merged.
 
 ```salam
 pub enum BorderStyle:
@@ -62,7 +62,7 @@ end
 pub func BorderInset(b: BorderStyle): int
 ```
 
-It returns `0` for `BorderStyle.None` and `1` for every other kind. `BorderStyle` and `BorderInset` are values only; drawing the ring — its code points, corners, and titles — is a later release.
+It returns `0` for `BorderStyle.None` and `1` for every other kind. `BorderInset` is the inset a `Panel` uses for its child. The ring itself is drawn by [`DrawBorder`](/reference/border).
 
 ## StyleDefault
 
