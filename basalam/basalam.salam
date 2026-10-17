@@ -35,6 +35,7 @@
  *     color.salam    the Color value type and its raw SGR encoding
  *     style.salam    the Style value type, merge, equality and SGR emission
  *     border.salam   box-drawing border rings and the DrawBorder helper
+ *     panel.salam    the Panel decorator: one framed child, its inset and title
  *     widget.salam   the Widget interface and BaseWidget defaults
  *     layout.salam   the Row, Column, Grid and Stack containers
  *     text.salam     the Text widget and the pure line rules it draws through

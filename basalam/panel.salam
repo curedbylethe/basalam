@@ -1,0 +1,82 @@
+/*
+ * basalam - a terminal user interface library for Salam (2026)
+ *
+ * Repository: https://github.com/curedbylethe/basalam
+ * License: GPL-3.0-or-later
+ */
+
+// The Panel decorator: a single child framed by a border ring. It owns the
+// border kind, the frame's style and the title, insets its child by the
+// border's cost, and paints only the frame. It is not a layout engine: it
+// holds exactly one child, never lays out several, and gives no style or
+// focus opinion to that child. Several children compose as one Column or
+// Row inside the Panel.
+
+package basalam
+
+@en "Panel"
+/// A single-child decorator that draws a border ring around its child.
+///
+/// The child is positioned inside the ring: Panel insets it by BorderInset
+/// of `border` on each side and passes that rect to the child's set_bounds.
+/// A Panel with border None draws nothing and insets nothing, so it behaves
+/// like its child. Add the child with add; it must also be added to the
+/// Screen's tree to be painted, like any other child.
+///
+/// Panel reports no natural size, so it fills the space its parent gives it.
+/// It is not focusable.
+pub struct Panel:
+    pub use BaseWidget
+
+    @en "border"
+    /// The ring drawn around the child. None draws nothing and insets
+    /// nothing.
+    pub border: BorderStyle = BorderStyle.None
+
+    @en "border_style"
+    /// The frame's style. Only its foreground is used, for every ring cell
+    /// and the title; attributes are ignored.
+    pub border_style: Style = StyleDefault
+
+    @en "title"
+    /// Text on the top edge. Empty or whitespace-only means no title.
+    pub title: str = ""
+
+    @en "slot"
+    /// The child, held as the one layout slot. Empty until add is called.
+    pub slot: Vector<LayoutSlot> = Vector {}
+
+    @en "add"
+    /// Sets the child. A second call replaces the first, so a Panel has at
+    /// most one child. The child is positioned in the Panel's content area
+    /// on the next set_bounds.
+    pub func add(child: dyn Widget):
+        if this.slot.len() > 0:
+            this.slot.set(0, LayoutSlot { child = child })
+            ret
+        end
+        _ := _slotAdd(this.slot, child)
+    end
+
+    @en "set_bounds"
+    /// Stores the Panel's rect, then sets the child's rect to the Panel's
+    /// rect inset by the border's cost on each side (BorderInset).
+    pub func set_bounds(bounds: Rect):
+        _enter_pass()
+        r := FitRect(bounds, bounds)
+        this.BaseWidget.set_bounds(r)
+        if this.slot.len() > 0:
+            n := BorderInset(this.border)
+            inner := InsetRect(r, Insets { top = n, right = n, bottom = n, left = n })
+            this.slot.get(0).child.set_bounds(inner)
+        end
+        _leave_pass()
+    end
+
+    @en "render"
+    /// Paints the frame over the Panel's rect. The child paints itself: the
+    /// Screen draws every widget in its tree.
+    pub func render(buf: Buffer, bounds: Rect):
+        DrawBorder(buf, bounds, this.border, this.border_style, this.title)
+    end
+end
