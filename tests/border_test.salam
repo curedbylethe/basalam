@@ -1,0 +1,236 @@
+/*
+ * basalam - a terminal user interface library for Salam (2026)
+ *
+ * Repository: https://github.com/curedbylethe/basalam
+ * License: GPL-3.0-or-later
+ */
+
+// Unit tests for DrawBorder: the glyph tables of each BorderStyle, the title
+// vectors (trim, right truncation, minimum width), the degenerate rect rules,
+// clipping at the grid edge, the untouched interior, and the one-foreground
+// color rule. Expected SGR strings are built with basalam.StyleSgr, so no
+// escape appears by hand.
+
+import testing
+
+include "../basalam/basalam.salam"
+
+func test_single_box():
+    mut b := basalam.NewBuffer(8, 3)
+    basalam.DrawBorder(b, basalam.Rect { x = 0, y = 0, width = 8, height = 3 }, basalam.BorderStyle.Single, basalam.Style {}, "")
+    testing.AssertEqStr(b.row_text(0), "┌──────┐")
+    testing.AssertEqStr(b.row_text(1), "│      │")
+    testing.AssertEqStr(b.row_text(2), "└──────┘")
+    b.free()
+end
+
+func test_double_box():
+    mut b := basalam.NewBuffer(8, 3)
+    basalam.DrawBorder(b, basalam.Rect { x = 0, y = 0, width = 8, height = 3 }, basalam.BorderStyle.Double, basalam.Style {}, "")
+    testing.AssertEqStr(b.row_text(0), "╔══════╗")
+    testing.AssertEqStr(b.row_text(1), "║      ║")
+    testing.AssertEqStr(b.row_text(2), "╚══════╝")
+    b.free()
+end
+
+func test_rounded_box():
+    mut b := basalam.NewBuffer(8, 3)
+    basalam.DrawBorder(b, basalam.Rect { x = 0, y = 0, width = 8, height = 3 }, basalam.BorderStyle.Rounded, basalam.Style {}, "")
+    testing.AssertEqStr(b.row_text(0), "╭──────╮")
+    testing.AssertEqStr(b.row_text(1), "│      │")
+    testing.AssertEqStr(b.row_text(2), "╰──────╯")
+    b.free()
+end
+
+func test_single_writes_eighteen_cells():
+    mut b := basalam.NewBuffer(8, 3)
+    basalam.DrawBorder(b, basalam.Rect { x = 0, y = 0, width = 8, height = 3 }, basalam.BorderStyle.Single, basalam.Style {}, "")
+    mut drawn := 0
+    repeat 3 in y:
+        repeat 8 in x:
+            if b.get(x, y).ch != " ":
+                drawn = drawn + 1
+            end
+        end
+    end
+    testing.AssertEqInt(drawn, 18)
+    b.free()
+end
+
+func test_none_is_noop():
+    mut b := basalam.NewBuffer(8, 3)
+    b.fill(basalam.Rect { x = 0, y = 0, width = 8, height = 3 }, "x", "")
+    basalam.DrawBorder(b, basalam.Rect { x = 0, y = 0, width = 8, height = 3 }, basalam.BorderStyle.None, basalam.Style {}, "Title")
+    testing.AssertEqStr(b.row_text(0), "xxxxxxxx")
+    testing.AssertEqStr(b.row_text(2), "xxxxxxxx")
+    b.free()
+end
+
+func test_interior_untouched():
+    mut b := basalam.NewBuffer(8, 3)
+    b.fill(basalam.Rect { x = 0, y = 0, width = 8, height = 3 }, "x", "")
+    basalam.DrawBorder(b, basalam.Rect { x = 0, y = 0, width = 8, height = 3 }, basalam.BorderStyle.Single, basalam.Style {}, "")
+    testing.AssertEqStr(b.row_text(1), "│xxxxxx│")
+    b.free()
+end
+
+func test_title_exact_fit():
+    mut b := basalam.NewBuffer(10, 2)
+    basalam.DrawBorder(b, basalam.Rect { x = 0, y = 0, width = 10, height = 2 }, basalam.BorderStyle.Single, basalam.Style {}, "Files")
+    testing.AssertEqStr(b.row_text(0), "┌─ Files ┐")
+    b.free()
+end
+
+func test_title_truncates_right():
+    mut b := basalam.NewBuffer(10, 2)
+    basalam.DrawBorder(b, basalam.Rect { x = 0, y = 0, width = 10, height = 2 }, basalam.BorderStyle.Single, basalam.Style {}, "Playback")
+    testing.AssertEqStr(b.row_text(0), "┌─ Playb ┐")
+    b.free()
+end
+
+func test_title_truncates_long_name():
+    mut b := basalam.NewBuffer(13, 2)
+    basalam.DrawBorder(b, basalam.Rect { x = 0, y = 0, width = 13, height = 2 }, basalam.BorderStyle.Single, basalam.Style {}, "nightly-build.log")
+    testing.AssertEqStr(b.row_text(0), "┌─ nightly- ┐")
+    b.free()
+end
+
+func test_title_one_char_at_minimum_width():
+    mut b := basalam.NewBuffer(6, 2)
+    basalam.DrawBorder(b, basalam.Rect { x = 0, y = 0, width = 6, height = 2 }, basalam.BorderStyle.Single, basalam.Style {}, "Files")
+    testing.AssertEqStr(b.row_text(0), "┌─ F ┐")
+    b.free()
+end
+
+func test_title_dropped_below_minimum_width():
+    mut b := basalam.NewBuffer(5, 2)
+    basalam.DrawBorder(b, basalam.Rect { x = 0, y = 0, width = 5, height = 2 }, basalam.BorderStyle.Single, basalam.Style {}, "Files")
+    testing.AssertEqStr(b.row_text(0), "┌───┐")
+    b.free()
+end
+
+func test_title_blank_is_absent():
+    mut b := basalam.NewBuffer(10, 2)
+    basalam.DrawBorder(b, basalam.Rect { x = 0, y = 0, width = 10, height = 2 }, basalam.BorderStyle.Single, basalam.Style {}, "   ")
+    testing.AssertEqStr(b.row_text(0), "┌────────┐")
+    b.free()
+end
+
+func test_title_trimmed():
+    mut b := basalam.NewBuffer(10, 2)
+    basalam.DrawBorder(b, basalam.Rect { x = 0, y = 0, width = 10, height = 2 }, basalam.BorderStyle.Single, basalam.Style {}, "  Files  ")
+    testing.AssertEqStr(b.row_text(0), "┌─ Files ┐")
+    b.free()
+end
+
+func test_height_one_is_horizontal_rule():
+    mut b := basalam.NewBuffer(10, 1)
+    basalam.DrawBorder(b, basalam.Rect { x = 0, y = 0, width = 10, height = 1 }, basalam.BorderStyle.Single, basalam.Style {}, "Files")
+    testing.AssertEqStr(b.row_text(0), "──────────")
+    b.free()
+end
+
+func test_one_by_one_is_horizontal_glyph():
+    mut b := basalam.NewBuffer(1, 1)
+    basalam.DrawBorder(b, basalam.Rect { x = 0, y = 0, width = 1, height = 1 }, basalam.BorderStyle.Single, basalam.Style {}, "")
+    testing.AssertEqStr(b.row_text(0), "─")
+    b.free()
+end
+
+func test_width_one_is_vertical_rule():
+    mut b := basalam.NewBuffer(1, 4)
+    basalam.DrawBorder(b, basalam.Rect { x = 0, y = 0, width = 1, height = 4 }, basalam.BorderStyle.Single, basalam.Style {}, "")
+    testing.AssertEqStr(b.row_text(0), "│")
+    testing.AssertEqStr(b.row_text(3), "│")
+    b.free()
+end
+
+func test_two_by_two_has_corners_only():
+    mut b := basalam.NewBuffer(2, 2)
+    basalam.DrawBorder(b, basalam.Rect { x = 0, y = 0, width = 2, height = 2 }, basalam.BorderStyle.Single, basalam.Style {}, "")
+    testing.AssertEqStr(b.row_text(0), "┌┐")
+    testing.AssertEqStr(b.row_text(1), "└┘")
+    b.free()
+end
+
+func test_two_by_three_has_vertical_edges():
+    mut b := basalam.NewBuffer(2, 3)
+    basalam.DrawBorder(b, basalam.Rect { x = 0, y = 0, width = 2, height = 3 }, basalam.BorderStyle.Single, basalam.Style {}, "")
+    testing.AssertEqStr(b.row_text(0), "┌┐")
+    testing.AssertEqStr(b.row_text(1), "││")
+    testing.AssertEqStr(b.row_text(2), "└┘")
+    b.free()
+end
+
+func test_three_by_two_has_horizontal_edges():
+    mut b := basalam.NewBuffer(3, 2)
+    basalam.DrawBorder(b, basalam.Rect { x = 0, y = 0, width = 3, height = 2 }, basalam.BorderStyle.Single, basalam.Style {}, "")
+    testing.AssertEqStr(b.row_text(0), "┌─┐")
+    testing.AssertEqStr(b.row_text(1), "└─┘")
+    b.free()
+end
+
+func test_empty_rects_write_nothing():
+    mut b := basalam.NewBuffer(4, 2)
+    b.fill(basalam.Rect { x = 0, y = 0, width = 4, height = 2 }, "x", "")
+    basalam.DrawBorder(b, basalam.Rect { x = 0, y = 0, width = 0, height = 2 }, basalam.BorderStyle.Single, basalam.Style {}, "")
+    basalam.DrawBorder(b, basalam.Rect { x = 0, y = 0, width = 2, height = 0 }, basalam.BorderStyle.Single, basalam.Style {}, "")
+    basalam.DrawBorder(b, basalam.Rect { x = 0, y = 0, width = -1, height = 3 }, basalam.BorderStyle.Single, basalam.Style {}, "")
+    testing.AssertEqStr(b.row_text(0), "xxxx")
+    testing.AssertEqStr(b.row_text(1), "xxxx")
+    b.free()
+end
+
+func test_clip_never_shifts():
+    mut b := basalam.NewBuffer(10, 3)
+    basalam.DrawBorder(b, basalam.Rect { x = 6, y = 0, width = 8, height = 3 }, basalam.BorderStyle.Single, basalam.Style {}, "")
+    testing.AssertEqStr(b.row_text(0), "      ┌───")
+    testing.AssertEqStr(b.row_text(1), "      │   ")
+    testing.AssertEqStr(b.row_text(2), "      └───")
+    b.free()
+end
+
+func test_color_is_fg_only():
+    mut b := basalam.NewBuffer(8, 3)
+    style := basalam.Style { fg = basalam.Color.Ansi(1), bold = true, italic = true }
+    basalam.DrawBorder(b, basalam.Rect { x = 0, y = 0, width = 8, height = 3 }, basalam.BorderStyle.Single, style, "Title")
+    want := basalam.StyleSgr(basalam.Style { fg = basalam.Color.Ansi(1) }, basalam.ColorTier.TrueColor)
+    testing.AssertEqStr(b.get(0, 0).style, want)
+    testing.AssertEqStr(b.get(3, 0).style, want)
+    testing.AssertEqStr(b.get(7, 2).style, want)
+    b.free()
+end
+
+func test_default_fg_writes_no_style():
+    mut b := basalam.NewBuffer(8, 3)
+    basalam.DrawBorder(b, basalam.Rect { x = 0, y = 0, width = 8, height = 3 }, basalam.BorderStyle.Single, basalam.Style {}, "")
+    testing.AssertEqStr(b.get(0, 0).style, "")
+    b.free()
+end
+
+func main:
+    test_single_box()
+    test_double_box()
+    test_rounded_box()
+    test_single_writes_eighteen_cells()
+    test_none_is_noop()
+    test_interior_untouched()
+    test_title_exact_fit()
+    test_title_truncates_right()
+    test_title_truncates_long_name()
+    test_title_one_char_at_minimum_width()
+    test_title_dropped_below_minimum_width()
+    test_title_blank_is_absent()
+    test_title_trimmed()
+    test_height_one_is_horizontal_rule()
+    test_one_by_one_is_horizontal_glyph()
+    test_width_one_is_vertical_rule()
+    test_two_by_two_has_corners_only()
+    test_two_by_three_has_vertical_edges()
+    test_three_by_two_has_horizontal_edges()
+    test_empty_rects_write_nothing()
+    test_clip_never_shifts()
+    test_color_is_fg_only()
+    test_default_fg_writes_no_style()
+    ret testing.Summary()
+end
