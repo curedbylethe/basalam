@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `DrawBorder(buf, rect, border, style, title)`: paints a one-cell box-drawing
+  ring (`BorderStyle.Single`, `Double`, or `Rounded`) with an optional title on
+  the top edge, in one foreground color from `style.fg`. `BorderStyle.None`
+  draws nothing.
+- `Panel`: a single-child decorator that frames its child with a border ring,
+  insets the child by `BorderInset`, and optionally takes focus. It has the
+  fields `border`, `border_style`, `title`, `takes_focus`, and `focus_style`,
+  and `add`. The focused frame paints in `focus_style` while the Panel has focus.
 - `Screen.hit_test(x, y)`: the topmost widget (last painted) whose bounds
   contain a 0-based cell, or `NoWidget`.
 - `Event.mouse_point()`: the 0-based cell of a `MouseEvent`, converted from
