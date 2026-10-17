@@ -45,6 +45,7 @@
           "reference/buffer",
           "reference/color",
           "reference/style",
+          "reference/border",
           "reference/keymap",
           "reference/screen"
         ]
