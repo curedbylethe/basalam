@@ -288,6 +288,32 @@ func test_tick_and_resize_stay_on_focus_path():
     testing.AssertEqInt(s.buffer.width, 30)
 end
 
+func test_release_report_decodes_and_routes():
+    mut s := build()
+    defer s.close()
+    // Final byte 'm' is a release. Column 3 and row 2 are cell (2, 1), the child.
+    seq := "\x1b[<0;3;2m"
+    mouse := term.DecodeMouse(seq)
+    testing.AssertTrue(mouse.ok)
+    testing.AssertFalse(mouse.pressed)
+    ev := basalam.Event { kind = basalam.MouseEvent, key = term.Key { raw = seq }, mouse = mouse }
+    testing.AssertFalse(s.dispatch(ev))
+    testing.AssertEqStr(trail(), "child>panel>root")
+end
+
+func test_motion_report_decodes_and_routes():
+    mut s := build()
+    defer s.close()
+    // Button byte 35 = 32 (motion bit) | 3 (no button held). Cell (2, 1).
+    seq := "\x1b[<35;3;2M"
+    mouse := term.DecodeMouse(seq)
+    testing.AssertTrue(mouse.ok)
+    testing.AssertTrue(mouse.motion)
+    ev := basalam.Event { kind = basalam.MouseEvent, key = term.Key { raw = seq }, mouse = mouse }
+    testing.AssertFalse(s.dispatch(ev))
+    testing.AssertEqStr(trail(), "child>panel>root")
+end
+
 func main:
     test_mouse_point_is_zero_based()
     test_hit_test_picks_topmost()
@@ -305,6 +331,8 @@ func main:
     test_undecoded_mouse_report_falls_back_to_focus()
     test_keyboard_still_goes_to_focused_widget()
     test_tick_and_resize_stay_on_focus_path()
+    test_release_report_decodes_and_routes()
+    test_motion_report_decodes_and_routes()
     visits.free()
     ret testing.Summary()
 end
