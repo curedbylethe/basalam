@@ -89,7 +89,7 @@ li.selected_style = term.Sgr(term.FgBlack) + term.Sgr(term.BgCyan)
 
 `focusable()` returns `true`, so the screen's focus dispatch delivers key presses to the list while it is focused, and Tab-style and spatial navigation can move the focus onto it. An unfocused list receives no key events. When the list consumes a key, the screen marks itself dirty and redraws.
 
-The focus indicator is the selection-row style itself: the selected row switches between the focused and unfocused style pair. `List` draws no border and no scrollbar — no core widget draws a border, so a bordered list stays out of scope. Place the list inside a container such as [Row or Column](/reference/layout) to give it a frame.
+The focus indicator is the selection-row style itself: the selected row switches between the focused and unfocused style pair. `List` draws no border and no scrollbar. To frame a list, wrap it in a [`Panel`](/reference/panel), which draws the frame around its child.
 
 ## Scrolling
 
