@@ -9,10 +9,12 @@
 #
 # Usage: tests/run.sh [name ...]      (default: every tests/*.salam)
 # Env:   SALAM=path/to/salam          (default: salam on PATH)
+#        TEST_TIMEOUT=seconds          (default: 30; bound on each test run)
 
 set -u
 
 SALAM="${SALAM:-salam}"
+TEST_TIMEOUT="${TEST_TIMEOUT:-30}"
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 OUT="$ROOT/build/tests"
 mkdir -p "$OUT"
@@ -44,10 +46,21 @@ for name in $names; do
         continue
     fi
     # Tests never read the terminal; give them an empty stdin so a test that
-    # accidentally does cannot hang the run.
-    "$bin" < /dev/null > "$got"
+    # accidentally does cannot hang the run. A watchdog bounds the run as
+    # well: a hung test must fail fast, not stall the whole suite (a blocked
+    # SIGWINCH wait once hung CI for twenty minutes).
+    "$bin" < /dev/null > "$got" &
+    pid=$!
+    ( sleep "$TEST_TIMEOUT"; kill -9 "$pid" 2>/dev/null ) &
+    watchdog=$!
+    wait "$pid"
     code=$?
-    if [ "$code" -ne 0 ]; then
+    kill "$watchdog" 2>/dev/null
+    wait "$watchdog" 2>/dev/null
+    if [ "$code" -eq 137 ]; then
+        echo "FAIL $name (timeout after ${TEST_TIMEOUT}s)"
+        fail=$((fail + 1))
+    elif [ "$code" -ne 0 ]; then
         echo "FAIL $name (exit $code)"
         fail=$((fail + 1))
     elif ! diff -u "$want" "$got"; then
