@@ -1,0 +1,106 @@
+/*
+ * basalam - a terminal user interface library for Salam (2026)
+ *
+ * Repository: https://github.com/curedbylethe/basalam
+ * License: GPL-3.0-or-later
+ */
+
+// The border ring: box-drawing glyphs for each BorderStyle and the shared
+// DrawBorder helper that paints one ring into a buffer. The helper is the
+// single place frames are drawn, so widgets (Panel first) and custom widgets
+// get the same corners, title rules and color rules. It takes no capability
+// or tier, paints only the cells of its ring, and never reads or clears the
+// interior. It does not lay out children, change geometry, or decide focus.
+
+package basalam
+
+import str
+
+@en "BorderGlyphs"
+/// The eight glyphs of one border ring. Edges that repeat on both sides
+/// (single and rounded share their edges) are stored once per side.
+struct _BorderGlyphs:
+    pub tl: str = ""
+    pub t: str = ""
+    pub tr: str = ""
+    pub l: str = ""
+    pub r: str = ""
+    pub bl: str = ""
+    pub b: str = ""
+    pub br: str = ""
+end
+
+// The glyph set for a border kind. None has no glyphs; DrawBorder returns
+// before it reads them.
+func _border_glyphs(b: BorderStyle): _BorderGlyphs:
+    ret match b:
+        Single => _BorderGlyphs { tl = "┌", t = "─", tr = "┐", l = "│", r = "│", bl = "└", b = "─", br = "┘" }
+        Double => _BorderGlyphs { tl = "╔", t = "═", tr = "╗", l = "║", r = "║", bl = "╚", b = "═", br = "╝" }
+        Rounded => _BorderGlyphs { tl = "╭", t = "─", tr = "╮", l = "│", r = "│", bl = "╰", b = "─", br = "╯" }
+        None => _BorderGlyphs {}
+    end
+end
+
+@en "DrawBorder"
+/// Paints a one-cell ring of `border` around `rect` into `buf`, every cell
+/// in one foreground color taken from `style.fg`.
+///
+/// Rules:
+/// - BorderStyle.None, or a rect with no area, writes nothing.
+/// - A one-row rect is a horizontal rule and a one-column rect is a
+///   vertical rule; neither has corners or a title.
+/// - Otherwise the four corners are drawn, then the horizontal edges, then
+///   the vertical edges. Edges run strictly between the corners.
+/// - `title` sits on the top edge starting at rect.x + 2, with one space
+///   before and after it. It is trimmed; an empty title draws nothing; it
+///   is cut to rect.width - 5 characters on the right and needs a width of
+///   at least 6.
+/// - Only foreground color is used. Attributes in `style` are ignored, and
+///   a Color.Default fg writes an empty style (the terminal default).
+///
+/// Writes go through Buffer.set, which clips to the grid and the clip
+/// region, so a rect partly outside the buffer paints only its inside part.
+pub func DrawBorder(buf: Buffer, rect: Rect, border: BorderStyle, style: Style, title: str):
+    if border == BorderStyle.None or rect.width <= 0 or rect.height <= 0:
+        ret
+    end
+    g := _border_glyphs(border)
+    fg := StyleSgr(Style { fg = style.fg }, ColorTier.TrueColor)
+    x0 := rect.x
+    y0 := rect.y
+    x1 := rect.x + rect.width - 1
+    y1 := rect.y + rect.height - 1
+    if rect.height == 1:
+        repeat rect.width in i:
+            buf.set(x0 + i, y0, Cell { ch = g.t, style = fg })
+        end
+        ret
+    end
+    if rect.width == 1:
+        repeat rect.height in j:
+            buf.set(x0, y0 + j, Cell { ch = g.l, style = fg })
+        end
+        ret
+    end
+    buf.set(x0, y0, Cell { ch = g.tl, style = fg })
+    buf.set(x1, y0, Cell { ch = g.tr, style = fg })
+    buf.set(x0, y1, Cell { ch = g.bl, style = fg })
+    buf.set(x1, y1, Cell { ch = g.br, style = fg })
+    repeat rect.width - 2 in i:
+        buf.set(x0 + 1 + i, y0, Cell { ch = g.t, style = fg })
+        buf.set(x0 + 1 + i, y1, Cell { ch = g.b, style = fg })
+    end
+    repeat rect.height - 2 in j:
+        buf.set(x0, y0 + 1 + j, Cell { ch = g.l, style = fg })
+        buf.set(x1, y0 + 1 + j, Cell { ch = g.r, style = fg })
+    end
+    text := str.Trim(title)
+    if text == "" or rect.width < 6:
+        ret
+    end
+    shown := str.CharSubstr(text, 0, rect.width - 5)
+    shown_len := str.CharCount(shown)
+    buf.set(x0 + 2, y0, Cell { ch = " ", style = fg })
+    buf.put_str(x0 + 3, y0, shown, fg)
+    buf.set(x0 + 3 + shown_len, y0, Cell { ch = " ", style = fg })
+end
