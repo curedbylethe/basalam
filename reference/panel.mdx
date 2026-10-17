@@ -1,0 +1,89 @@
+---
+title: "Panel"
+description: "The Panel widget: a single child framed by a border ring, inset by the border's cost, with an optional title and an opt-in focus stop whose frame changes color while focused."
+keywords: ["panel", "frame", "border", "decorator", "title", "focus", "focus_style", "takes_focus", "inset"]
+---
+
+`Panel` frames one child. It draws a [border](/reference/border) ring around its rectangle, insets the child by the ring's cost, and paints nothing else. It is a decorator, not a layout engine: it holds one child, and several children go in a [`Column` or `Row`](/reference/layout) inside it.
+
+```salam
+mut frame := basalam.Panel { border = basalam.BorderStyle.Single, title = "Files" }
+frame.add(body)
+```
+
+## Fields
+
+| Field | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `border` | `BorderStyle` | `BorderStyle.None` | The ring drawn around the child. `None` draws nothing and insets nothing. |
+| `border_style` | `Style` | `StyleDefault` | The frame's style. Only its `fg` is used, for every ring cell and the title. |
+| `title` | `str` | `""` | Text on the top edge. Empty or whitespace-only means no title. |
+| `takes_focus` | `bool` | `false` | Makes the Panel a focus stop that passes keys to its child. |
+| `focus_style` | `Style` | `StyleDefault` | The frame's style while the Panel has focus. |
+
+Set fields in a struct literal, or assign them later. A partial literal fills the rest with defaults.
+
+## One child
+
+`add` sets the child. A second call replaces the first, so a `Panel` holds at most one child. To frame several widgets, put them in a container and frame the container:
+
+```salam
+mut frame := basalam.Panel { border = basalam.BorderStyle.Rounded, title = "Status" }
+mut column := basalam.Column {}
+column.add(header)
+column.add(footer)
+frame.add(column)
+```
+
+The child is positioned inside the ring, so it does not need to know about the frame. Add it to the [`Screen`](/reference/screen) tree as well, or it is never painted. The Panel itself is added to the tree like any other widget, and the Screen paints the frame.
+
+## Inset
+
+On `set_bounds`, the child gets the Panel's rectangle inset by `BorderInset(border)` on each side. For `Single`, `Double`, and `Rounded` that is one cell. For `None` it is zero, so the child gets the full rectangle, and the Panel paints nothing. A Panel with no border behaves like its child.
+
+Setting `border` again on a laid-out Panel takes effect on the next `set_bounds`.
+
+## Focus
+
+A Panel is not a focus stop by default. Set `takes_focus` to make it one:
+
+- While the Panel is focused, it passes every event to its child and returns the child's result. Keys the child consumes count as handled.
+- The child is never a focus stop of its own. The frame is the only place focus lands, so a framed child is focused once.
+- While the Panel is focused and `focus_style` is set, the frame paints in `focus_style` instead of `border_style`. The title is drawn in the same color as the frame. When `focus_style` is `StyleDefault`, which is the default, the frame keeps `border_style` while focused.
+
+Only the foreground of `focus_style` is used, as for `border_style`. Its attributes are ignored.
+
+```salam
+mut frame := basalam.Panel {
+    border = basalam.BorderStyle.Single,
+    title = "Left",
+    takes_focus = true,
+    focus_style = basalam.Style { fg = basalam.Green },
+}
+```
+
+## Size
+
+`Panel` reports no natural size, so it fills the space its parent gives it. Give it a size through its parent's layout, or by calling `set_bounds` directly.
+
+## Framing a focusable child
+
+The usual case is a focusable widget with a frame that lights up while it has focus. Build the child in the Screen first, so the frame can take it as its child, then add the frame:
+
+```salam
+body := screen.add(basalam.RootId, Body {})
+mut frame := basalam.Panel {
+    border = basalam.BorderStyle.Single,
+    title = "Left",
+    takes_focus = true,
+    focus_style = basalam.Style { fg = basalam.Green },
+}
+frame.add(screen.widget(body))
+panel := screen.add(basalam.RootId, frame)
+```
+
+The Screen paints `Body` and the frame, and `screen.widget(panel).set_bounds(...)` positions both. `Body` is not focusable: the frame takes the focus and forwards keys to it. The [demo](https://github.com/curedbylethe/basalam/blob/main/examples/demo.salam) uses this pattern for its three panels.
+
+<Note>
+  The child handle passed to `add` is shared with the Screen's copy, so it has to come from `screen.widget(body)`. A copy of the Panel made before `add`, or a field changed after `add`, does not reach the Screen's copy. Set the frame's fields before you add it to the Screen.
+</Note>

@@ -46,6 +46,7 @@
           "reference/color",
           "reference/style",
           "reference/border",
+          "reference/panel",
           "reference/keymap",
           "reference/screen"
         ]
