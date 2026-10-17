@@ -12,6 +12,7 @@
 // Column child being positioned inside the frame. Expected SGR strings come
 // from basalam.StyleSgr, so no escape appears by hand.
 
+import term
 import testing
 
 include "../basalam/basalam.salam"
@@ -20,6 +21,15 @@ include "../basalam/basalam.salam"
 // back through the Panel's slot.
 struct Probe:
     pub use basalam.BaseWidget
+end
+
+// A child that consumes the key "k" and passes everything else on.
+struct Keyed:
+    pub use basalam.BaseWidget
+
+    pub func handle_event(event: basalam.Event): bool:
+        ret event.is_char("k")
+    end
 end
 
 func test_single_frame_painted():
@@ -172,7 +182,61 @@ func test_column_child_positioned_inside_frame():
     testing.AssertEqInt(child.height, 3)
 end
 
+func test_focusable_only_when_opted_in():
+    mut off := basalam.Panel {}
+    testing.AssertFalse(off.focusable())
+    mut focusable_on := basalam.Panel { takes_focus = true }
+    testing.AssertTrue(focusable_on.focusable())
+end
+
+func test_focus_forwards_keys_to_child():
+    mut p := basalam.Panel { takes_focus = true }
+    p.add(Keyed {})
+    testing.AssertTrue(p.handle_event(basalam.Event { kind = basalam.KeyEvent, key = term.Decode("k") }))
+    testing.AssertFalse(p.handle_event(basalam.Event { kind = basalam.KeyEvent, key = term.Decode("x") }))
+end
+
+func test_focused_frame_uses_focus_style():
+    mut b := basalam.NewBuffer(8, 3)
+    b.focused = true
+    mut p := basalam.Panel { border = basalam.BorderStyle.Single, border_style = basalam.Style { fg = basalam.Color.Ansi(4) }, focus_style = basalam.Style { fg = basalam.Color.Ansi(3) } }
+    p.add(Probe {})
+    r := basalam.Rect { x = 0, y = 0, width = 8, height = 3 }
+    p.set_bounds(r)
+    p.render(b, r)
+    testing.AssertEqStr(b.get(0, 0).style, basalam.StyleSgr(basalam.Style { fg = basalam.Color.Ansi(3) }, basalam.ColorTier.TrueColor))
+    b.free()
+end
+
+func test_unfocused_frame_uses_border_style():
+    mut b := basalam.NewBuffer(8, 3)
+    mut p := basalam.Panel { border = basalam.BorderStyle.Single, border_style = basalam.Style { fg = basalam.Color.Ansi(4) }, focus_style = basalam.Style { fg = basalam.Color.Ansi(3) } }
+    p.add(Probe {})
+    r := basalam.Rect { x = 0, y = 0, width = 8, height = 3 }
+    p.set_bounds(r)
+    p.render(b, r)
+    testing.AssertEqStr(b.get(0, 0).style, basalam.StyleSgr(basalam.Style { fg = basalam.Color.Ansi(4) }, basalam.ColorTier.TrueColor))
+    b.free()
+end
+
+func test_default_focus_style_keeps_border_style():
+    mut b := basalam.NewBuffer(8, 3)
+    b.focused = true
+    mut p := basalam.Panel { border = basalam.BorderStyle.Single, border_style = basalam.Style { fg = basalam.Color.Ansi(4) } }
+    p.add(Probe {})
+    r := basalam.Rect { x = 0, y = 0, width = 8, height = 3 }
+    p.set_bounds(r)
+    p.render(b, r)
+    testing.AssertEqStr(b.get(0, 0).style, basalam.StyleSgr(basalam.Style { fg = basalam.Color.Ansi(4) }, basalam.ColorTier.TrueColor))
+    b.free()
+end
+
 func main:
+    test_focusable_only_when_opted_in()
+    test_focus_forwards_keys_to_child()
+    test_focused_frame_uses_focus_style()
+    test_unfocused_frame_uses_border_style()
+    test_default_focus_style_keeps_border_style()
     test_single_frame_painted()
     test_double_and_rounded_glyphs()
     test_title_present()
