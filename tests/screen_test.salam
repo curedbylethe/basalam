@@ -376,6 +376,39 @@ func test_resize_forces_full_repaint():
     testing.AssertEqStr(s.buffer.diff(), s.buffer.ansi())
 end
 
+func assert_rect(r: basalam.Rect, x: int, y: int, w: int, h: int):
+    testing.AssertEqInt(r.x, x)
+    testing.AssertEqInt(r.y, y)
+    testing.AssertEqInt(r.width, w)
+    testing.AssertEqInt(r.height, h)
+end
+
+// A dispatched resize must reach a layout container: the root is refit, and
+// the Column re-lays out its children into the new area.
+func test_resize_event_relayouts_container():
+    root := basalam.NewColumn()
+    top := Block { ch = "a" } as dyn basalam.Widget
+    bottom := Block { ch = "b" } as dyn basalam.Widget
+    _ := root.add(top)
+    _ := root.add(bottom)
+    mut s := basalam.NewScreen(root as dyn basalam.Widget, 20, 10)
+    defer s.close()
+    _ := s.add(basalam.RootId, top)
+    _ := s.add(basalam.RootId, bottom)
+    // Both children are Fill on y, so the 10 rows split 5 and 5.
+    assert_rect(top.bounds(), 0, 0, 20, 5)
+    assert_rect(bottom.bounds(), 0, 5, 20, 5)
+
+    resize := basalam.Event { kind = basalam.ResizeEvent, width = 30, height = 12 }
+    testing.AssertFalse(s.dispatch(resize))
+    testing.AssertEqInt(s.buffer.width, 30)
+    testing.AssertEqInt(s.buffer.height, 12)
+    assert_rect(s.root.bounds(), 0, 0, 30, 12)
+    // 12 rows split 6 and 6; each child fills the 30-cell width.
+    assert_rect(top.bounds(), 0, 0, 30, 6)
+    assert_rect(bottom.bounds(), 0, 6, 30, 6)
+end
+
 func main:
     test_new_screen_fits_root()
     test_events_flow_through_channel()
@@ -388,6 +421,7 @@ func main:
     test_ansi_frame()
     test_close_is_idempotent()
     test_resize_forces_full_repaint()
+    test_resize_event_relayouts_container()
     test_raise_paint_order()
     test_hits_false_still_paints()
     ret testing.Summary()
