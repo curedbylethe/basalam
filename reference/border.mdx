@@ -1,0 +1,90 @@
+---
+title: "Border"
+description: "Draw a one-cell box-drawing ring into a buffer with DrawBorder: the single, double, and rounded glyph sets, the title rules, the degenerate rectangles, and the one-foreground color rule."
+keywords: ["border", "frame", "box drawing", "DrawBorder", "BorderStyle", "title", "rounded", "double", "single"]
+---
+
+`DrawBorder` paints a one-cell ring around a rectangle of a [`Buffer`](/reference/buffer). It is the shared helper that every frame in basalam uses, including the [`Panel`](/reference/panel) widget, so a custom widget that wants a frame calls it too. It draws only the ring. It does not lay out children, change geometry, or pick a color tier.
+
+```salam
+basalam.DrawBorder(buf, bounds, basalam.BorderStyle.Single, basalam.Style { fg = basalam.Color.Ansi(4) }, "Files")
+```
+
+The signature is `DrawBorder(buf: Buffer, rect: Rect, border: BorderStyle, style: Style, title: str)`. The `border` argument is the `BorderStyle` value itself, not a wrapper.
+
+## Border styles
+
+`BorderStyle` has four values. `None` draws nothing; the other three draw a ring with these glyphs:
+
+| Style | Top left | Top | Top right | Sides | Bottom left | Bottom | Bottom right |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `Single` | `┌` | `─` | `┐` | `│` | `└` | `─` | `┘` |
+| `Double` | `╔` | `═` | `╗` | `║` | `╚` | `═` | `╝` |
+| `Rounded` | `╭` | `─` | `╮` | `│` | `╰` | `─` | `╯` |
+
+`Rounded` uses the single-line edges with arc corners. `None` writes no cell and no byte, and it does not reserve any space. A ring is one cell wide, so drawing one inside a rectangle leaves the inner area for content: the content area is the rectangle inset by one cell on each side.
+
+## Title
+
+The `title` sits on the top edge, starting two cells in from the left corner, with one space before and after it:
+
+```text
+┌─ Files ──────┐
+```
+
+- The title is trimmed of surrounding whitespace. An empty or whitespace-only title draws nothing.
+- The title needs a width of at least 6 cells and a height of at least 2. A narrower rectangle draws no title.
+- The available span is the width minus 5 cells. A longer title is cut to that span on the right. There is no ellipsis and no centering.
+- A title never reaches a corner, because the corners are drawn in every case and the title stops before the right edge.
+
+The title uses the same foreground as the ring. There is no separate title style.
+
+## Degenerate rectangles
+
+Small rectangles follow fixed rules, not a clip:
+
+| Rectangle | Draws |
+| --- | --- |
+| `width` or `height` is zero or negative | Nothing |
+| `height` 1 | A horizontal rule of `─` across `width`, no corners, no title |
+| `width` 1 and `height` 2 or more | A vertical rule of `│`, no corners, no title |
+| 2 by 2 | Four corners, no edges |
+| 2 by 3 | Corners and two `│` edge cells in the middle row |
+| 3 by 2 | Corners and a `─` edge between them on each row |
+
+When the rectangle is larger than the buffer, the ring is clipped at the buffer's edge, and the part that falls inside the buffer is drawn in its correct place. A ring is never shifted to fit.
+
+## Color
+
+Every ring cell, including the title, uses one foreground color, `style.fg`. The rules are:
+
+- Only `fg` is used. `bg` and the attributes `bold`, `dim`, `italic`, and `underline` are ignored, even when set.
+- A `fg` of `Color.Default` writes no escape, so the frame keeps the terminal's own foreground.
+- Border cells carry the foreground at true color, as `Text` does. The frame is not lowered to the terminal's color tier when it is drawn.
+
+The glyphs are the same at every color tier, so a frame keeps its shape wherever it runs.
+
+## Writes and overlap
+
+`DrawBorder` replaces every cell it draws and reads or clears nothing else. The interior of the rectangle keeps whatever was drawn there before, so you can draw a frame over content. Overlapping frames are the caller's concern: the last write wins, and junctions are not resolved.
+
+## Out of scope
+
+These are not part of this release:
+
+- ASCII fallback glyphs for terminals without box drawing.
+- Heavy or mixed-weight glyph sets.
+- Junctions where two rings meet, and nested frames.
+- Shadows.
+
+## Use it in a widget
+
+Call `DrawBorder` in your widget's `render`, with the bounds the screen gives you:
+
+```salam
+pub func render(buf: basalam.Buffer, bounds: basalam.Rect):
+    basalam.DrawBorder(buf, bounds, basalam.BorderStyle.Rounded, basalam.Style { fg = basalam.Color.Ansi(6) }, "Log")
+end
+```
+
+To frame a child widget without writing a frame yourself, use [`Panel`](/reference/panel).
