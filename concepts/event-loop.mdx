@@ -32,7 +32,7 @@ sequenceDiagram
 
 **The input thread** starts in `screen.start()`. It loops over two sources:
 
-- **Keys and mouse.** It waits up to `PollMs` (20 ms) for input with `term.KeyReady`, then reads it with `term.ReadKey`. Keys become a `KeyEvent`. Mouse reports are decoded with `term.DecodeMouse` into a `MouseEvent`.
+- **Keys and mouse.** It waits up to `PollMs` (20 ms) for input with `term.KeyReady`, then reads it with `term.ReadKey`. Keys become a `KeyEvent`. Mouse reports are decoded with `term.DecodeMouse` into a `MouseEvent`. When reading returns `term.KeyEOF` (stdin ended, or stdin is not a terminal), the thread reports one `KeyEvent` and stops reading; the channel stays open and events already queued are still delivered.
 - **Ticks.** When `tick_ms` is above zero, it sends a `TickEvent` that often. A late tick is scheduled from the time it was sent, so a slow main thread gets one late tick, not a burst of catch-up ticks.
 
 **The resize watcher** (POSIX only) starts in `screen.start()` as well. Size is a signal, not input: the terminal announces a resize with `SIGWINCH`, so `start()` installs a handler and blocks the signal before spawning either thread. The watcher parks in `sigwait`, reads `term.Size()` on each wake, and sends a `ResizeEvent` only when the size actually changed, so a wake with an unchanged size emits nothing. Windows has no `SIGWINCH`: there the input thread keeps polling `term.Size()` once per pass, and `PollMs` bounds that poll. See [Limitations](#limitations).
