@@ -151,6 +151,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Key repeat is documented: a held key arrives as repeated discrete
   `KeyEvent`s through the input loop; the library coalesces and drops
   nothing.
+- The `term.KeyEOF` once-then-stop behavior is documented: when stdin ends the input thread reports one `KeyEvent` and stops reading; the channel stays open and queued events are still delivered.
 - The `reference/color` page documents the color value type, the palette,
   the SGR encodings, capability detection, and the downgrade ladder. The
   architecture, buffer, and text pages now state that the `Color` type exists

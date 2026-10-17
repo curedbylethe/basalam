@@ -36,6 +36,8 @@ end
 | `ResizeEvent` | 3 | `width`, `height` |
 | `TickEvent` | 4 | None. A periodic timer tick. |
 
+When reading returns `term.KeyEOF` (stdin ended), the input thread reports a single `KeyEvent` and stops reading; the channel stays open and queued events are still delivered.
+
 ## Mouse events
 
 `mouse` is a `term.MouseEvent` from `term.DecodeMouse`:
