@@ -188,16 +188,16 @@ end
 
 func _lower_256(c: Color): Color:
     ret match c:
-        Rgb(r, g, b) => Color.Indexed(_nearest_indexed(r, g, b))
-        else => c
+        Rgb(r, g, b): Color.Indexed(_nearest_indexed(r, g, b)) end
+        else: c end
     end
 end
 
 func _lower_16(c: Color): Color:
     ret match c:
-        Indexed(n) => Color.Ansi(_indexed_to_ansi(n))
-        Rgb(r, g, b) => Color.Ansi(_nearest_ansi(r, g, b))
-        else => c
+        Indexed(n): Color.Ansi(_indexed_to_ansi(n)) end
+        Rgb(r, g, b): Color.Ansi(_nearest_ansi(r, g, b)) end
+        else: c end
     end
 end
 
@@ -210,8 +210,8 @@ end
 
 func _nearest_ansi_from_indexed(n: int): int:
     ret match _idx_rgb(n):
-        Rgb(r, g, b) => _nearest_ansi(r, g, b)
-        else => 0
+        Rgb(r, g, b): _nearest_ansi(r, g, b) end
+        else: 0 end
     end
 end
 
@@ -293,10 +293,10 @@ end
 /// written by hand.
 pub func FgSeq(c: Color): str:
     ret match c:
-        Default => term.Sgr(term.FgDefault)
-        Ansi(n) => term.Sgr(_ansi_fg(n))
-        Indexed(n) => term.SeqFg256(n)
-        Rgb(r, g, b) => term.SeqFgRGB(r, g, b)
+        Default: term.Sgr(term.FgDefault) end
+        Ansi(n): term.Sgr(_ansi_fg(n)) end
+        Indexed(n): term.SeqFg256(n) end
+        Rgb(r, g, b): term.SeqFgRGB(r, g, b) end
     end
 end
 
@@ -308,10 +308,10 @@ end
 /// written by hand.
 pub func BgSeq(c: Color): str:
     ret match c:
-        Default => term.Sgr(term.BgDefault)
-        Ansi(n) => term.Sgr(_ansi_bg(n))
-        Indexed(n) => term.SeqBg256(n)
-        Rgb(r, g, b) => term.SeqBgRGB(r, g, b)
+        Default: term.Sgr(term.BgDefault) end
+        Ansi(n): term.Sgr(_ansi_bg(n)) end
+        Indexed(n): term.SeqBg256(n) end
+        Rgb(r, g, b): term.SeqBgRGB(r, g, b) end
     end
 end
 
@@ -349,10 +349,10 @@ end
 /// mutates its input.
 pub func Lower(c: Color, tier: ColorTier): Color:
     ret match tier:
-        Off => Color.Default
-        TrueColor => c
-        Indexed256 => _lower_256(c)
-        Ansi16 => _lower_16(c)
+        Off: Color.Default end
+        TrueColor: c end
+        Indexed256: _lower_256(c) end
+        Ansi16: _lower_16(c) end
     end
 end
 

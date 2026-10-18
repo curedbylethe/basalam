@@ -13,7 +13,7 @@ draws frames.
 
 ## Install
 
-You need the Salam compiler, version 0.4.9 or later:
+You need the Salam compiler, version 0.5.5 or later:
 
 ```sh
 { curl -fsSL https://raw.githubusercontent.com/SalamLang/Salam/refs/heads/main/install.sh || wget -qO- https://raw.githubusercontent.com/SalamLang/Salam/refs/heads/main/install.sh; } | sh

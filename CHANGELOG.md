@@ -146,6 +146,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   a handler, blocks the signal, and spawns a resize watcher that parks in
   `sigwait`, reads `term.Size()`, and sends a `ResizeEvent` only when the
   size changed. Windows keeps polling `term.Size()` on each input pass.
+- Match arms use the Salam 0.5 form (`pattern: body end`) instead of the old
+  `pattern => body`. The minimum compiler is now 0.5.5, because the compiler
+  no longer parses the old form.
 
 ### Documentation
 

@@ -43,45 +43,45 @@ include "../basalam/basalam.salam"
 
 func kind(c: basalam.Color): int:
     ret match c:
-        Default => 0
-        Ansi(_) => 1
-        Indexed(_) => 2
-        Rgb(_, _, _) => 3
+        Default: 0 end
+        Ansi(_): 1 end
+        Indexed(_): 2 end
+        Rgb(_, _, _): 3 end
     end
 end
 
 func ansi_n(c: basalam.Color): int:
     ret match c:
-        Ansi(n) => n
-        else => -1
+        Ansi(n): n end
+        else: -1 end
     end
 end
 
 func indexed_n(c: basalam.Color): int:
     ret match c:
-        Indexed(n) => n
-        else => -1
+        Indexed(n): n end
+        else: -1 end
     end
 end
 
 func rgb_r(c: basalam.Color): int:
     ret match c:
-        Rgb(r, _, _) => r
-        else => -1
+        Rgb(r, _, _): r end
+        else: -1 end
     end
 end
 
 func rgb_g(c: basalam.Color): int:
     ret match c:
-        Rgb(_, g, _) => g
-        else => -1
+        Rgb(_, g, _): g end
+        else: -1 end
     end
 end
 
 func rgb_b(c: basalam.Color): int:
     ret match c:
-        Rgb(_, _, b) => b
-        else => -1
+        Rgb(_, _, b): b end
+        else: -1 end
     end
 end
 

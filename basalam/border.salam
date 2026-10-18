@@ -34,10 +34,10 @@ end
 // before it reads them.
 func _border_glyphs(b: BorderStyle): _BorderGlyphs:
     ret match b:
-        Single => _BorderGlyphs { tl = "┌", t = "─", tr = "┐", l = "│", r = "│", bl = "└", b = "─", br = "┘" }
-        Double => _BorderGlyphs { tl = "╔", t = "═", tr = "╗", l = "║", r = "║", bl = "╚", b = "═", br = "╝" }
-        Rounded => _BorderGlyphs { tl = "╭", t = "─", tr = "╮", l = "│", r = "│", bl = "╰", b = "─", br = "╯" }
-        None => _BorderGlyphs {}
+        Single: _BorderGlyphs { tl = "┌", t = "─", tr = "┐", l = "│", r = "│", bl = "└", b = "─", br = "┘" } end
+        Double: _BorderGlyphs { tl = "╔", t = "═", tr = "╗", l = "║", r = "║", bl = "╚", b = "═", br = "╝" } end
+        Rounded: _BorderGlyphs { tl = "╭", t = "─", tr = "╮", l = "│", r = "│", bl = "╰", b = "─", br = "╯" } end
+        None: _BorderGlyphs {} end
     end
 end
 

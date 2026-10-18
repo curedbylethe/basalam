@@ -23,7 +23,7 @@ jobs:
       - name: Setup Salam
         uses: SalamLang/Salam/.github/actions/setup-salam@main
         with:
-          version: '0.4.9'
+          version: '0.5.5'
 
       - name: Show compiler version
         run: salam version
