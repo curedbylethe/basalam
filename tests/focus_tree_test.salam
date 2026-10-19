@@ -17,7 +17,8 @@
 // flat sibling lists. The screen is never started: the fixture is built with
 // NewScreen and every focus movement calls the screen methods directly, then
 // asserts focused_id(). Nesting does not reorder focus: the order stays
-// ascending id among focusable widgets, filtered to the top raised layer.
+// ascending id among focusable widgets, filtered to the top raised layer and
+// to ids with no hidden widget on their path to the root.
 //
 // Tree used throughout:
 //
@@ -133,26 +134,39 @@ func test_auto_focus_reaches_depth_three():
     testing.AssertEqInt(s.focused_id(), 3)
     testing.AssertFalse(s.can_focus(1))
     testing.AssertFalse(s.can_focus(2))
+    // 7 is focusable on its own but sits under the closed modal.
+    testing.AssertFalse(s.can_focus(7))
+end
+
+func test_auto_focus_skips_hidden_subtree():
+    mut m := basalam.NewModal()
+    mut s := basalam.NewScreen(basalam.BaseWidget {}, 20, 8)
+    defer s.close()
+    mid := s.add(basalam.RootId, m)
+    tile := s.add(mid, Tile { name = "t" })
+    // The modal is closed, so auto-focus must refuse the hidden child.
+    testing.AssertEqInt(s.focused_id(), basalam.NoWidget)
+    testing.AssertFalse(s.can_focus(tile))
+    // Open reaches the screen's copy through the shared state.
+    m.open()
+    testing.AssertTrue(s.can_focus(tile))
+    testing.AssertTrue(s.focus(tile))
 end
 
 func test_focus_next_crosses_container_boundaries():
     mut s := tree_screen(basalam.NewModal())
     defer s.close()
     testing.AssertEqInt(s.focused_id(), 3)
-    // Ascending id across depths: a, b, c, then m inside the modal subtree.
-    // The modal is closed and m is still reachable: focus_order filters on
-    // focusable(), not on ancestor visibility. Pinned as current behaviour.
+    // Ascending id across depths: a, b, c. The modal is closed, so it and m
+    // are outside the order: an id is skipped when any widget on its path to
+    // the root reports visible() false.
     testing.AssertTrue(s.focus_next())
     testing.AssertEqInt(s.focused_id(), 4)
     testing.AssertTrue(s.focus_next())
     testing.AssertEqInt(s.focused_id(), 5)
     testing.AssertTrue(s.focus_next())
-    testing.AssertEqInt(s.focused_id(), 7)
-    testing.AssertTrue(s.focus_next())
     testing.AssertEqInt(s.focused_id(), 3)
     // And back down the same order, wrapping at the first entry.
-    testing.AssertTrue(s.focus_prev())
-    testing.AssertEqInt(s.focused_id(), 7)
     testing.AssertTrue(s.focus_prev())
     testing.AssertEqInt(s.focused_id(), 5)
     testing.AssertTrue(s.focus_prev())
@@ -178,11 +192,10 @@ func test_spatial_focus_across_depth():
     // a and b share row 2; c is two rows below a.
     testing.AssertTrue(s.focus_right())
     testing.AssertEqInt(s.focused_id(), 4)
-    // The modal tile is the right edge of row 2.
-    testing.AssertTrue(s.focus_right())
-    testing.AssertEqInt(s.focused_id(), 7)
+    // The modal tile is the right edge of row 2, but it is hidden with its
+    // container, so nothing lies to the right of b.
     testing.AssertFalse(s.focus_right())
-    testing.AssertEqInt(s.focused_id(), 7)
+    testing.AssertEqInt(s.focused_id(), 4)
     testing.AssertTrue(s.focus(3))
     testing.AssertTrue(s.focus_down())
     testing.AssertEqInt(s.focused_id(), 5)
@@ -239,6 +252,7 @@ end
 func main:
     test_nested_tree_shape()
     test_auto_focus_reaches_depth_three()
+    test_auto_focus_skips_hidden_subtree()
     test_focus_next_crosses_container_boundaries()
     test_focus_rejects_containers()
     test_spatial_focus_across_depth()

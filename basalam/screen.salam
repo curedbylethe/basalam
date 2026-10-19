@@ -53,7 +53,9 @@
  * (focus_next/prev) and spatial (focus_up/down/left/right, see
  * focus.salam) navigation walk the focus order: focusable widgets in the
  * topmost raised layer, or every focusable widget in ID order when that
- * layer has none. An application binds the methods to keys through the
+ * layer has none. Neither set contains an id inside a hidden subtree: an id
+ * is skipped when any widget on its path to the root reports visible()
+ * false. An application binds the methods to keys through the
  * opt-in keymap.
  *
  * Keymap fallback. A screen carries an opt-in Keymap (see keymap.salam). For
@@ -246,12 +248,13 @@ pub struct Screen:
     @en "add"
     /// Adds w under parent (an ID; RootId for top level) and returns the
     /// new widget's ID. Unraised widgets paint in ID order, which is the
-    /// order they were added. The first focusable widget added while
-    /// nothing has focus receives it.
+    /// order they were added. The first reachable focusable widget added
+    /// while nothing has focus receives it; a child of a hidden container is
+    /// not reachable, so it is skipped.
     pub func add(parent: int, w: dyn Widget): int:
         this.dirty = true
         id := this.tree.add(parent, w)
-        if this.focus_stack.len() == 0 and w.focusable():
+        if this.focus_stack.len() == 0:
             _ := this.focus(id)
         end
         ret id
@@ -403,9 +406,23 @@ pub struct Screen:
     end
 
     @en "can_focus"
-    /// True when id names a widget that is currently focusable.
+    /// True when id names a widget that is currently focusable and no widget
+    /// on its path to the root reports itself hidden.
     pub func can_focus(id: int): bool:
-        ret this.tree.valid(id) and this.tree.get(id).focusable()
+        ret this.tree.valid(id) and this.visible_chain(id) and this.tree.get(id).focusable()
+    end
+
+    // True when no widget on the path from id to the root reports itself
+    // hidden. Parent ids are always smaller, so the walk ends at NoWidget.
+    func visible_chain(id: int): bool:
+        mut cur := id
+        until cur != NoWidget:
+            if not this.tree.get(cur).visible():
+                ret false
+            end
+            cur = this.tree.parent(cur)
+        end
+        ret true
     end
 
     @en "focus"
@@ -913,9 +930,10 @@ pub struct Screen:
         ret top
     end
 
-    // Focusable widgets in the topmost layer, ascending id. An empty layer,
-    // or a layer with no focusable widget, falls back to every focusable
-    // widget, which is ID order. The caller frees the vector.
+    // Focusable widgets in the topmost layer, ascending id, none of them
+    // inside a hidden subtree. An empty layer, or a layer with no focusable
+    // widget, falls back to every focusable widget, which is ID order. The
+    // caller frees the vector.
     func focus_order(): Vector<int>:
         mut all := Vector {} as Vector<int>
         mut layered := Vector {} as Vector<int>

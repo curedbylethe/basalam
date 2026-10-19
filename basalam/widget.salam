@@ -18,7 +18,7 @@
  *
  * basalam is retained mode: a widget is a long-lived value that holds its
  * own state, and the screen asks it to draw itself and to react to events.
- * The Widget interface is the whole contract; anything that has these eight
+ * The Widget interface is the whole contract; anything that has these nine
  * methods is a widget (Salam interfaces are structural: there is no
  * `implements`). A list, a button, and a panel are all Widgets, so the
  * screen stores them side by side as `dyn Widget`.
@@ -91,6 +91,12 @@ pub interface Widget:
     /// the widgets under it.
     func hits(): bool
 
+    @en "visible"
+    /// True when the widget is on screen. False hides the whole subtree
+    /// from focus navigation: a widget answers only for itself, so focus
+    /// order asks every widget on the path to the root.
+    func visible(): bool
+
     @en "bounds"
     /// The widget's rect on the screen, as last set by set_bounds.
     func bounds(): Rect
@@ -115,9 +121,10 @@ end
 
 @en "BaseWidget"
 /// Default implementations of every Widget method. Embed it with
-/// `pub use basalam.BaseWidget` and override what you need. On its own it
-/// is an invisible, unfocusable widget that ignores every event, which
-/// also makes it a useful container or placeholder.
+/// `pub use basalam.BaseWidget` and override what you need. On its own it is
+/// a widget that paints nothing, is unfocusable, reports itself visible and
+/// ignores every event, which also makes it a useful container or
+/// placeholder.
 pub struct BaseWidget:
     @en "rect"
     /// Storage for bounds() and set_bounds(). Embedding widgets can read it
@@ -153,6 +160,13 @@ pub struct BaseWidget:
     /// Returns true. Override it to return false when the widget may paint
     /// and still refuse hits.
     pub func hits(): bool:
+        ret true
+    end
+
+    @en "visible"
+    /// Returns true: a BaseWidget is on screen even though it paints nothing.
+    /// Override it to hide a whole subtree.
+    pub func visible(): bool:
         ret true
     end
 
