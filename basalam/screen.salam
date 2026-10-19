@@ -290,7 +290,8 @@ pub struct Screen:
     /// Focus follows raise: when the current focus is outside the layer's
     /// focus order, it moves to that order's first id and the old focus is
     /// saved for unraise_subtree. An id that is not in the tree, including
-    /// NoWidget, does nothing.
+    /// NoWidget, does nothing. The saved focus is one level deep: a second
+    /// raise overwrites it, so nest layers with push_focus and pop_focus.
     /// Rejected: a public subtree query followed by raise(), which is two
     /// calls on every modal open. Also rejected: a blocking-owner field that
     /// dispatch and hit_test consult, which duplicates the geometric block
