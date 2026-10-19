@@ -129,6 +129,12 @@ pub struct Table:
 
     cell_aligns: Vector<_CellAlign> = Vector {}
 
+    // The SGRs of the body and header styles, kept between renders. Written
+    // only by render, never by the app.
+    body_memo: _SgrMemo = _SgrMemo {}
+
+    head_memo: _SgrMemo = _SgrMemo {}
+
     @en "focusable"
     /// Returns false: a table takes no keyboard focus.
     pub func focusable(): bool:
@@ -256,8 +262,8 @@ pub struct Table:
             ret
         end
         ws := this._resolve_widths(bounds.width)
-        body := StyleSgr(this.style, ColorTier.TrueColor)
-        head := StyleSgr(this.header_style, ColorTier.TrueColor)
+        body := this.body_memo._sgr(this.style, ColorTier.TrueColor)
+        head := this.head_memo._sgr(this.header_style, ColorTier.TrueColor)
         mut y := 0
         mut first := 0
         if this.header:

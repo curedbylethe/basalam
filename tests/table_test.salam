@@ -286,6 +286,29 @@ func test_header_style_replaces_body_style():
     b.free()
 end
 
+// CUR-455 probe. A second render with unchanged styles reuses both cached
+// SGRs, so the build counter does not move; changing header_style costs exactly
+// one build. The body and header styles each own a memo.
+func test_sgr_memo_probe():
+    mut t := basalam.NewTable()
+    t.pad_x = 0
+    t.header = true
+    t.add_column(fixed_col(4, basalam.Alignment.Left))
+    t.add_row(row1("H"))
+    t.add_row(row1("b"))
+    buf := basalam.NewBuffer(4, 3)
+    before := basalam.SgrBuilds()
+    t.render(buf, rect(0, 0, 4, 3))
+    first := basalam.SgrBuilds()
+    testing.AssertEqInt(first - before, 2)
+    t.render(buf, rect(0, 0, 4, 3))
+    testing.AssertEqInt(basalam.SgrBuilds() - first, 0)
+    t.header_style = basalam.Style { fg = basalam.Blue }
+    t.render(buf, rect(0, 0, 4, 3))
+    testing.AssertEqInt(basalam.SgrBuilds() - first, 1)
+    buf.free()
+end
+
 func test_narrow_rect_shrink_order():
     // Star shrinks to 0, then Pref toward min, then Fixed keeps width and is
     // clipped by the rect from the right.
@@ -414,6 +437,7 @@ func main:
     test_wide_glyph_ellipsis_blank_then_dots()
     test_wide_glyph_fits_exactly()
     test_header_style_replaces_body_style()
+    test_sgr_memo_probe()
     test_narrow_rect_shrink_order()
     test_star_remainder_goes_to_earlier_column()
     test_pref_min_max_clamp()
