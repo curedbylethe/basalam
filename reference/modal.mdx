@@ -30,7 +30,7 @@ end
 
 <ResponseField name="border_style" type="Style">The ring's colour. Only its foreground is used. Attributes are ignored, as for Panel. Defaults to `StyleDefault`.</ResponseField>
 <ResponseField name="takes_focus" type="bool">When `true`, the Modal is a focus stop while it is open. Its one focus stop keeps Tab inside its layer. Defaults to `true`.</ResponseField>
-<ResponseField name="on_close" type="func ()">Called after Esc closes the Modal. [`close`](#methods) does not call it. Defaults to an empty function.</ResponseField>
+<ResponseField name="on_close" type="func ()">Called after Esc closes the Modal. [`close`](#methods) does not call it. Set it before `Screen.add`: the stored copy keeps the callback set at that time. Defaults to an empty function.</ResponseField>
 <ResponseField name="state" type="Vector<_ModalState>">The shared state holder. `NewModal` builds it, and every copy made by `Screen.add` shares it. `NewModal` is the only supported constructor, so build a Modal with it and do not write this field yourself.</ResponseField>
 
 The title, size, visibility, closable flag and rect are not fields. Set them with `set_title`, `set_size`, `set_closable` and `set_bounds`, and read the rect with `bounds`.
@@ -133,7 +133,7 @@ _ := screen.pop_focus()
 
 ## Focus isolation
 
-An open Modal is a focus stop. It is in the topmost layer, and `raise_subtree` puts its child widgets into that same layer, so the layer always holds a focusable widget. Linear navigation walks that layer's focus order, so `Tab` stays inside the Modal and cannot reach the widgets under it.
+An open Modal is a focus stop while `takes_focus` is set (the default). It is in the topmost layer, and `raise_subtree` puts its child widgets into that same layer, so the layer always holds a focusable widget. Linear navigation walks that layer's focus order, so `Tab` stays inside the Modal and cannot reach the widgets under it.
 
 Mouse input is blocked by geometry. `hit_test` returns the topmost widget that accepts hits, and an open Modal accepts hits over its whole bounds. A click on the scrim therefore starts at the Modal, which consumes it. A click inside the dialog starts at the Modal too, and the Modal offers it to its child first. If the child does not consume it, the event bubbles on to the Modal's ancestors as usual. Nothing under the Modal sees a mouse event that lands on the scrim.
 

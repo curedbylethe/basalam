@@ -26,7 +26,8 @@
 // set_size, set_closable and set_bounds reach the stored copy whether they run
 // before or after Screen.add. Esc closes the stored widget itself, and on_close
 // is the app's hook, called after that close, to call Screen.unraise_subtree
-// and Screen.pop_focus.
+// and Screen.pop_focus. on_close is a plain field, not holder state: set it
+// before Screen.add, or the stored copy keeps the empty callback.
 //
 // The scrim dims with the DIM attribute, not a character or a colour blend.
 // A terminal that ignores SGR 2 shows no scrim at all, and the frame and
