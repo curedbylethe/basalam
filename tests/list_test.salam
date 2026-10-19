@@ -666,7 +666,8 @@ func test_screen_focused_list_receives_j():
     s.present()
     testing.AssertFalse(s.dirty)
     testing.AssertTrue(s.dispatch(key("j")))
-    testing.AssertTrue(s.dirty)
+    // A consumed key queues the list's bounds and leaves dirty false.
+    testing.AssertFalse(s.dirty)
     s.present()
     testing.AssertEqStr(s.buffer.row_text(1), "drafts      ")
     testing.AssertEqStr(s.buffer.get(0, 1).style, term.Sgr(term.StyleReverse))

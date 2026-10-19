@@ -295,13 +295,14 @@ func test_explicit_focus_and_stack():
     testing.AssertFalse(s.pop_focus())
 end
 
-func test_focus_change_marks_dirty_and_updates_field():
+func test_focus_change_queues_repaint_and_updates_field():
     mut s := grid()
     defer s.close()
     s.present()
     testing.AssertFalse(s.dirty)
     testing.AssertTrue(s.focus_next())
-    testing.AssertTrue(s.dirty)
+    // Focus queues the old and new bounds. It does not set dirty.
+    testing.AssertFalse(s.dirty)
     testing.AssertEqInt(s.focused.bounds().x, 4)
     testing.AssertEqInt(s.focused.bounds().y, 0)
     _ := s.pop_focus()
@@ -484,7 +485,7 @@ func main:
     test_single_focusable_cannot_move()
     test_spatial_moves()
     test_explicit_focus_and_stack()
-    test_focus_change_marks_dirty_and_updates_field()
+    test_focus_change_queues_repaint_and_updates_field()
     test_dispatch_goes_to_focused_widget()
     test_dispatch_with_empty_stack_starts_at_root()
     test_dispatch_routes_through_focus_stack()

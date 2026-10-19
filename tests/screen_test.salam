@@ -17,9 +17,10 @@
 // the screen is never start()ed, so present() draws into the buffer without
 // writing to the terminal. Synthetic events go through the real events
 // channel (post / next_event / run_with_tick), the real dispatch path, and
-// the real draw path, and the tests assert on the resulting buffer. The
-// dirty flag is set only by consumed events: a consumed key marks the screen
-// for redraw, an unconsumed one leaves it as it was. The resize path is
+// the real draw path, and the tests assert on the resulting buffer. dirty
+// means a full repaint (resize, tick, added widget, raise). A consumed key
+// queues that widget's bounds instead, and an unconsumed one changes
+// nothing. The resize path is
 // covered here too: a ResizeEvent reallocates the buffer, so the next frame
 // is a forced full repaint (diff() equals the whole-frame ansi()).
 
@@ -71,6 +72,49 @@ struct Frame:
 
     pub func render(buf: basalam.Buffer, bounds: basalam.Rect):
         buf.put_str(bounds.x, bounds.y, this.title + " " + this.seen, "")
+    end
+end
+
+// One cell that consumes "r" and flips its mark. Focusable so dispatch
+// starts here instead of on the root.
+struct Spot:
+    pub use basalam.BaseWidget
+    pub mark: str = "a"
+
+    pub func focusable(): bool:
+        ret true
+    end
+
+    pub func handle_event(event: basalam.Event): bool:
+        if not event.is_char("r"):
+            ret false
+        end
+        if this.mark == "a":
+            this.mark = "b"
+        else:
+            this.mark = "a"
+        end
+        ret true
+    end
+
+    pub func render(buf: basalam.Buffer, bounds: basalam.Rect):
+        buf.put_str(bounds.x, bounds.y, this.mark, "")
+    end
+end
+
+// Writes its current digit, then advances it. A later frame that still
+// shows the old digit was not rendered.
+struct Counter:
+    pub use basalam.BaseWidget
+    pub ch: str = "1"
+
+    pub func render(buf: basalam.Buffer, bounds: basalam.Rect):
+        buf.put_str(bounds.x, bounds.y, this.ch, "")
+        if this.ch == "1":
+            this.ch = "2"
+        else:
+            this.ch = "3"
+        end
     end
 end
 
@@ -210,17 +254,29 @@ func test_resize_event():
 end
 
 func test_dirty_only_after_consumed_key():
-    mut s := basalam.NewScreen(Frame { title = "d" }, 10, 2)
+    mut s := basalam.NewScreen(basalam.BaseWidget {}, 8, 1)
     defer s.close()
+    spot := s.add(basalam.RootId, Spot {})
+    counter := s.add(basalam.RootId, Counter {})
+    s.widget(spot).set_bounds(rect(0, 0, 1, 1))
+    s.widget(counter).set_bounds(rect(4, 0, 1, 1))
     s.present()
-    // A clean frame: present() cleared the initial dirty flag.
+    // The first present was a full repaint and cleared dirty.
     testing.AssertFalse(s.dirty)
-    // Frame ignores "x", so the event is unconsumed and nothing is dirty.
+    testing.AssertEqStr(s.buffer.get(0, 0).ch, "a")
+    testing.AssertEqStr(s.buffer.get(4, 0).ch, "1")
+    // "x" is unconsumed. Nothing is queued, so the next present is a no-op.
     testing.AssertFalse(s.dispatch(key("x")))
     testing.AssertFalse(s.dirty)
-    // Frame consumes "r": the screen must redraw.
+    s.present()
+    testing.AssertEqStr(s.buffer.get(4, 0).ch, "1")
+    // "r" queues the spot's cell and does not set dirty. The counter sits
+    // outside that rect, so its digit stays where the full paint left it.
     testing.AssertTrue(s.dispatch(key("r")))
-    testing.AssertTrue(s.dirty)
+    testing.AssertFalse(s.dirty)
+    s.present()
+    testing.AssertEqStr(s.buffer.get(0, 0).ch, "b")
+    testing.AssertEqStr(s.buffer.get(4, 0).ch, "1")
 end
 
 func test_run_with_tick():
@@ -240,7 +296,9 @@ func test_run_with_tick():
     // does not consume, which do not mark the screen dirty.
     testing.AssertEqStr(s.buffer.row_text(0), "run 1     ")
     // "y" was queued after Ctrl+C; the loop drains the queue before ending,
-    // so Frame saw x, Ctrl+C, and y.
+    // so Frame saw x, Ctrl+C, and y. Those keys were not consumed, so they
+    // queued no region. present returns when nothing is pending.
+    s.dirty = true
     s.present()
     testing.AssertEqStr(s.buffer.row_text(0), "run 3     ")
 end

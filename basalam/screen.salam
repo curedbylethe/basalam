@@ -48,8 +48,8 @@
  *
  * Focus. The screen keeps a focus stack of widget IDs; the top is the
  * focused widget, which receives each event first and renders with
- * buf.focused set. Every focus change marks the screen dirty, so the next
- * present() redraws both the old and the new focus indicator. Linear
+ * buf.focused set. Every focus change queues the old and the new bounds,
+ * so the next present() repaints those two and leaves the rest. Linear
  * (focus_next/prev) and spatial (focus_up/down/left/right, see
  * focus.salam) navigation walk the focus order: focusable widgets in the
  * topmost raised layer, or every focusable widget in ID order when that
@@ -122,6 +122,10 @@ pub const PollMs := 20
 @en "EventCapacity"
 /// How many events the channel buffers before the input thread waits.
 pub const EventCapacity := 256
+
+// More pending regions than this, or a combined area over half the screen,
+// becomes a full repaint. Both knobs are cheap to retune.
+const RegionLimit := 4
 
 // What the input thread needs, copied onto the heap because spawn() passes
 // exactly one pointer. The channel copy shares the screen's channel.
@@ -205,16 +209,21 @@ pub struct Screen:
     pub keymap: Keymap = Keymap {}
 
     @en "dirty"
-    /// True when the next present() has something new to show. Set by
-    /// consumed events, resizes, focus changes, added widgets, and
-    /// raise/unraise.
+    /// True when the next present() must repaint the whole frame: a resize,
+    /// a tick, an added widget, raise/unraise, a keymap-consumed key, or
+    /// invalidate of an unknown widget. A precise change is a region.
     pub dirty: bool = true
+
+    // One rect per changed widget, not its subtree. A parent whose look
+    // depends on a child must cover that child with its own bounds, or set
+    // dirty. Upgrade: per-widget subtree invalidation.
+    regions: Vector<Rect> = Vector {}
 
     @en "focus_stack"
     /// Widget IDs; the top (last) entry is the focused widget, and an
     /// empty stack means nothing is focused. Change it through focus,
     /// push_focus, pop_focus, and the navigation methods, which keep
-    /// `focused` and `dirty` in sync.
+    /// `focused` in sync and queue the old and new bounds.
     pub focus_stack: Vector<int> = Vector {}
 
     attached: bool = false
@@ -503,12 +512,18 @@ pub struct Screen:
                 from = hit
             end
         end
-        mut consumed := this.tree.dispatch(from, event) != NoWidget
+        id := this.tree.dispatch(from, event)
+        mut consumed := id != NoWidget
+        if consumed:
+            // The widget's own bounds, not its subtree.
+            this.queue_region(this.tree.get(id).bounds())
+        end
         if not consumed and event.kind == KeyEvent:
             consumed = this.keymap.handle(this, event)
-        end
-        if consumed:
-            this.dirty = true
+            // The keymap does not name a widget, so the repaint is full.
+            if consumed:
+                this.dirty = true
+            end
         end
         ret consumed
     end
@@ -525,14 +540,49 @@ pub struct Screen:
         this.keymap = km
     end
 
-    @en "draw"
-    /// Renders every widget into the back buffer in ascending (stamp, id)
-    /// order, so later in that order paints on top. Unraised widgets have
-    /// stamp 0 and therefore stay in ID order; with nothing raised this is
-    /// ID order. Each widget gets a copy of the buffer clipped to its
-    /// visible bounds, with `focused` set if it holds the focus. Widgets
-    /// with no visible area are skipped.
-    pub func draw():
+    // Empty rects are not paintable, so they escalate to a full repaint.
+    func queue_region(r: Rect):
+        if r.is_empty():
+            this.dirty = true
+        else:
+            this.regions.push(r)
+        end
+    end
+
+    @en "invalidate"
+    /// Queues a repaint of widget id's bounds. An unknown id, or a widget
+    /// whose rect is empty, marks the whole screen instead. Legal before
+    /// start(): it only marks, and the flush still waits until the screen
+    /// is attached.
+    pub func invalidate(id: int):
+        if not this.tree.valid(id):
+            this.dirty = true
+            ret
+        end
+        this.queue_region(this.tree.get(id).bounds())
+    end
+
+    // dirty, too many regions, or too much area. force_full is not a reason:
+    // resize already sets dirty, and a headless present never flushes, so
+    // force_full would otherwise stay true and every frame would be full.
+    func needs_full(): bool:
+        if this.dirty or this.regions.len() > RegionLimit:
+            ret true
+        end
+        mut sum := 0
+        repeat this.regions.len() in i:
+            r := this.regions.get(i)
+            if r.is_empty():
+                ret true
+            end
+            sum = sum + r.width * r.height
+        end
+        // The sum double-counts overlaps, so this can escalate early. A
+        // full repaint is still the correct frame.
+        ret sum * 2 > this.buffer.width * this.buffer.height
+    end
+
+    func draw_full():
         this.buffer.clear()
         area := this.buffer.area()
         focus := this.focused_id()
@@ -552,15 +602,64 @@ pub struct Screen:
         end
     end
 
+    func draw_regions():
+        area := this.buffer.area()
+        focus := this.focused_id()
+        order := this.paint_order()
+        defer order.free()
+        repeat this.regions.len() in n:
+            r := this.regions.get(n)
+            this.buffer.fill(r, " ", "")
+            repeat order.len() in i:
+                id := order.get(i)
+                w := this.tree.get(id)
+                b := w.bounds()
+                if b.intersects(r):
+                    mut visible := b.intersection(area)
+                    visible = visible.intersection(r)
+                    if not visible.is_empty():
+                        mut view := this.buffer
+                        view.clip = visible
+                        view.focused = id == focus
+                        w.render(view, b)
+                    end
+                end
+            end
+        end
+    end
+
+    @en "draw"
+    /// Repaints the back buffer. A set `dirty` flag, more than RegionLimit
+    /// regions, or regions covering more than half the screen repaints
+    /// every widget. Otherwise only the pending regions are cleared and
+    /// repainted. Does nothing when neither is set. Paint order is ascending
+    /// (stamp, id). Each widget gets a buffer copy clipped to its visible
+    /// bounds, with `focused` set if it holds the focus.
+    pub func draw():
+        if not this.dirty and this.regions.len() == 0:
+            ret
+        end
+        if this.needs_full():
+            this.draw_full()
+        else:
+            this.draw_regions()
+        end
+    end
+
     @en "present"
     /// Draws and, once start() has attached the terminal, writes the changed
-    /// cells out. Clears `dirty`.
+    /// cells out. Returns immediately when nothing is pending. Clears
+    /// `dirty` and the pending regions.
     pub func present():
+        if not this.dirty and this.regions.len() == 0:
+            ret
+        end
         this.draw()
         if this.attached:
             this.buffer.flush()
         end
         this.dirty = false
+        this.regions.clear()
     end
 
     @en "post"
@@ -668,6 +767,7 @@ pub struct Screen:
         this.focus_stack.free()
         this.keymap.free()
         this.stamps.free()
+        this.regions.free()
     end
 
     @en "run"
@@ -722,16 +822,20 @@ pub struct Screen:
         ret order
     end
 
-    // Keeps the `focused` field in step with the stack and asks for a
-    // redraw, so the old and new focus can update their indicators.
+    // Keeps the `focused` field in step with the stack and queues the old
+    // and new bounds, so both focus indicators can update.
     func focus_changed():
+        // this.focused still names the previous widget. The stack already
+        // names the new one. Root covers the empty-stack case.
+        old_bounds := this.focused.bounds()
         id := this.focused_id()
         if id == NoWidget:
             this.focused = this.root
         else:
             this.focused = this.tree.get(id)
         end
-        this.dirty = true
+        this.queue_region(old_bounds)
+        this.queue_region(this.focused.bounds())
     end
 
     // Highest raise stamp, or 0 when nothing is raised. unraise writes 0
@@ -894,7 +998,7 @@ pub struct Screen:
             if not consumed and ev.is_ctrl("c"):
                 this.stop()
             end
-            if this.dirty:
+            if this.dirty or this.regions.len() > 0:
                 this.present()
             end
         end
