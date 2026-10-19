@@ -15,10 +15,12 @@
 // The app owns z-order and focus. A widget cannot know its own id, so Modal
 // never raises itself and never moves focus. Open is Screen.push_focus then
 // Screen.raise_subtree on its id; close is Screen.unraise_subtree then
-// Screen.pop_focus. Push focus before raising: raise_subtree moves the focus
-// into the layer on its own, so raising first would leave a stale entry on the
-// focus stack. A child added to an open Modal is not raised into its layer;
-// call raise_subtree again after adding.
+// Screen.pop_focus. Visibility also governs focus eligibility: a hidden Modal
+// reports visible() false, so focus order skips the Modal and its whole
+// subtree, not just the Modal itself. Push focus before raising:
+// raise_subtree moves the focus into the layer on its own, so raising first
+// would leave a stale entry on the focus stack. A child added to an open Modal
+// is not raised into its layer; call raise_subtree again after adding.
 //
 // Screen.add stores a copy of the widget. The Modal's mutable state (visible,
 // title, size, closable and rect) lives in one shared holder, a Vector with one
@@ -220,6 +222,13 @@ pub struct Modal:
     @en "hits"
     /// True only while open. A hidden Modal lets a click fall through.
     pub func hits(): bool:
+        ret this._get().visible
+    end
+
+    @en "visible"
+    /// True only while open. A hidden Modal also hides its child from focus
+    /// order, because the screen checks every widget on the path to the root.
+    pub func visible(): bool:
         ret this._get().visible
     end
 
