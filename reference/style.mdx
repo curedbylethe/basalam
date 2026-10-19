@@ -152,6 +152,16 @@ pub func StyleSgrOff(style: Style, tier: ColorTier): str
 
 The conversion holds no state, so the caller owns the transition. When the next cell's style is not equal to the previous one, emit `StyleSgrOff(prev)` then `StyleSgr(next)`. Any shorter sequence that leaves the terminal in the same state is allowed. The first cell of a frame assumes the terminal's default, and the caller emits `StyleSgrOff(last)` at the end of the frame.
 
+## Build counter
+
+`SgrBuilds` reports how many SGR strings the widget caching layer has built in the current process. Widgets that take a `Style` cache the string for their resolved style and tier, so redrawing an unchanged widget builds nothing and leaves the count where it was; a style change costs one build.
+
+```salam
+pub func SgrBuilds(): int
+```
+
+It is a read-only diagnostic for tests and profiling, not configuration: nothing in the library reads it, and it only ever grows.
+
 ## API
 
 ```salam
@@ -178,6 +188,7 @@ pub func StyleMerge(parent: Style, child: Style): Style
 pub func StyleEq(a: Style, b: Style): bool
 pub func StyleSgr(style: Style, tier: ColorTier): str
 pub func StyleSgrOff(style: Style, tier: ColorTier): str
+pub func SgrBuilds(): int
 ```
 
 ## Example

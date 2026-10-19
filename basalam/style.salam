@@ -69,6 +69,35 @@ import term
 /// the identity of StyleMerge.
 pub const StyleDefault := Style {}
 
+// How many SGR strings the widget caching layer has built this process.
+// Diagnostics only: the tests read it through SgrBuilds, and it never resets.
+mut _sgr_builds := 0
+
+// Caches one Style serialized at one tier, so a widget that redraws with an
+// unchanged style reuses the string instead of building it again. The key is
+// the style plus the tier: StyleEq ignores the tier, so comparing the style
+// alone could serve a string built for another tier. The entry is never
+// cleared; str has no free, so a stale value costs nothing extra.
+struct _SgrMemo:
+    style: Style = StyleDefault
+    tier: ColorTier = ColorTier.TrueColor
+    sgr: str = ""
+    ready: bool = false
+
+    // The SGR for style at tier, built once per distinct style+tier pair.
+    pub func _sgr(style: Style, tier: ColorTier): str:
+        if this.ready and this.tier == tier and StyleEq(this.style, style):
+            ret this.sgr
+        end
+        this.style = style
+        this.tier = tier
+        this.sgr = StyleSgr(style, tier)
+        this.ready = true
+        _sgr_builds = _sgr_builds + 1
+        ret this.sgr
+    end
+end
+
 @en "BorderStyle"
 /// The kind of border a container draws: none, or a one-cell ring drawn with
 /// light lines, double lines, or light lines and arc corners. A value only —
@@ -227,4 +256,12 @@ pub func StyleSgrOff(style: Style, tier: ColorTier): str:
         out = out + term.Sgr(term.BgDefault)
     end
     ret out
+end
+
+@en "SgrBuilds"
+/// Diagnostics: how many SGR strings the widget caching layer has built this
+/// process. A widget that redraws with an unchanged style and tier reuses its
+/// cached string, so the count does not move. Read-only; not configuration.
+pub func SgrBuilds(): int:
+    ret _sgr_builds
 end
