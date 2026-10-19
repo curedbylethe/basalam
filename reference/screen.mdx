@@ -38,7 +38,7 @@ pub func NewTerminalScreen(root: dyn Widget): Screen
 <ResponseField name="tick_ms" type="int" default="0">Interval of `TickEvent`s in milliseconds. `0` sends none. Set it before `start()`.</ResponseField>
 <ResponseField name="mouse" type="bool" default="false">When `true`, `start()` enables mouse reporting and clicks arrive as `MouseEvent`s. Set it before `start()`.</ResponseField>
 <ResponseField name="keymap" type="Keymap" default="Keymap {}">The opt-in [keymap](/reference/keymap) consulted as a fallback for a `KeyEvent` no widget consumed. Empty by default, so a screen behaves exactly as before until you install or extend it. Bind through this field to extend the map in place, or use `set_keymap` to replace it. Never assign a `Keymap` directly.</ResponseField>
-<ResponseField name="dirty" type="bool">`true` requests a full repaint. Set by a resize, a tick, an added widget, `raise` / `unraise`, a keymap-consumed key, and `invalidate` of an unknown id or an empty rect. A consumed widget event does not set it. That event queues the widget's own bounds.</ResponseField>
+<ResponseField name="dirty" type="bool">`true` requests a full repaint. Set by a resize, a tick from `run_with_tick`, an added widget, `raise` / `unraise`, a keymap-consumed key, and `invalidate` of an unknown id or an empty rect. Set it yourself after changing state outside `dispatch`; a tick you dispatch yourself does not set it. A consumed widget event does not set it. That event queues the widget's own bounds.</ResponseField>
 <ResponseField name="focus_stack" type="Vector<int>">Widget IDs; the last entry is the focused widget. Change it only through the focus methods, which keep `focused` in sync and queue the old and new bounds.</ResponseField>
 
 ## Building the tree

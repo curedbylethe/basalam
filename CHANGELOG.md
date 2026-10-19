@@ -156,10 +156,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- `Screen.present()` returns when nothing is pending. A widget that
+- `Screen.present()` and `Screen.draw()` return when nothing is pending. A widget that
   consumes an event queues its own bounds, and a focus change queues the
-  old and new bounds. `dirty` still means a full repaint: resize, ticks,
-  `raise` / `unraise`, and a keymap-consumed key set it. More than four
+  old and new bounds. `dirty` still means a full repaint: resize, ticks
+  from `run_with_tick`, `raise` / `unraise`, and a keymap-consumed key set
+  it. A tick you dispatch yourself queues nothing, so mark the screen after
+  changing state outside the widget tree. More than four
   pending regions, or regions covering more than half the screen, repaint
   every widget too. A region is that widget's bounds, not its subtree.
   (CUR-226)

@@ -210,6 +210,11 @@ func main:
         if ev.kind == basalam.KeyEvent:
             last_key = describe(ev.key)
         end
+        // The status line is drawn by the root widget, which consumes
+        // nothing, so mark the screen after changing it.
+        if ev.kind == basalam.TickEvent or ev.kind == basalam.KeyEvent:
+            screen.dirty = true
+        end
         // Tab and the arrows are consumed by the keymap, and Enter/Space by
         // the focused panel, so only q and Ctrl+C reach here unconsumed, and
         // they quit.
@@ -225,7 +230,7 @@ end
 ```
 
 - The TTY guard exits before touching the terminal when standard input is not interactive.
-- `tick_ms = 1000` asks for a tick once a second, which the loop counts into the status line.
+- `tick_ms = 1000` asks for a tick once a second, which the loop counts into the status line. Because the root widget consumes nothing, the loop marks the screen dirty after changing the status line; otherwise `present` has nothing queued and returns.
 - `set_keymap(basalam.NewDefaultKeymap())` opts in to the default focus bindings, so the panels themselves never handle `Tab` or the arrows.
 - `start()` then `defer screen.close()` brackets every return path.
 - Each event is dispatched once. A `ResizeEvent` re-runs `arrange`, a `TickEvent` advances the counter, and a `KeyEvent` names the key.
