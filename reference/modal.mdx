@@ -1,0 +1,232 @@
+---
+title: "Modal"
+description: "The Modal overlay: a titled dialog centred over a dim scrim, with focus isolation, mouse capture, Esc to close, and an app-driven raise and focus protocol."
+keywords: ["modal", "dialog", "overlay", "scrim", "dim", "focus", "esc", "raise_subtree", "push_focus", "on_close", "closable"]
+---
+
+`Modal` is an overlay dialog. It paints a single-line ring with a title, centred in its own bounds over a dim scrim, and it owns one child placed inside the ring. It is the eighth widget, after [Table](/reference/table). While it is open it takes focus, captures clicks on the scrim, and closes on Esc. The app opens and closes it and decides what sits above what. The Modal does not raise itself and does not move focus.
+
+```salam
+mut dialog := basalam.NewModal()
+dialog.set_title("Quit")
+dialog.set_size(basalam.ModalSize.Fixed(12, 5))
+mid := screen.add(basalam.RootId, dialog)
+```
+
+## Modal
+
+`Modal` embeds [BaseWidget](/reference/widget) and overrides `focusable`, `hits`, `handle_event`, `render`, `bounds`, `preferred_size` and `set_bounds`. Its title, size, open state, closable flag and rect live in one state holder that every copy shares. Read and write them through the methods below, not through fields.
+
+```salam
+pub struct Modal:
+    pub use BaseWidget
+
+    pub border_style: Style = StyleDefault
+    pub takes_focus: bool = true
+    pub on_close: func () = (): end
+    pub state: Vector<_ModalState> = Vector {}
+end
+```
+
+<ResponseField name="border_style" type="Style">The ring's colour. Only its foreground is used. Attributes are ignored, as for Panel. Defaults to `StyleDefault`.</ResponseField>
+<ResponseField name="takes_focus" type="bool">When `true`, the Modal is a focus stop while it is open. Its one focus stop keeps Tab inside its layer. Defaults to `true`.</ResponseField>
+<ResponseField name="on_close" type="func ()">Called after Esc closes the Modal. [`close`](#methods) does not call it. Defaults to an empty function.</ResponseField>
+<ResponseField name="state" type="Vector<_ModalState>">The shared state holder. `NewModal` builds it, and every copy made by `Screen.add` shares it. `NewModal` is the only supported constructor, so build a Modal with it and do not write this field yourself.</ResponseField>
+
+The title, size, visibility, closable flag and rect are not fields. Set them with `set_title`, `set_size`, `set_closable` and `set_bounds`, and read the rect with `bounds`.
+
+### Methods
+
+```salam
+pub func NewModal(): Modal
+pub func add(child: dyn Widget)
+pub func open()
+pub func close()
+pub func set_title(t: str)
+pub func set_size(sz: ModalSize)
+pub func set_closable(b: bool)
+pub func set_bounds(bounds: Rect)
+pub func bounds(): Rect
+pub func preferred_size(max_width: int): Rect
+pub func focusable(): bool
+pub func hits(): bool
+pub func handle_event(event: Event): bool
+pub func render(buf: Buffer, bounds: Rect)
+```
+
+| Method | Description |
+| --- | --- |
+| `NewModal(): Modal` | Creates a hidden Modal: `ModalSize.Percent(50, 40)`, no title, no child, and closable. |
+| `add(child: dyn Widget)` | Sets the one child. A second call replaces the first. The child must also be added to the Screen's tree under the Modal's id to be painted and to receive events. It is placed on the next `set_bounds`. |
+| `open()` | Shows the Modal. State only: it does not raise the Modal or move focus. |
+| `close()` | Hides the Modal. State only: it does not call `on_close`, unraise, or restore focus. |
+| `set_title(t: str)` | Sets the text on the top edge of the ring. |
+| `set_size(sz: ModalSize)` | Sets the dialog size and places the child for the current bounds. |
+| `set_closable(b: bool)` | Sets whether Esc closes the Modal. |
+| `set_bounds(bounds: Rect)` | Stores the Modal's rect and places the child inside the dialog. |
+| `bounds(): Rect` | The rect the last `set_bounds` stored. |
+| `preferred_size(max_width: int): Rect` | A `Fixed` size reports its exact size. A `Percent` size reports `-1` by `-1`, because it depends on the bounds. |
+| `focusable(): bool` | `true` only while the Modal is open and `takes_focus` is set. |
+| `hits(): bool` | `true` only while the Modal is open. A hidden Modal lets a click fall through. |
+| `handle_event(event: Event): bool` | Handles Esc and mouse events as described under [Esc and nested modals](#esc-and-nested-modals) and [Focus isolation](#focus-isolation). |
+| `render(buf: Buffer, bounds: Rect)` | Paints the scrim and the ring. A hidden Modal paints nothing. |
+
+The methods work the same before and after `Screen.add`. `Screen.add` stores a copy of the Modal, but the copy shares the state holder with the value you kept, so `open`, `close`, `set_title`, `set_size`, `set_closable` and `set_bounds` reach the stored copy whichever one you call them on.
+
+## Frame
+
+The ring is a single-line box, drawn with `DrawBorder` in `border_style`, around the dialog rect. The title sits on the top edge, and a title wider than the ring is cut to fit. A dialog smaller than 2 by 2 cells draws no ring at all.
+
+The child is placed inside the ring: the dialog rect inset by one cell on each side. It paints itself, as any widget does.
+
+## Scrim
+
+While the Modal is open, every cell of its bounds outside the dialog rect gets the DIM attribute added to its style. Each cell keeps its glyph and its colours, so the content underneath stays readable, dimmed. The dialog cells are not touched.
+
+The scrim uses the DIM attribute (SGR 2) and nothing else. A terminal that ignores SGR 2 shows no scrim at all. The frame and the content still draw, so the dialog works without it, but nothing is dimmed.
+
+## Size and placement
+
+`ModalSize` sets how big the dialog is inside the Modal's bounds:
+
+| Value | Effect |
+| --- | --- |
+| `ModalSize.Percent(w, h)` | A share of the bounds on each axis, in percent from 0 to 100. The product is floored, then clamped to at least `20` by `5` and at most the bounds. When the bounds are smaller than `20` by `5`, the dialog is the bounds. |
+| `ModalSize.Fixed(w, h)` | Exactly `w` by `h` cells, clamped to the bounds and nothing more. No `20` by `5` floor applies to an explicit size. |
+
+The default is `Percent(50, 40)`. The dialog is centred in the bounds. When the gap on an axis is odd, the extra cell goes to the right and at the bottom.
+
+```salam
+dialog.set_size(basalam.ModalSize.Percent(60, 50))
+dialog.set_bounds(screen_area)
+```
+
+The Modal does not resize or move itself when the screen does. Call `set_bounds` with the new area, as the example does.
+
+## Opening and closing
+
+A Modal takes part in the Screen's focus and z-order through the app, in a fixed order. The Modal's own methods only change its state.
+
+To open it, call `open` on the Modal, set its bounds, then push focus and raise the subtree, in that order:
+
+```salam
+dialog.open()
+dialog.set_bounds(screen_area)
+_ := screen.push_focus(mid)
+screen.raise_subtree(mid)
+```
+
+`push_focus` first keeps the focus stack correct. `raise_subtree` moves the focus into the new layer on its own if the focus is outside it, so raising first would leave a stale entry on the focus stack. The protocol is push, then raise.
+
+To close it, unraise the subtree, then pop the focus:
+
+```salam
+screen.unraise_subtree(mid)
+_ := screen.pop_focus()
+```
+
+`close` only hides the Modal. It does not unraise or restore focus, so the app runs these two calls after it. Esc closes the Modal and then calls `on_close`. `on_close` takes no arguments, so it cannot name the screen. Run the unraise and the pop where the screen is in reach, right after the dispatch that consumed the Esc, as the example does.
+
+<Note>
+  A child added to an open Modal is not raised into its layer. Add the child before you open the Modal, or call `raise_subtree` again after you add it.
+</Note>
+
+## Focus isolation
+
+An open Modal is a focus stop. It is in the topmost layer, and `raise_subtree` puts its child widgets into that same layer, so the layer always holds a focusable widget. Linear navigation walks that layer's focus order, so `Tab` stays inside the Modal and cannot reach the widgets under it.
+
+Mouse input is blocked by geometry. `hit_test` returns the topmost widget that accepts hits, and an open Modal accepts hits over its whole bounds. A click on the scrim therefore starts at the Modal, which consumes it. A click inside the dialog starts at the Modal too, and the Modal offers it to its child first. If the child does not consume it, the event bubbles on to the Modal's ancestors as usual. Nothing under the Modal sees a mouse event that lands on the scrim.
+
+A hidden Modal blocks nothing. Its `hits` and `focusable` are `false`, so the events and focus fall through as if it were not there.
+
+## Esc and nested modals
+
+Esc starts at the focused widget and bubbles up its ancestors, as every key does. An open Modal handles Esc as follows:
+
+1. Its child gets the event first. If the child consumes Esc, the Modal stays open.
+2. If the Modal is `closable`, Esc closes it, calls `on_close`, and the Modal consumes the key.
+3. If it is not `closable`, Esc passes on.
+
+The Modal consumes Esc itself, so a consumed Esc never reaches the [keymap](/reference/keymap) fallback. The library still installs no Esc binding.
+
+Nested modals need no extra rules. An inner Modal takes the focus when the app opens it with `push_focus`, so Esc starts at the inner Modal. The inner Modal closes, and the outer one stays open. The app then runs `unraise_subtree` and `pop_focus` for the inner Modal, which returns the focus to the outer one.
+
+## Example
+
+A Modal needs a `Screen` for focus and z-order. This example uses only the protocol above and renders the frame headlessly first, so you can see what the dialog looks like before the screen draws it.
+
+Every widget in this example is a small custom `Label`. The `Label` is focusable, so the screen starts with it focused, and the Modal's focus is restored to it on close.
+
+```salam
+import term
+
+include "basalam/basalam.salam"
+
+mut dismissed := false
+
+struct Root:
+    pub use basalam.BaseWidget
+end
+
+struct Label:
+    pub use basalam.BaseWidget
+    pub text: str = ""
+    pub func focusable(): bool:
+        ret true
+    end
+
+    pub func render(buf: basalam.Buffer, bounds: basalam.Rect):
+        buf.put_str(bounds.x, bounds.y, this.text, "")
+    end
+end
+
+func main:
+    mut m := basalam.NewModal()
+    m.set_title("Quit")
+    m.set_size(basalam.ModalSize.Fixed(12, 5))
+    m.on_close = (): dismissed = true end
+    m.open()
+    m.set_bounds(basalam.Rect { width = 20, height = 8 })
+    buf := basalam.NewBuffer(20, 8)
+    defer buf.free()
+    m.render(buf, basalam.Rect { width = 20, height = 8 })
+    repeat 8 in y:
+        println "[" + buf.row_text(y) + "]"
+    end
+
+    mut app := basalam.NewScreen(Root {}, 20, 8)
+    defer app.close()
+    base := app.add(basalam.RootId, Label { text = "under the modal" })
+    app.widget(base).set_bounds(basalam.Rect { width = 20, height = 8 })
+    mid := app.add(basalam.RootId, m)
+    child := app.add(mid, Label { text = "Sure?" })
+    app.widget(child).set_bounds(basalam.Rect { x = 5, y = 2, width = 10, height = 1 })
+    println app.focused_id()
+    _ := app.push_focus(mid)
+    app.raise_subtree(mid)
+    app.present()
+    println app.focused_id() == mid
+
+    esc := basalam.Event { kind = basalam.KeyEvent, key = term.Key { code = term.KeyEscape } }
+    println app.dispatch(esc), dismissed
+    app.unraise_subtree(mid)
+    _ := app.pop_focus()
+    println app.focused_id() == base
+end
+// [                    ]
+// [    ┌─ Quit ───┐    ]
+// [    │          │    ]
+// [    │          │    ]
+// [    │          │    ]
+// [    └──────────┘    ]
+// [                    ]
+// [                    ]
+// 1
+// true
+// true true
+// true
+```
+
+<Note>
+  The Modal does not raise itself, and it does not move focus. The app owns z-order and focus: open it with `push_focus` then `raise_subtree`, and close it with `unraise_subtree` then `pop_focus`.
+</Note>

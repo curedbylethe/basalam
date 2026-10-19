@@ -7,7 +7,7 @@ keywords: ["buffer", "cell", "draw", "clip", "style"]
 A `Buffer` is a grid of `Cell`s. Widgets draw into it; they never write to the terminal. Every write outside the grid or outside the buffer's clip rect is silently dropped, so drawing can never fail.
 
 <Warning>
-  A `Buffer` holds two grids: a back grid widgets draw into and a front grid of what the terminal currently shows. `flush()` diffs the two and writes only the cells that changed. What is still absent: dirty-region and rectangle tracking, structured styles (styles are raw SGR strings today; the [Style](/reference/style) type exists and Text carries it, but cells still hold strings — the buffer migration is a follow-up), and wide-character support (each cell holds one codepoint and is assumed to be one column wide, epic 2).
+  A `Buffer` holds two grids: a back grid widgets draw into and a front grid of what the terminal currently shows. `flush()` diffs the two and writes only the cells that changed. What is still absent: dirty-region and rectangle tracking, structured styles (styles are raw SGR strings today; the [Style](/reference/style) type exists and `Text`, `Panel`, `Button`, `Checkbox`, `Progress`, `Table`, `Modal`, and `Separator` carry it, but cells still hold strings — the buffer migration is a follow-up), and wide-character support (each cell holds one codepoint and is assumed to be one column wide, epic 2).
 </Warning>
 
 ## Cell

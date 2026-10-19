@@ -1,0 +1,143 @@
+---
+title: "Separator"
+description: "The Separator widget: a one-line horizontal or vertical rule drawn in one rune, with an orientation field, a rune that must be one cell wide, and a style."
+keywords: ["separator", "rule", "line", "divider", "orientation", "horizontal", "vertical", "rune", "set_ch", "style"]
+---
+
+`Separator` draws a one-line rule into a [buffer](/reference/buffer). It is the ninth widget, after [Modal](/reference/modal). It repeats one rune along the first row of its rect, or down the first column, and it never takes focus, takes no clicks, and consumes no events. Its direction is a field, so the shape of its rect does not decide it.
+
+```salam
+mut rule := basalam.NewSeparator()
+rule.set_orientation(basalam.Orientation.Vertical)
+_ := rule.set_ch("┃")
+rule.set_style(basalam.Style { fg = basalam.Cyan })
+```
+
+## Separator
+
+`Separator` embeds [BaseWidget](/reference/widget), overrides the default `render`, and adds `focusable`, `hits`, `handle_event`, `preferred_size` and `measure`. It inherits `bounds` and `set_bounds` unchanged.
+
+```salam
+pub struct Separator:
+    pub use BaseWidget
+
+    pub orientation: Orientation = Orientation.Horizontal
+    pub ch: str = ""
+    pub style: Style = StyleDefault
+end
+```
+
+<ResponseField name="orientation" type="Orientation">Which line is drawn: `Orientation.Horizontal` for a rule across the first row, or `Orientation.Vertical` for a rule down the first column. Defaults to `Orientation.Horizontal`.</ResponseField>
+<ResponseField name="ch" type="str">The rune, exactly one cell wide. An empty string means the orientation's default rune. Defaults to `""`. Set it with `set_ch`, which refuses a rune that does not fit.</ResponseField>
+<ResponseField name="style" type="Style">The rule's style. Its foreground colours the rune cells, and a set background fills the whole rect first. Defaults to `StyleDefault`.</ResponseField>
+
+The separator has no length field. The layout engine sizes it, as described under [Preferred size](#preferred-size).
+
+### Methods
+
+```salam
+pub func NewSeparator(): Separator
+pub func set_orientation(o: Orientation)
+pub func set_ch(ch: str): bool
+pub func set_style(s: Style)
+pub func focusable(): bool
+pub func hits(): bool
+pub func handle_event(event: Event): bool
+pub func preferred_size(max_width: int): Rect
+pub func measure(axis: Axis, max_width: int): Measure
+pub func render(buf: Buffer, bounds: Rect)
+```
+
+| Method | Description |
+| --- | --- |
+| `NewSeparator(): Separator` | Creates a horizontal separator with the default rune and default style. |
+| `set_orientation(o: Orientation)` | Sets the direction of the rule. |
+| `set_ch(ch: str): bool` | Sets the rune. Returns `false` and keeps the old rune when `ch` is not one cell wide. An empty string resets to the default rune. |
+| `set_style(s: Style)` | Sets the rule's style and its background. |
+| `focusable(): bool` | Always `false`, so a separator never takes focus. |
+| `hits(): bool` | Always `false`, so a click on the rule falls through to the widget beneath. |
+| `handle_event(event: Event): bool` | Always `false`. The separator consumes nothing, so the event bubbles on. |
+| `preferred_size(max_width: int): Rect` | The size a layout should give the rule, described under [Preferred size](#preferred-size). |
+| `measure(axis: Axis, max_width: int): Measure` | The extent along `axis`. `ok` is always `true`. |
+| `render(buf: Buffer, bounds: Rect)` | Draws the rule inside `bounds`. |
+
+The screen calls `hits` and `render`, and the layout engine calls `measure` or `preferred_size`. You rarely call them yourself.
+
+## Orientation and placement
+
+The `orientation` field decides the line. The rect's shape does not:
+
+- `Horizontal` draws across row `0` of the rect, for its full width.
+- `Vertical` draws down column `0` of the rect, for its full height.
+
+Cells off that line are not painted, so they keep whatever lies beneath them. An 8 by 3 rect with a horizontal separator paints row `0` only, and a 3 by 3 rect with a vertical one paints column `0` only. A rect with no width or no height paints nothing.
+
+The rule is one rune repeated for the full length of the line, so a horizontal separator in an 8-cell rect is 8 runes long.
+
+### Preferred size
+
+The separator leaves its main axis open, so a layout fills it, and it asks for one cell on the cross axis:
+
+- `Horizontal` reports a width of `-1`, meaning no preference, so the layout gives it the width it has, and a height of `1`.
+- `Vertical` reports a width of `1` and a height of `-1`, meaning no preference.
+
+`measure` reports the same thing along one axis. The cross axis is always one cell, and the main axis takes `max_width`. A separator never reports `ok = false`.
+
+## Runes
+
+`set_ch` accepts a rune only when it is exactly one codepoint and exactly one cell wide. The cell width comes from a built-in table of the common East Asian wide and fullwidth blocks, and treats controls, combining marks and format characters as zero-width. A rune that fails either test is refused:
+
+- A wide rune, such as `中` (two cells), returns `false`, and the old rune stays.
+- A zero-width rune, such as a control or a combining mark, returns `false`, and the old rune stays.
+- A string with more than one codepoint returns `false`, and the old rune stays.
+- An empty string returns `true` and resets the rune to the orientation's default: `─` (U+2500) for a horizontal separator and `│` (U+2502) for a vertical one.
+
+A refused rune never reaches the screen, so the rule never draws wrong silently. The table is the common blocks only, not the full East Asian Width data, so a rare rune outside those blocks may pass as one cell wide when it is two.
+
+```salam
+rule := basalam.NewSeparator()
+ok := rule.set_ch("中") // false: two cells wide, the default rune stays
+```
+
+## Style
+
+`style` applies to the whole rule:
+
+- Its foreground colours every rune cell.
+- Its background, when set, fills the whole rect with spaces in that background before the runes are drawn. A background of `Default` fills nothing.
+
+Attributes such as bold apply to the rune cells too. The rule carries no other styling: no dashed or dotted patterns, and no per-segment colour.
+
+## Example
+
+A buffer is plain memory, so you can render the separator without a terminal. This renders the SP01 frame, an 8 by 1 horizontal rule, and the SP03 frame, an 8 by 3 rect that keeps its lower rows blank, then tries three runes.
+
+```salam
+include "basalam/basalam.salam"
+
+func main:
+    mut s := basalam.NewSeparator()
+    sp01 := basalam.NewBuffer(8, 1)
+    defer sp01.free()
+    s.render(sp01, basalam.Rect { width = 8, height = 1 })
+    println "[" + sp01.row_text(0) + "]"
+
+    sp03 := basalam.NewBuffer(8, 3)
+    defer sp03.free()
+    s.render(sp03, basalam.Rect { width = 8, height = 3 })
+    repeat 3 in y:
+        println "[" + sp03.row_text(y) + "]"
+    end
+
+    println s.set_ch("中"), s.set_ch("="), s.set_ch("")
+end
+// [────────]
+// [────────]
+// [        ]
+// [        ]
+// false true true
+```
+
+<Note>
+  A `dyn basalam.Widget` cannot be downcast back to a `Separator`. Keep a concrete `Separator` reference, or a shared value such as a `mut` global, to call `set_ch` and `set_style` after the separator is in a `Screen`.
+</Note>

@@ -36,6 +36,7 @@
  *     style.salam    the Style value type, merge, equality and SGR emission
  *     border.salam   box-drawing border rings and the DrawBorder helper
  *     panel.salam    the Panel decorator: one framed child, its inset and title
+ *     modal.salam    the Modal overlay: a dialog over a dim scrim, with focus and Esc
  *     widget.salam   the Widget interface and BaseWidget defaults
  *     layout.salam   the Row, Column, Grid and Stack containers
  *     text.salam     the Text widget and the pure line rules it draws through
@@ -44,6 +45,8 @@
  *     button.salam   the Button widget: one-row action button with on_click
  *     checkbox.salam the Checkbox widget: one-row boolean toggle
  *     progress.salam the Progress widget: one-row buffer-drawn progress bar
+ *     table.salam    the Table widget: a non-focusable grid with columns and a header
+ *     separator.salam the Separator widget: one-line horizontal or vertical rule
  *     tree.salam     the widget registry (IDs, parents) and event bubbling
  *     screen.salam   Screen: terminal session, input thread, event loop
  *     signal.salam   SIGWINCH listening primitives for the resize watch
