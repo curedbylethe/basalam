@@ -213,9 +213,9 @@ func test_render_colours():
     testing.AssertEqStr(b.row_text(0), "######---------  42%")
     green := basalam.StyleSgr(basalam.Style { fg = basalam.Green }, basalam.ColorTier.TrueColor)
     bright := basalam.StyleSgr(basalam.Style { fg = basalam.BrightBlack }, basalam.ColorTier.TrueColor)
-    testing.AssertEqStr(b.get(0, 0).style, green)
-    testing.AssertEqStr(b.get(6, 0).style, bright)
-    testing.AssertEqStr(b.get(15, 0).style, "")
+    // The whole row, not just the boundary cells: fill, empty, then the tail.
+    want := term.SeqMoveTo(1, 1) + term.Reset + green + "######" + term.Reset + bright + "---------" + term.Reset + "  42%" + term.Reset
+    testing.AssertEqStr(b.ansi(), want)
 
     // The tail takes text_style.
     mut t := basalam.NewProgress()
