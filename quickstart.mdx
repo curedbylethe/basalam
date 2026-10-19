@@ -79,6 +79,7 @@ keywords: ["install", "quickstart", "include", "build"]
 - `NewTerminalScreen` makes `Hello` the root widget, sized to the terminal.
 - `start()` switches the terminal to raw mode and the alternate screen and starts the input thread. `defer screen.close()` undoes all of it on every exit path.
 - The `until` loop takes one event at a time. `dispatch` offers it to the widgets; `q` is not consumed by any widget, so the loop stops the screen.
+- `basalam.Version` is the library version (`0.1.0`); the [demo](/guides/examples) prints it in its title bar.
 
 Read [The event loop](/concepts/event-loop) for the details, or [Writing a widget](/guides/writing-a-widget) to build an interactive one.
 

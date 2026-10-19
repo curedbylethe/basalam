@@ -55,7 +55,7 @@ Linear navigation walks the focus order and wraps inside it. That order is the f
 
 ### Spatial: focus_up, focus_down, focus_left, focus_right
 
-Spatial navigation moves to the nearest widget in a direction, chosen from the same focus order, not from every focusable widget on the screen. The search is `basalam.Nearest(from, candidates, dir)`, a pure function over rects that looks at each candidate once (O(n)). With nothing focused, spatial moves fall back to `focus_next`.
+Spatial navigation moves to the nearest widget in a direction, chosen from the same focus order, not from every focusable widget on the screen. The search is `basalam.Nearest(from, candidates, dir)`, a pure function over rects that looks at each candidate once (O(n)); `dir` is `DirUp` (0), `DirDown` (1), `DirLeft` (2), or `DirRight` (3). With nothing focused, spatial moves fall back to `focus_next`.
 
 ## The spatial rule
 
