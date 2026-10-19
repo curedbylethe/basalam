@@ -104,7 +104,7 @@ t.add_column(basalam.TableColumn { width = basalam.LayoutSize { kind = basalam.S
 t.add_column(basalam.TableColumn { width = basalam.LayoutSize { kind = basalam.SizeKind.Fill, weight = 2 } })
 ```
 
-Widths are resolved on every call, so `render`, `preferred_size` and `measure` always agree.
+Widths are resolved on every call by one resolver, so `measure` reports what `preferred_size` reports. `preferred_size` resolves without a width, so `Fill` columns count `0` there. `render` resolves at the real width, so a `Fill` column can be wider at render time than in `preferred_size`.
 
 ## Overflow
 
