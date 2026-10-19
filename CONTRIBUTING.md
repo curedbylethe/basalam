@@ -19,16 +19,17 @@ commit. By taking part you agree to follow the
 
 ## Common tasks
 
-| Command           | What it does                                               |
-| ----------------- | ---------------------------------------------------------- |
-| `make build`      | Type-checks and compiles every file in `basalam/`          |
-| `make test`       | Builds and runs the test suite                             |
-| `make examples`   | Builds every program in `examples/` into `build/examples/` |
-| `make run`        | Builds and runs the demo example                           |
-| `make format`     | Formats all Salam sources in place                         |
-| `make check`      | Format check, build, examples, tests                       |
-| `make docs`       | Previews the documentation site (`npm i -g mint` first)    |
-| `make docs-check` | Validates the documentation site and its links             |
+| Command           | What it does                                                                    |
+| ----------------- | ------------------------------------------------------------------------------- |
+| `make build`      | Type-checks and compiles every file in `basalam/`                               |
+| `make test`       | Builds and runs the test suite                                                  |
+| `make test-llvm`  | Builds and runs the test suite with `--backend=llvm`                            |
+| `make examples`   | Builds every program in `examples/` into `build/examples/`                      |
+| `make run`        | Builds and runs the demo example                                                |
+| `make format`     | Formats all Salam sources in place                                              |
+| `make check`      | Format check, build, examples, tests; CI also runs `test-llvm` and `docs-check` |
+| `make docs`       | Previews the documentation site (`npm i -g mint` first)                         |
+| `make docs-check` | Validates the documentation site and its links                                  |
 
 Set `SALAM=/path/to/salam` to use a compiler that is not on your `PATH`.
 
@@ -60,6 +61,10 @@ output is what you expect, and save it as `tests/<name>.out`.
 Tests never touch a real terminal. Code that needs one (the screen's input
 thread, raw mode) is kept thin so the logic around it can be tested
 headlessly.
+
+CI also runs `make test-llvm`, which builds every test with
+`--backend=llvm`. With an explicit backend the compiler does not fall back
+to C, so an LLVM codegen failure fails the build.
 
 ## Code style
 

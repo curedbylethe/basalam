@@ -79,9 +79,11 @@ needs the same `mint` install.
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md). `make check` runs the library checks
-and `make docs-check` checks the documentation site; CI runs both. This
-project follows the [Contributor Covenant](CODE_OF_CONDUCT.md).
+See [CONTRIBUTING.md](CONTRIBUTING.md). `make check` runs the library checks,
+`make test-llvm` builds every test with `--backend=llvm` so a codegen failure
+fails instead of falling back to C, and `make docs-check` checks the
+documentation site; CI runs all three. This project follows the
+[Contributor Covenant](CODE_OF_CONDUCT.md).
 
 ## License
 

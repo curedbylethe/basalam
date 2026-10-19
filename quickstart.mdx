@@ -103,4 +103,4 @@ From a clone of the repository:
 make check
 ```
 
-`make check` runs the formatter check, compiles the library, and runs the test suite. Run `make help` for the other targets.
+`make check` runs the formatter check, compiles the library, and runs the test suite. CI also runs `make test-llvm`, which builds every test with `--backend=llvm` and fails instead of falling back to C. Run `make help` for the other targets.
