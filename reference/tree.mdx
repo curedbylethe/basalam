@@ -18,7 +18,7 @@ Salam's `dyn` values cannot be compared with `==`, and cannot be cast back to th
 
 ID order is the order widgets were added. A parent's ID is always smaller than its children's. That order is what the tree stores. It is not, by itself, paint order or focus order.
 
-With nothing raised, the [screen](/reference/screen) paints in this ID order and walks focus in it, so a child paints over its parent and a later sibling paints over an earlier one. After `raise`, paint order is ascending `(stamp, id)` and focus stays in the topmost layer that has a focusable widget. Stamps live on the screen, not in the tree.
+With nothing raised, the [screen](/reference/screen) paints in this ID order and walks focus in it, so a child paints over its parent and a later sibling paints over an earlier one. After `raise`, paint order is ascending `(stamp, id)` and focus stays in the topmost layer that has a focusable widget outside a hidden subtree. Stamps live on the screen, not in the tree.
 
 ```text
 root(0)                added first

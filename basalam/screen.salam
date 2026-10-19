@@ -284,9 +284,10 @@ pub struct Screen:
     /// ID order. Idempotent: an id that was not raised, or that is not in
     /// the tree, is left at 0. Does not rewind the stamp counter. When
     /// nothing remains raised, focuses the saved id if it is still
-    /// focusable, otherwise the first focusable widget, and clears the
-    /// saved id. While a layer remains, focuses the first id of the new
-    /// focus order when the current focus is outside it.
+    /// focusable outside a hidden subtree, otherwise the first focusable
+    /// widget outside a hidden subtree, and clears the saved id. While a
+    /// layer remains, focuses the first id of the new focus order when the
+    /// current focus is outside it.
     pub func unraise(ids: Vector<int>):
         repeat ids.len() in i:
             this.stamps.put(ids.get(i), 0)
@@ -428,7 +429,7 @@ pub struct Screen:
     @en "focus"
     /// Moves the focus to id, replacing the top of the focus stack (or
     /// starting it). Returns false, changing nothing, when id is not a
-    /// focusable widget.
+    /// focusable widget outside a hidden subtree.
     pub func focus(id: int): bool:
         if not this.can_focus(id):
             ret false
@@ -445,7 +446,8 @@ pub struct Screen:
     @en "push_focus"
     /// Focuses id and remembers the previous focus underneath it, for
     /// example while a dialog is open. pop_focus returns to it. Returns
-    /// false, changing nothing, when id is not a focusable widget.
+    /// false, changing nothing, when id is not a focusable widget outside
+    /// a hidden subtree.
     pub func push_focus(id: int): bool:
         if not this.can_focus(id):
             ret false
@@ -470,11 +472,11 @@ pub struct Screen:
 
     @en "focus_next"
     /// Moves the focus to the next widget in focus order, wrapping from
-    /// the last to the first. Focus order is the focusable widgets in the
-    /// topmost raised layer, or every focusable widget in ID order when
-    /// that layer has none. A current focus outside the order lands on
-    /// the first entry. With no focusable widget, does nothing. Returns
-    /// true when the focus moved.
+    /// the last to the first. Focus order is the focusable widgets outside
+    /// hidden subtrees in the topmost raised layer, or every such widget
+    /// in ID order when that layer has none. A current focus outside the
+    /// order lands on the first entry. With no such widget, does nothing.
+    /// Returns true when the focus moved.
     pub func focus_next(): bool:
         ret this.focus_step(1)
     end
@@ -482,7 +484,7 @@ pub struct Screen:
     @en "focus_prev"
     /// Moves the focus to the previous widget in focus order, wrapping
     /// from the first to the last. A current focus outside the order
-    /// lands on the last entry. With no focusable widget, does nothing.
+    /// lands on the last entry. With no such widget, does nothing.
     /// Returns true when the focus moved.
     pub func focus_prev(): bool:
         ret this.focus_step(-1)
