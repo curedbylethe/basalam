@@ -378,6 +378,26 @@ func test_text_ansi_frame_carries_style():
     testing.AssertEqStr(b.ansi(), want)
 end
 
+// CUR-455 probe. Two SGR strings per render: the pad fill (style.bg only) and
+// the glyph run (the whole style). A second render with unchanged inputs builds
+// nothing; changing a style field rebuilds only the memo that serializes it, so
+// an fg-only change costs one build and leaves the pad alone.
+func test_sgr_memo_probe():
+    mut b := basalam.NewBuffer(6, 1)
+    defer b.free()
+    mut t := basalam.NewText("hi")
+    t.set_style(basalam.Style { fg = basalam.Red })
+    before := basalam.SgrBuilds()
+    t.render(b, rect(0, 0, 6, 1))
+    first := basalam.SgrBuilds()
+    testing.AssertEqInt(first - before, 2)
+    t.render(b, rect(0, 0, 6, 1))
+    testing.AssertEqInt(basalam.SgrBuilds() - first, 0)
+    t.set_style(basalam.Style { fg = basalam.Blue })
+    t.render(b, rect(0, 0, 6, 1))
+    testing.AssertEqInt(basalam.SgrBuilds() - first, 1)
+end
+
 // ---- AC4: wrapping within bounds -------------------------------------
 
 func test_text_render_wrapped_rows():
@@ -477,6 +497,7 @@ func main:
     test_text_style_foreground_and_background()
     test_text_style_padding_on_wrapped_row()
     test_text_ansi_frame_carries_style()
+    test_sgr_memo_probe()
     test_text_render_wrapped_rows()
     test_text_render_clips_taller_content()
     test_text_wrap_none_does_not_spill()
