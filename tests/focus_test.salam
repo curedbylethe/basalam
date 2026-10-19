@@ -59,6 +59,17 @@ struct Tile:
     end
 end
 
+// A container that can hide its whole subtree. It is not a Modal: the Screen
+// must consult Widget.visible on the parent chain, never a widget type.
+struct Shutter:
+    pub use basalam.BaseWidget
+    pub shown: bool = true
+
+    pub func visible(): bool:
+        ret this.shown
+    end
+end
+
 func rect(x: int, y: int, w: int, h: int): basalam.Rect:
     ret basalam.Rect { x = x, y = y, width = w, height = h }
 end
@@ -469,6 +480,61 @@ func test_indicator_follows_focus():
     testing.AssertEqStr(s.buffer.row_text(0), " a0 *b0 ")
 end
 
+// A hidden container hides its whole subtree, not just itself: the child is
+// never reached by Tab, Shift-Tab (focus_prev) or a spatial move, while the
+// plain tiles keep cycling. The container is a local struct, so this pins the
+// Widget.visible contract and not the Modal type.
+func test_hidden_container_hides_its_subtree():
+    mut shown := basalam.NewScreen(basalam.BaseWidget {}, 8, 1)
+    defer shown.close()
+    a1 := shown.add(basalam.RootId, Tile { name = "a" })
+    sh1 := shown.add(basalam.RootId, Shutter { shown = true })
+    b1 := shown.add(sh1, Tile { name = "b" })
+    c1 := shown.add(basalam.RootId, Tile { name = "c" })
+    shown.widget(a1).set_bounds(rect(0, 0, 2, 1))
+    shown.widget(sh1).set_bounds(rect(2, 0, 2, 1))
+    shown.widget(b1).set_bounds(rect(2, 0, 2, 1))
+    shown.widget(c1).set_bounds(rect(4, 0, 2, 1))
+    testing.AssertEqInt(shown.focused_id(), a1)
+    testing.AssertTrue(shown.can_focus(b1))
+    testing.AssertTrue(shown.focus_next())
+    testing.AssertEqInt(shown.focused_id(), b1)
+    testing.AssertTrue(shown.focus_next())
+    testing.AssertEqInt(shown.focused_id(), c1)
+    testing.AssertTrue(shown.focus_next())
+    testing.AssertEqInt(shown.focused_id(), a1)
+    testing.AssertTrue(shown.focus_right())
+    testing.AssertEqInt(shown.focused_id(), b1)
+    testing.AssertTrue(shown.focus_right())
+    testing.AssertEqInt(shown.focused_id(), c1)
+
+    mut hidden := basalam.NewScreen(basalam.BaseWidget {}, 8, 1)
+    defer hidden.close()
+    a2 := hidden.add(basalam.RootId, Tile { name = "a" })
+    sh2 := hidden.add(basalam.RootId, Shutter { shown = false })
+    b2 := hidden.add(sh2, Tile { name = "b" })
+    c2 := hidden.add(basalam.RootId, Tile { name = "c" })
+    hidden.widget(a2).set_bounds(rect(0, 0, 2, 1))
+    hidden.widget(sh2).set_bounds(rect(2, 0, 2, 1))
+    hidden.widget(b2).set_bounds(rect(2, 0, 2, 1))
+    hidden.widget(c2).set_bounds(rect(4, 0, 2, 1))
+    testing.AssertEqInt(hidden.focused_id(), a2)
+    testing.AssertFalse(hidden.can_focus(b2))
+    testing.AssertFalse(hidden.focus(b2))
+    // Tab and the spatial move skip b, and the plain tiles keep cycling.
+    testing.AssertTrue(hidden.focus_next())
+    testing.AssertEqInt(hidden.focused_id(), c2)
+    testing.AssertTrue(hidden.focus_next())
+    testing.AssertEqInt(hidden.focused_id(), a2)
+    testing.AssertTrue(hidden.focus_prev())
+    testing.AssertEqInt(hidden.focused_id(), c2)
+    testing.AssertTrue(hidden.focus(a2))
+    testing.AssertTrue(hidden.focus_right())
+    testing.AssertEqInt(hidden.focused_id(), c2)
+    testing.AssertTrue(hidden.focus_left())
+    testing.AssertEqInt(hidden.focused_id(), a2)
+end
+
 func main:
     test_nearest_picks_smallest_gap()
     test_nearest_requires_perpendicular_overlap()
@@ -491,6 +557,7 @@ func main:
     test_dispatch_routes_through_focus_stack()
     test_focus_topmost_layer()
     test_indicator_follows_focus()
+    test_hidden_container_hides_its_subtree()
     visits.free()
     ret testing.Summary()
 end
