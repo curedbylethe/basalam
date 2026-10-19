@@ -16,8 +16,9 @@
 // Benchmark, not a newcomer program. Headless 200x60 frame timing.
 // Never calls start(), loop(), or next_event(). present() flushes only
 // when attached; this process never attaches, so the run is silent.
-// A frame mutates, sets dirty, then does what flush() does minus term.Emit:
-// present, diff, commit. str has no free, so diff strings accumulate.
+// A frame mutates, marks that change, then does what flush() does minus
+// term.Emit: present, diff, commit. A small frame marks one widget with
+// invalidate. str has no free, so diff strings accumulate.
 // Fine for this short run, not for library code.
 // dyn Widget is a boxed copy with no downcast, so set_progress cannot
 // reach a boxed Progress and that widget is omitted. Text and Button
@@ -41,6 +42,8 @@ mut rows_b := Vector {} as Vector<str>
 mut input_a := basalam.BaseWidget {} as dyn basalam.Widget
 mut input_b := basalam.BaseWidget {} as dyn basalam.Widget
 mut box := basalam.BaseWidget {} as dyn basalam.Widget
+// Screen ids in mutate_one slot order. main fills this.
+mut slots := Vector {} as Vector<int>
 
 func heap(s: str): str:
     mut b := str.NewBuilder()
@@ -90,8 +93,8 @@ end
 func frame(screen &: basalam.Screen, n: int, small: bool): int:
     if small:
         mutate_one(n)
-        // STAGE-03 replaces this with screen.invalidate(id).
-        screen.dirty = true
+        // n%10 is a slot, not a screen id.
+        screen.invalidate(slots.get(n % 10))
     else:
         mutate_all(n)
         screen.dirty = true
@@ -159,9 +162,22 @@ func main:
     add_child(root, kids, basalam.NewText(texts.get(3)) as dyn basalam.Widget, 8)
     mut screen := basalam.NewScreen(root as dyn basalam.Widget, 200, 60)
     defer screen.close()
+    mut kid_ids := Vector {} as Vector<int>
     repeat kids.len() in i:
-        _ := screen.add(basalam.RootId, kids.get(i))
+        kid_ids.push(screen.add(basalam.RootId, kids.get(i)))
     end
+    // header, body, mid, foot, button, list a, list b, input a, checkbox, input b
+    slots.push(kid_ids.get(0))
+    slots.push(kid_ids.get(1))
+    slots.push(kid_ids.get(4))
+    slots.push(kid_ids.get(9))
+    slots.push(kid_ids.get(7))
+    slots.push(kid_ids.get(2))
+    slots.push(kid_ids.get(3))
+    slots.push(kid_ids.get(5))
+    slots.push(kid_ids.get(6))
+    slots.push(kid_ids.get(8))
+    kid_ids.free()
     run_mode(screen, "full", false)
     println ""
     run_mode(screen, "small", true)
