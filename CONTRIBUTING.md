@@ -19,15 +19,16 @@ commit. By taking part you agree to follow the
 
 ## Common tasks
 
-| Command        | What it does                                              |
-| -------------- | --------------------------------------------------------- |
-| `make build`   | Type-checks and compiles every file in `basalam/`         |
-| `make test`    | Builds and runs the test suite                            |
-| `make examples`| Builds every program in `examples/` into `build/examples/`|
-| `make run`     | Builds and runs the demo example                          |
-| `make format`  | Formats all Salam sources in place                        |
-| `make check`   | What CI runs: format check, build, examples, tests        |
-| `make docs`    | Previews the documentation site (`npm i -g mint` first)   |
+| Command           | What it does                                               |
+| ----------------- | ---------------------------------------------------------- |
+| `make build`      | Type-checks and compiles every file in `basalam/`          |
+| `make test`       | Builds and runs the test suite                             |
+| `make examples`   | Builds every program in `examples/` into `build/examples/` |
+| `make run`        | Builds and runs the demo example                           |
+| `make format`     | Formats all Salam sources in place                         |
+| `make check`      | Format check, build, examples, tests                       |
+| `make docs`       | Previews the documentation site (`npm i -g mint` first)    |
+| `make docs-check` | Validates the documentation site and its links             |
 
 Set `SALAM=/path/to/salam` to use a compiler that is not on your `PATH`.
 
@@ -84,7 +85,8 @@ A change is not finished until it is documented:
   speaker has reviewed them; they can be added later without code changes.
 - Non-obvious algorithms get inline prose comments.
 - User-facing behavior changes update the Mintlify pages (`*.mdx`) and,
-  for new pages, `docs.json` navigation.
+  for new pages, `docs.json` navigation. A new or edited page must pass
+  `make docs-check`, which CI enforces.
 
 ## Commits
 
