@@ -172,7 +172,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   it. A tick you dispatch yourself queues nothing, so mark the screen after
   changing state outside the widget tree. More than four
   pending regions, or regions covering more than half the screen, repaint
-  every widget too. A region is that widget's bounds, not its subtree.
+  every widget too. Those regions are each widget's own bounds, not its subtree.
   (CUR-226)
 - `Buffer.diff()` and `Buffer.commit()` skip clean rows. `set`, `fill`,
   `put_str`, and `clear` mark the cells they write; assigning `cells`
