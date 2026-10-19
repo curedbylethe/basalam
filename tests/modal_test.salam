@@ -205,6 +205,21 @@ func test_sc01_scrim_dims_outside_only():
     b.free()
 end
 
+// A cell with several SGR parameters (bold and fg, as Text or Button paints)
+// keeps every one of them; DIM is inserted after ESC[ and nothing is cut.
+func test_scrim_keeps_every_sgr_parameter():
+    base := basalam.StyleSgr(basalam.Style { bold = true, fg = basalam.Red }, basalam.ColorTier.TrueColor)
+    esc := str.CharSubstr(base, 0, 2)
+    dimmed := esc + "2;" + str.CharSubstr(base, 2, str.CharCount(base) - 2)
+    mut b := basalam.NewBuffer(8, 3)
+    b.fill(rect(0, 0, 8, 3), "x", base)
+    m := openModal(8, 3, basalam.ModalSize.Fixed(4, 3), "")
+    m.render(b, rect(0, 0, 8, 3))
+    testing.AssertEqStr(b.get(0, 0).style, dimmed)
+    testing.AssertEqStr(b.get(3, 1).style, base)
+    b.free()
+end
+
 // A scrim over a cell with no style yet is DIM alone, the StyleSgr of DIM.
 func test_scrim_on_unstyled_cell_is_dim_alone():
     mut b := basalam.NewBuffer(8, 3)
@@ -426,6 +441,9 @@ func test_nested_esc_closes_only_inner():
     testing.AssertEqInt(inner_closes, 1)
     testing.AssertEqInt(outer_closes, 0)
     testing.AssertEqInt(s.hit_test(0, 0), oid)
+    s.unraise_subtree(iid)
+    testing.AssertTrue(s.pop_focus())
+    testing.AssertEqInt(s.focused_id(), oid)
 end
 
 // A hidden Modal does not hit: the widget under it is found. An open one does.
@@ -521,6 +539,7 @@ func main:
     test_md04_two_by_two_corners_only()
     test_md05_title_clipped_to_width_minus_five()
     test_sc01_scrim_dims_outside_only()
+    test_scrim_keeps_every_sgr_parameter()
     test_scrim_on_unstyled_cell_is_dim_alone()
     test_percent_in_small_bounds_fills_bounds()
     test_esc_closes_and_fires_on_close()
