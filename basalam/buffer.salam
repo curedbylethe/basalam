@@ -154,10 +154,17 @@ pub struct Buffer:
     /// cell, all in the same style. Text that runs past the clip or the
     /// grid is cut off; it never wraps.
     pub func put_str(x: int, y: int, text: str, style: str):
-        chars := str.Chars(text)
-        defer chars.free()
-        repeat chars.len() in i:
-            this.set(x + i, y, Cell { ch = chars.get(i), style = style })
+        mut i := 0
+        mut col := 0
+        n := text.len()
+        until i < n:
+            ch := str.CharAt(text, i)
+            if ch == "":
+                break
+            end
+            this.set(x + col, y, Cell { ch = ch, style = style })
+            col += 1
+            i += ch.len()
         end
     end
 
