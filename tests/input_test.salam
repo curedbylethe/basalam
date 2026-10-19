@@ -201,14 +201,16 @@ func test_render_placeholder_default():
 end
 
 func test_render_default_fallbacks_built_once():
-    // Prime both fallbacks with one focused render of a placeholder, then
-    // render again into a fresh buffer: no SGR may be built the second time.
+    // The first focused placeholder render builds both fallbacks; later
+    // renders reuse them.
     mut e := basalam.NewInput()
     e.set_placeholder("Name")
     mut b := basalam.NewBuffer(8, 1)
     defer b.free()
     b.focused = true
+    before := basalam.SgrBuilds()
     e.render(b, rect(0, 0, 8, 1))
+    testing.AssertEqInt(basalam.SgrBuilds() - before, 2)
     primed := basalam.SgrBuilds()
     mut b2 := basalam.NewBuffer(8, 1)
     defer b2.free()
@@ -431,6 +433,7 @@ func test_unicode_codepoint_editing():
 end
 
 func main:
+    test_render_default_fallbacks_built_once()
     test_defaults()
     test_editing_append_printable()
     test_editing_space_wire_shape()
@@ -441,7 +444,6 @@ func main:
     test_render_value_unfocused()
     test_render_cursor_default()
     test_render_placeholder_default()
-    test_render_default_fallbacks_built_once()
     test_render_themed_styles()
     test_cursor_tracks_value_and_backspace()
     test_render_overflow_wide_value()
