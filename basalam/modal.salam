@@ -43,6 +43,14 @@ package basalam
 import str
 import term
 
+// The most scrim entries to keep. A frame has only a handful of distinct
+// underlying styles, so the bound is a leak guard, not a tuning knob: str is
+// never freed, and a widget that changes its style string per frame would
+// otherwise add an entry per frame.
+// shortcut: 256 memo entries, upgrade only if a real scene paints more
+// distinct underlying styles inside a scrim than this.
+const _ScrimMemoCap := 256
+
 // The state every copy of a Modal must share. It lives in a Vector, so a copy
 // made by Screen.add writes to the same element as the local value.
 struct _ModalState:
@@ -53,6 +61,10 @@ struct _ModalState:
     pub visible: bool = false
     pub closable: bool = true
     pub rect: Rect = Rect {}
+    // The scrim's memo: an underlying cell SGR to its dimmed SGR. Persistent
+    // across frames, never cleared. The scrim's style input is the buffer's
+    // existing cell style, not a Modal field, so the key is that string.
+    pub scrim: HashMap<str, str> = HashMap {} as HashMap<str, str>
 end
 
 @en "ModalSize"
@@ -269,12 +281,26 @@ pub struct Modal:
             ret
         end
         dialog := this._dialog_rect(bounds)
+        // The memo is read and written through the shared holder, not a copy:
+        // the first put allocates the map, and that must land on the element
+        // every Modal copy shares.
+        holder := this.state.ref(0)
         repeat bounds.height in j:
             repeat bounds.width in i:
                 p := Point { x = bounds.x + i, y = bounds.y + j }
                 if not dialog.contains(p):
                     mut cell := buf.get(p.x, p.y)
-                    cell.style = _dim(cell.style, ColorTier.TrueColor)
+                    under := cell.style
+                    hit := holder[0].scrim.get_or(under, "")
+                    if hit != "":
+                        cell.style = hit
+                    else:
+                        cell.style = _dim(under, ColorTier.TrueColor)
+                        if holder[0].scrim.size() < _ScrimMemoCap:
+                            holder[0].scrim.put(under, cell.style)
+                        end
+                        _sgr_builds = _sgr_builds + 1
+                    end
                     buf.set(p.x, p.y, cell)
                 end
             end
