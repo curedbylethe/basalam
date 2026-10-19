@@ -66,7 +66,7 @@ pub struct Checkbox:
 
     @en "disabled"
     /// When true the checkbox is not focusable, ignores every event and does
-    /// not take hits, and draws its row dim with bold dropped.
+    /// not take hits, and draws its row dim.
     pub disabled: bool = false
 
     @en "on_toggle"
