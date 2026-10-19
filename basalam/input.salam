@@ -44,6 +44,14 @@ package basalam
 import str
 import term
 
+// The two fallback styles below are constants: they read no field, so they
+// cannot go stale, and each is built at most once per process. The ready flag
+// is what distinguishes "not built yet" from a build that is legitimately "".
+mut _dim_style := ""
+mut _dim_style_ready := false
+mut _reverse_style := ""
+mut _reverse_style_ready := false
+
 @en "Input"
 /// A single-line text input: value, caret, optional placeholder, and styles
 /// for the value, the cursor cell, and the placeholder. It is focusable, so
@@ -160,7 +168,7 @@ pub struct Input:
         if count == 0 and this.placeholder != "":
             mut ps := this.placeholder_style
             if ps == "":
-                ps = term.Sgr(term.FgBlack + term.FgBright)
+                ps = _default_placeholder_style()
             end
             buf.put_str(bounds.x, bounds.y, str.CharSubstr(this.placeholder, 0, w), this.style + ps)
         else:
@@ -169,13 +177,36 @@ pub struct Input:
         if buf.focused:
             mut cs := this.cursor_style
             if cs == "":
-                cs = term.Sgr(term.StyleReverse)
+                cs = _default_cursor_style()
             end
             col := count - start
             c := buf.get(bounds.x + col, bounds.y)
             buf.set(bounds.x + col, bounds.y, Cell { ch = c.ch, style = this.style + cs })
         end
     end
+end
+
+// The dim style an empty value draws its placeholder with when the caller
+// left placeholder_style "". Built once; the per-frame concat with the base
+// style stays (G-15).
+func _default_placeholder_style(): str:
+    if not _dim_style_ready:
+        _dim_style = term.Sgr(term.FgBlack + term.FgBright)
+        _dim_style_ready = true
+        _sgr_builds = _sgr_builds + 1
+    end
+    ret _dim_style
+end
+
+// The reverse-video style the focused cursor cell uses when the caller left
+// cursor_style "". Built once; same deferral as above.
+func _default_cursor_style(): str:
+    if not _reverse_style_ready:
+        _reverse_style = term.Sgr(term.StyleReverse)
+        _reverse_style_ready = true
+        _sgr_builds = _sgr_builds + 1
+    end
+    ret _reverse_style
 end
 
 @en "NewInput"
