@@ -123,7 +123,7 @@ pub struct Separator:
     end
 
     @en "set_ch"
-    /// Sets the rune. The rune must be exactly one cell wide, by term.Width.
+    /// Sets the rune. The rune must be exactly one cell wide, by display width.
     /// An empty string resets to the orientation's default rune. Any other
     /// string that is wide or zero-width is refused: nothing changes, the
     /// previous rune stays, and the call returns false. The rule is a bool,
