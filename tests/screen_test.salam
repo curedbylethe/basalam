@@ -606,6 +606,93 @@ func test_invalidate_targets_one_widget():
     testing.AssertEqStr(s.buffer.get(4, 0).ch, "3")
 end
 
+// invalidate_subtree(id) repaints the widget and its descendants as one
+// region. An unknown id, or a subtree whose rects are all empty, marks the
+// whole screen instead.
+func test_invalidate_subtree():
+    // A: both children repaint; a counter outside the subtree stays put.
+    mut s := basalam.NewScreen(basalam.BaseWidget {}, 10, 6)
+    defer s.close()
+    parent := s.add(basalam.RootId, ZBox { mark = "p" })
+    kid_a := s.add(parent, Counter {})
+    kid_b := s.add(parent, Counter {})
+    outside := s.add(basalam.RootId, Counter {})
+    s.widget(parent).set_bounds(rect(0, 0, 1, 1))
+    s.widget(kid_a).set_bounds(rect(0, 1, 1, 1))
+    s.widget(kid_b).set_bounds(rect(2, 1, 1, 1))
+    s.widget(outside).set_bounds(rect(8, 5, 1, 1))
+    s.present()
+    testing.AssertEqStr(s.buffer.get(0, 1).ch, "1")
+    testing.AssertEqStr(s.buffer.get(2, 1).ch, "1")
+    testing.AssertEqStr(s.buffer.get(8, 5).ch, "1")
+    s.invalidate_subtree(parent)
+    testing.AssertFalse(s.dirty)
+    s.present()
+    testing.AssertEqStr(s.buffer.get(0, 1).ch, "2")
+    testing.AssertEqStr(s.buffer.get(2, 1).ch, "2")
+    testing.AssertEqStr(s.buffer.get(8, 5).ch, "1")
+
+    // B: a child outside its parent's rect. invalidate leaves the stale
+    // pixel; invalidate_subtree covers it.
+    mut b := basalam.NewScreen(basalam.BaseWidget {}, 12, 4)
+    defer b.close()
+    p := b.add(basalam.RootId, ZBox { mark = "p" })
+    spot := Spot {} as dyn basalam.Widget
+    spot_id := b.add(p, spot)
+    b.widget(p).set_bounds(rect(0, 0, 2, 1))
+    b.widget(spot_id).set_bounds(rect(4, 0, 1, 1))
+    b.present()
+    testing.AssertEqStr(b.buffer.get(4, 0).ch, "a")
+    testing.AssertTrue(spot.handle_event(key("r")))
+    b.invalidate(p)
+    b.present()
+    testing.AssertEqStr(b.buffer.get(4, 0).ch, "a")
+    b.invalidate_subtree(p)
+    testing.AssertFalse(b.dirty)
+    b.present()
+    testing.AssertEqStr(b.buffer.get(4, 0).ch, "b")
+
+    // C: ids outside the tree mark the whole screen.
+    mut k := basalam.NewScreen(basalam.BaseWidget {}, 8, 1)
+    defer k.close()
+    k.present()
+    testing.AssertFalse(k.dirty)
+    k.invalidate_subtree(basalam.NoWidget)
+    testing.AssertTrue(k.dirty)
+    k.present()
+    k.invalidate_subtree(k.tree.count())
+    testing.AssertTrue(k.dirty)
+
+    // D: a widget with no bounds has an empty rect, so its subtree's union
+    // is empty and becomes a full repaint.
+    mut d := basalam.NewScreen(basalam.BaseWidget {}, 8, 1)
+    defer d.close()
+    empty := d.add(basalam.RootId, Counter {})
+    d.present()
+    testing.AssertFalse(d.dirty)
+    d.invalidate_subtree(empty)
+    testing.AssertTrue(d.dirty)
+
+    // E: six members under half the screen stay one partial region, so a
+    // distant counter is not repainted by a per-member scheme.
+    mut e := basalam.NewScreen(basalam.BaseWidget {}, 10, 4)
+    defer e.close()
+    band := e.add(basalam.RootId, ZBox { mark = "b" })
+    repeat 5 in i:
+        id := e.add(band, ZBox { mark = "c" })
+        e.widget(id).set_bounds(rect(i + 1, 0, 1, 1))
+    end
+    e.widget(band).set_bounds(rect(0, 0, 1, 1))
+    distant := e.add(basalam.RootId, Counter {})
+    e.widget(distant).set_bounds(rect(0, 3, 1, 1))
+    e.present()
+    testing.AssertEqStr(e.buffer.get(0, 3).ch, "1")
+    e.invalidate_subtree(band)
+    testing.AssertFalse(e.dirty)
+    e.present()
+    testing.AssertEqStr(e.buffer.get(0, 3).ch, "1")
+end
+
 // A focus change queues the old and new cells. A third widget stays put.
 func test_focus_change_repaints_old_and_new_only():
     mut s := basalam.NewScreen(basalam.BaseWidget {}, 8, 1)
@@ -713,6 +800,7 @@ func main:
     test_raise_subtree_ignores_unknown_ids()
     test_present_with_nothing_pending_is_a_noop()
     test_invalidate_targets_one_widget()
+    test_invalidate_subtree()
     test_focus_change_repaints_old_and_new_only()
     test_too_many_regions_repaint_everything()
     test_wide_regions_repaint_everything()
