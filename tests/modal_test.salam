@@ -243,6 +243,55 @@ func test_percent_in_small_bounds_fills_bounds():
     b.free()
 end
 
+// The scrim memo: rendering the same unscrimmed buffer twice builds the
+// dimmed style once, and the second frame still paints it. The buffer is
+// repainted between frames because a scrimmed cell would otherwise become
+// the next frame's input style.
+func test_scrim_memo_builds_once_per_input_style():
+    base := basalam.StyleSgr(basalam.Style { fg = basalam.Red }, basalam.ColorTier.TrueColor)
+    esc := str.CharSubstr(base, 0, 2)
+    dimmed := esc + "2;" + str.CharSubstr(base, 2, str.CharCount(base) - 2)
+    area := rect(0, 0, 8, 3)
+    mut b := basalam.NewBuffer(8, 3)
+    m := openModal(8, 3, basalam.ModalSize.Fixed(4, 3), "")
+
+    b.fill(area, "x", base)
+    mut before := basalam.SgrBuilds()
+    m.render(b, area)
+    testing.AssertEqInt(basalam.SgrBuilds() - before, 1)
+
+    b.fill(area, "x", base)
+    before = basalam.SgrBuilds()
+    m.render(b, area)
+    testing.AssertEqInt(basalam.SgrBuilds() - before, 0)
+    testing.AssertEqStr(b.get(0, 0).style, dimmed)
+    testing.AssertEqStr(b.get(3, 1).style, base)
+    b.free()
+end
+
+// Two distinct underlying styles build once each; the repeat builds nothing.
+func test_scrim_memo_two_styles_two_builds():
+    red := basalam.StyleSgr(basalam.Style { fg = basalam.Red }, basalam.ColorTier.TrueColor)
+    green := basalam.StyleSgr(basalam.Style { fg = basalam.Green }, basalam.ColorTier.TrueColor)
+    area := rect(0, 0, 8, 3)
+    left := rect(0, 0, 2, 3)
+    mut b := basalam.NewBuffer(8, 3)
+    m := openModal(8, 3, basalam.ModalSize.Fixed(4, 3), "")
+
+    b.fill(area, "x", red)
+    b.fill(left, "y", green)
+    mut before := basalam.SgrBuilds()
+    m.render(b, area)
+    testing.AssertEqInt(basalam.SgrBuilds() - before, 2)
+
+    b.fill(area, "x", red)
+    b.fill(left, "y", green)
+    before = basalam.SgrBuilds()
+    m.render(b, area)
+    testing.AssertEqInt(basalam.SgrBuilds() - before, 0)
+    b.free()
+end
+
 // Esc: the first press closes while closable, fires on_close and is
 // consumed. Once closed, a press is not consumed.
 func test_esc_closes_and_fires_on_close():
@@ -655,6 +704,8 @@ func main:
     test_scrim_keeps_every_sgr_parameter()
     test_scrim_on_unstyled_cell_is_dim_alone()
     test_percent_in_small_bounds_fills_bounds()
+    test_scrim_memo_builds_once_per_input_style()
+    test_scrim_memo_two_styles_two_builds()
     test_esc_closes_and_fires_on_close()
     test_not_closable_passes_esc()
     test_child_consuming_esc_keeps_open()
