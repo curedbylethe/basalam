@@ -720,28 +720,23 @@ end
 // reused, so a render that falls back adds no build. A style the caller
 // assigns is used verbatim and never builds.
 func test_sgr_defaults_probe():
-    // Prime both fallbacks: focused uses reverse video, unfocused uses
-    // bright-on-black.
-    mut lp := basalam.NewList(items3())
-    lp.set_bounds(rect(0, 0, 10, 3))
-    mut bp := basalam.NewBuffer(10, 3)
-    bp.focused = true
-    lp.render(bp, rect(0, 0, 10, 3))
-    bp.free()
-    mut lq := basalam.NewList(items3())
-    lq.set_bounds(rect(0, 0, 10, 3))
-    mut bq := basalam.NewBuffer(10, 3)
-    bq.focused = false
-    lq.render(bq, rect(0, 0, 10, 3))
-    bq.free()
-
-    primed := basalam.SgrBuilds()
+    // The first render builds both fallbacks, even though only the focused
+    // one is used: List computes selected and unselected up front.
     mut lf := basalam.NewList(items3())
     lf.set_bounds(rect(0, 0, 10, 3))
     mut bf := basalam.NewBuffer(10, 3)
     defer bf.free()
     bf.focused = true
+    before := basalam.SgrBuilds()
     lf.render(bf, rect(0, 0, 10, 3))
+    testing.AssertEqInt(basalam.SgrBuilds() - before, 2)
+
+    // A repeat render into the same buffer adds nothing.
+    primed := basalam.SgrBuilds()
+    lf.render(bf, rect(0, 0, 10, 3))
+    testing.AssertEqInt(basalam.SgrBuilds() - primed, 0)
+
+    // An unfocused render uses the other fallback and adds nothing.
     mut lu := basalam.NewList(items3())
     lu.set_bounds(rect(0, 0, 10, 3))
     mut bu := basalam.NewBuffer(10, 3)
@@ -763,6 +758,7 @@ func test_sgr_defaults_probe():
 end
 
 func main:
+    test_sgr_defaults_probe()
     test_defaults_selection()
     test_defaults_empty()
     test_nav_k01_j_inside_window()
@@ -805,7 +801,6 @@ func main:
     test_screen_focused_list_receives_j()
     test_screen_unfocused_list_does_not_consume()
     test_unicode_codepoint_clip()
-    test_sgr_defaults_probe()
     picks.free()
     ret testing.Summary()
 end
