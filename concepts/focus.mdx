@@ -47,7 +47,7 @@ screen.set_keymap(basalam.NewDefaultKeymap())
 screen.keymap.bind(term.Decode("n"), (screen: basalam.Screen*, event: basalam.Event): ret screen[0].focus_next() end)
 ```
 
-Every method returns `true` when the focus moved. Each focus change marks the screen dirty, so the next `present()` redraws both the old and the new focus indicator.
+Every method returns `true` when the focus moved. Each focus change queues the old bounds and the new bounds, so the next `present()` redraws those two indicators and leaves the rest of the screen.
 
 ### Linear: focus_next and focus_prev
 

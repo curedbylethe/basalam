@@ -143,7 +143,7 @@ pub func Lower(c: Color, tier: ColorTier): Color
 - Different kinds are never equal, even when they render alike: `Color.Indexed(196) != Color.Rgb(255, 0, 0)`.
 - `Color.Default` is not white and not any palette entry: `Color.Default != Color.Ansi(7)`.
 
-This is the equality the dirty-cell comparison will rely on once cells carry colors.
+Cell diffs compare the content string and the style string. This `Color` equality is what that comparison will use once cells carry colors.
 
 ## Encoding at a tier
 
