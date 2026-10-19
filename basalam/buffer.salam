@@ -121,6 +121,12 @@ pub struct Buffer:
     /// it once the front grid has caught up with the back grid.
     pub force_full: bool = true
 
+    // ansi()/diff() scratch. BufReset keeps the capacity; BufStr clones, so
+    // the returned str does not alias it. resize() keeps this builder.
+    // Only free() releases it. A copy shares data and has its own len, so
+    // only the owner may serialize.
+    out_buf: str.StringBuilder = str.StringBuilder {}
+
     @en "area"
     /// The rect covering the whole grid: (0, 0, width, height).
     pub func area(): Rect:
@@ -217,6 +223,13 @@ pub struct Buffer:
         this.front = fresh.front
         this.clip = fresh.clip
         this.force_full = fresh.force_full
+        // out_buf stays. fresh.out_buf is unused, so dropping fresh neither
+        // leaks nor frees this builder.
+    end
+
+    // BufReset out_buf for one serialization. Capacity stays.
+    func _reset_out():
+        str.BufReset(this.out_buf)
     end
 
     @en "ansi"
@@ -225,23 +238,22 @@ pub struct Buffer:
     /// only where it changes, and a final style reset. This is the entire
     /// frame; nothing is diffed against the previous one.
     pub func ansi(): str:
-        mut b := str.NewBuilder()
-        defer str.BufFree(b)
+        this._reset_out()
         mut style := ""
         repeat this.height in y:
-            str.BufAppend(b, term.SeqMoveTo(y + 1, 1))
+            str.BufAppend(this.out_buf, term.SeqMoveTo(y + 1, 1))
             repeat this.width in x:
                 c := this.cells.get(y * this.width + x)
                 if c.style != style:
-                    str.BufAppend(b, term.Reset)
-                    str.BufAppend(b, c.style)
+                    str.BufAppend(this.out_buf, term.Reset)
+                    str.BufAppend(this.out_buf, c.style)
                     style = c.style
                 end
-                str.BufAppend(b, c.ch)
+                str.BufAppend(this.out_buf, c.ch)
             end
         end
-        str.BufAppend(b, term.Reset)
-        ret str.BufStr(b)
+        str.BufAppend(this.out_buf, term.Reset)
+        ret str.BufStr(this.out_buf)
     end
 
     @en "diff"
@@ -255,8 +267,7 @@ pub struct Buffer:
         if this.force_full:
             ret this.ansi()
         end
-        mut b := str.NewBuilder()
-        defer str.BufFree(b)
+        this._reset_out()
         mut style := ""
         mut changed := false
         repeat this.height in y:
@@ -270,16 +281,16 @@ pub struct Buffer:
                     until e < this.width and this.cells.get(y * this.width + e) != this.front.get(y * this.width + e):
                         e += 1
                     end
-                    str.BufAppend(b, term.SeqMoveTo(y + 1, x + 1))
+                    str.BufAppend(this.out_buf, term.SeqMoveTo(y + 1, x + 1))
                     mut i := x
                     until i < e:
                         c := this.cells.get(y * this.width + i)
                         if c.style != style:
-                            str.BufAppend(b, term.Reset)
-                            str.BufAppend(b, c.style)
+                            str.BufAppend(this.out_buf, term.Reset)
+                            str.BufAppend(this.out_buf, c.style)
                             style = c.style
                         end
-                        str.BufAppend(b, c.ch)
+                        str.BufAppend(this.out_buf, c.ch)
                         i += 1
                     end
                     changed = true
@@ -288,9 +299,9 @@ pub struct Buffer:
             end
         end
         if changed:
-            str.BufAppend(b, term.Reset)
+            str.BufAppend(this.out_buf, term.Reset)
         end
-        ret str.BufStr(b)
+        ret str.BufStr(this.out_buf)
     end
 
     @en "commit"
@@ -321,6 +332,7 @@ pub struct Buffer:
     pub func free():
         this.cells.free()
         this.front.free()
+        str.BufFree(this.out_buf)
     end
 end
 
