@@ -18,8 +18,9 @@
  *
  * The screen supports two focus models side by side:
  *
- *   linear   focus_next / focus_prev walk the focusable widgets in ID
- *            order (the same order they paint in), wrapping around;
+ *   linear   focus_next / focus_prev walk the focusable widgets outside
+ *            hidden subtrees in ID order (the same order they paint in),
+ *            wrapping around;
  *   spatial  focus_up / focus_down / focus_left / focus_right move to the
  *            nearest focusable widget in that direction.
  *
