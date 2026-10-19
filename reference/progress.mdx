@@ -58,7 +58,7 @@ pub func render(buf: Buffer, bounds: Rect)
 | `preferred_size(max_width: int): Rect` | An unknown width and a height of one row, so a layout gives the bar the width it has. |
 | `render(buf: Buffer, bounds: Rect)` | Draws the bar into the row at `bounds.y`. |
 
-The screen calls `hits`, `preferred_size`, and `render`. You rarely call them yourself.
+The screen calls `hits` and `render`, and the layout engine calls `preferred_size`. You rarely call them yourself.
 
 ## Value
 
