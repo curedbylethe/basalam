@@ -20,6 +20,7 @@ frame.add(body)
 | `title` | `str` | `""` | Text on the top edge. Empty or whitespace-only means no title. |
 | `takes_focus` | `bool` | `false` | Makes the Panel a focus stop that passes keys to its child. |
 | `focus_style` | `Style` | `StyleDefault` | The frame's style while the Panel has focus. |
+| `slot` | `Vector<LayoutSlot>` | `Vector {}` | The one child, managed by `add`; do not set directly. |
 
 Set fields in a struct literal, or assign them later. A partial literal fills the rest with defaults.
 

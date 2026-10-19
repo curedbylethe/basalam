@@ -12,7 +12,7 @@ That order means widgets always win. A key a widget consumes never reaches a bin
 screen.set_keymap(basalam.NewDefaultKeymap())
 ```
 
-See [`dispatch`](/reference/screen#the-event-loop) for where the fallback sits in the event loop.
+See [`dispatch`](/reference/screen#the-event-loop) for where the fallback sits in the event loop. For task-oriented examples — installing the defaults, binding and scoping keys, sequences, and modes — see [The keymap](/guides/keymap).
 
 ## Keymap
 
@@ -41,6 +41,15 @@ Each call returns an independent map: rebinding one does not touch another.
 <Warning>
   Never copy a `Keymap` value. Salam has no move semantics and the fields hold raw `Vector` and `HashMap` pointers, so `mut b := a` makes two owners alias the same buffers and double-free. Create it with `NewKeymap`, install it with [`set_keymap`](#installing-and-extending), and release it with `free`.
 </Warning>
+
+### Fields
+
+| Field | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `pending_timeout_ms` | `int` | `0` | How long a pending sequence may wait for its next key, in milliseconds. A prefix older than this is dropped lazily, on the next `KeyEvent`; `0` never expires one. |
+| `pending_since_ms` | `int` | `0` | When the current pending sequence started waiting, maintained by the map. Public so tests can force a timeout without sleeping; applications set `pending_timeout_ms` instead. |
+
+See [Sequences](#sequences) for the full timeout behavior.
 
 ## Binding
 
