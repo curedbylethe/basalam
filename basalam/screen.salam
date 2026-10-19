@@ -283,6 +283,57 @@ pub struct Screen:
         this.focus_after_unraise()
     end
 
+    @en "raise_subtree"
+    /// Raises id and every descendant of id as one layer: one fresh stamp
+    /// for the whole subtree, so it paints above every other widget. Inside
+    /// the layer, ascending ID order keeps each parent before its children.
+    /// Focus follows raise: when the current focus is outside the layer's
+    /// focus order, it moves to that order's first id and the old focus is
+    /// saved for unraise_subtree. An id that is not in the tree, including
+    /// NoWidget, does nothing.
+    /// Rejected: a public subtree query followed by raise(), which is two
+    /// calls on every modal open. Also rejected: a blocking-owner field that
+    /// dispatch and hit_test consult, which duplicates the geometric block
+    /// and can fall out of step with it.
+    pub func raise_subtree(id: int):
+        if not this.tree.valid(id):
+            ret
+        end
+        ids := this.subtree_ids(id)
+        defer ids.free()
+        this.raise(ids)
+    end
+
+    @en "unraise_subtree"
+    /// Clears the stamp of id and every descendant to 0, returning them to
+    /// plain ID order, and restores focus exactly as unraise does. An id
+    /// that is not in the tree, including NoWidget, does nothing.
+    pub func unraise_subtree(id: int):
+        if not this.tree.valid(id):
+            ret
+        end
+        ids := this.subtree_ids(id)
+        defer ids.free()
+        this.unraise(ids)
+    end
+
+    // Ids of id and of every widget whose ancestor chain reaches id, in
+    // ascending order. Parents have lower ids than children, so the walk
+    // up always ends. The caller frees the vector.
+    func subtree_ids(id: int): Vector<int>:
+        mut ids := Vector {} as Vector<int>
+        repeat this.tree.count() in c:
+            mut a := c
+            until a != NoWidget and a != id:
+                a = this.tree.parent(a)
+            end
+            if a == id:
+                ids.push(c)
+            end
+        end
+        ret ids
+    end
+
     @en "widget"
     /// The widget with this ID (the root for an invalid ID).
     pub func widget(id: int): dyn Widget:

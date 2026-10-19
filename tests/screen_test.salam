@@ -409,6 +409,90 @@ func test_resize_event_relayouts_container():
     assert_rect(bottom.bounds(), 0, 6, 30, 6)
 end
 
+// Six widgets on a 6-cell row. 1 is a focusable sibling and holds focus.
+// 2 is an overlay with focusable children 3 and 4. 5 is a sibling added
+// after the overlay. Every widget covers the whole row.
+func subtree_screen(): basalam.Screen:
+    mut s := basalam.NewScreen(ZBox { mark = "0" }, 6, 1)
+    _ := s.add(basalam.RootId, ZBox { mark = "1", can_focus = true })
+    overlay := s.add(basalam.RootId, ZBox { mark = "2" })
+    _ := s.add(overlay, ZBox { mark = "3", can_focus = true })
+    _ := s.add(overlay, ZBox { mark = "4", can_focus = true })
+    _ := s.add(basalam.RootId, ZBox { mark = "5" })
+    full := rect(0, 0, 6, 1)
+    repeat s.tree.count() in id:
+        s.widget(id).set_bounds(full)
+    end
+    ret s
+end
+
+// The subtree is one layer above the siblings, and the parent paints
+// before its children inside it.
+func test_raise_subtree_paint_order():
+    mut s := subtree_screen()
+    defer s.close()
+    testing.AssertEqStr(painted(s), "012345")
+    s.raise_subtree(2)
+    testing.AssertEqStr(painted(s), "015234")
+    s.unraise_subtree(2)
+    testing.AssertEqStr(painted(s), "012345")
+end
+
+// 5 covers the same cell as the overlay's children but sits outside the
+// layer, so the topmost subtree member wins the hit.
+func test_raise_subtree_hit_test():
+    mut s := subtree_screen()
+    defer s.close()
+    testing.AssertEqInt(s.hit_test(0, 0), 5)
+    s.raise_subtree(2)
+    testing.AssertEqInt(s.hit_test(0, 0), 4)
+    s.unraise_subtree(2)
+    testing.AssertEqInt(s.hit_test(0, 0), 5)
+end
+
+// A childless widget raised as a subtree paints exactly as raise([id]).
+func test_raise_subtree_leaf_matches_raise():
+    mut s := subtree_screen()
+    defer s.close()
+    s.raise_subtree(1)
+    testing.AssertEqStr(painted(s), "023451")
+    testing.AssertEqInt(s.focused_id(), 1)
+    s.unraise_subtree(1)
+    testing.AssertEqStr(painted(s), "012345")
+    ids := id_vec(1, 1, 0)
+    s.raise(ids)
+    testing.AssertEqStr(painted(s), "023451")
+    s.unraise(ids)
+    ids.free()
+    testing.AssertEqStr(painted(s), "012345")
+end
+
+// Focus moves to the layer's first focusable widget and returns to the
+// previous focus on unraise.
+func test_raise_subtree_focus():
+    mut s := subtree_screen()
+    defer s.close()
+    testing.AssertEqInt(s.focused_id(), 1)
+    s.raise_subtree(2)
+    testing.AssertEqInt(s.focused_id(), 3)
+    s.unraise_subtree(2)
+    testing.AssertEqInt(s.focused_id(), 1)
+end
+
+// Ids outside the tree, and NoWidget, change nothing and do not crash.
+func test_raise_subtree_ignores_unknown_ids():
+    mut s := subtree_screen()
+    defer s.close()
+    testing.AssertEqStr(painted(s), "012345")
+    s.raise_subtree(99)
+    s.raise_subtree(basalam.NoWidget)
+    s.unraise_subtree(99)
+    s.unraise_subtree(basalam.NoWidget)
+    testing.AssertFalse(s.dirty)
+    testing.AssertEqStr(painted(s), "012345")
+    testing.AssertEqInt(s.focused_id(), 1)
+end
+
 func main:
     test_new_screen_fits_root()
     test_events_flow_through_channel()
@@ -424,5 +508,10 @@ func main:
     test_resize_event_relayouts_container()
     test_raise_paint_order()
     test_hits_false_still_paints()
+    test_raise_subtree_paint_order()
+    test_raise_subtree_hit_test()
+    test_raise_subtree_leaf_matches_raise()
+    test_raise_subtree_focus()
+    test_raise_subtree_ignores_unknown_ids()
     ret testing.Summary()
 end
