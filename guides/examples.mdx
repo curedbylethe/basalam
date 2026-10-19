@@ -1,0 +1,258 @@
+---
+title: "Annotated examples"
+description: "Read the hello program in full and the demo in annotated excerpts: widgets, manual layout, resize, ticks, and focus."
+keywords: ["examples", "demo", "hello", "tutorial", "annotated"]
+---
+
+The repository's `examples/` directory holds two runnable programs, both built by `make examples`. Each source file carries inline annotations, and this page walks them: `hello.salam` in full, then the parts of `demo.salam` worth explaining. The [full demo source](https://github.com/curedbylethe/basalam/blob/main/examples/demo.salam) is on GitHub.
+
+## Hello: the smallest program
+
+`examples/hello.salam` is the whole library in 48 lines: one widget, the event loop, and a clean exit on `q`. The file opens with the project's license header; the program starts below it. Its include path, `../basalam/basalam.salam`, is relative to the file inside `examples/`.
+
+```salam
+/*
+ * basalam - a terminal user interface library for Salam (2026)
+ *
+ *   +-------------------+
+ *   |   B A S A L A M   |
+ *   +-------------------+
+ *
+ * Built on the Salam standard library's std/term package
+ * Salam: https://github.com/SalamLang/Salam
+ *
+ * Repository: https://github.com/curedbylethe/basalam
+ * License: GPL-3.0-or-later
+ *
+ */
+
+// The smallest complete basalam program: one widget, the event loop, and a
+// clean exit on q.
+//
+//     salam build examples/hello.salam && ./hello
+
+import term
+
+include "../basalam/basalam.salam"
+
+struct Hello:
+    pub use basalam.BaseWidget
+
+    pub func render(buf: basalam.Buffer, bounds: basalam.Rect):
+        buf.put_str(2, 1, "Hello from basalam!", term.Sgr(term.StyleBold))
+        buf.put_str(2, 3, "Screen size: " + bounds.width + "x" + bounds.height, "")
+        buf.put_str(2, 4, "Press q to quit.", "")
+    end
+end
+
+func main:
+    mut screen := basalam.NewTerminalScreen(Hello {})
+    screen.start()
+    defer screen.close()
+
+    screen.present()
+    mut ev := basalam.Event {}
+    until screen.next_event(ev):
+        if not screen.dispatch(ev) and ev.is_char("q"):
+            screen.stop()
+        end
+        screen.present()
+    end
+end
+```
+
+What to notice:
+
+- `Hello` embeds `BaseWidget`, so it already satisfies every widget method; it overrides only `render`.
+- `render` receives the buffer to draw into and the widget's `bounds`. Drawing into a buffer, never the terminal, is what keeps widgets testable.
+- `put_str` writes a string at a cell with a style. `term.Sgr(term.StyleBold)` builds that style; writing escape sequences by hand is never necessary.
+- `NewTerminalScreen` makes `Hello` the root widget and sizes it to the terminal.
+- `start()` switches the terminal to raw mode and the alternate screen. `defer screen.close()` restores all of it on every exit path, including a crash.
+- `next_event` blocks for one event and fills `ev`; `dispatch` offers it to the widgets.
+- `Hello` consumes nothing, so `q` reaches the loop unconsumed and `stop()` ends it.
+
+## The demo: panels, resize, ticks, focus
+
+`examples/demo.salam` is 170 lines. These are the parts that need commentary; the [full source](https://github.com/curedbylethe/basalam/blob/main/examples/demo.salam) has the rest.
+
+### Application state lives in globals
+
+```salam
+// Application state lives in globals: the main loop updates it and the
+// root widget reads it when drawing. (Salam cannot downcast a dyn widget,
+// so state the application changes from outside a widget is shared this
+// way or through events.)
+mut last_key := "none"
+mut seconds := 0
+```
+
+Salam cannot downcast a `dyn` widget back to a concrete type, so if the main loop wants to change state a widget then reads, a shared global or an event is the way. The loop updates these two; the root widget reads them while drawing.
+
+### A root that draws the frame
+
+```salam
+// The root widget: a reverse-video title bar on the first row and a status
+// line on the last. It covers the whole screen and consumes nothing, so
+// unhandled keys reach the main loop.
+struct App:
+    pub use basalam.BaseWidget
+
+    pub func render(buf: basalam.Buffer, bounds: basalam.Rect):
+        bar := term.Sgr(term.StyleReverse)
+        top := basalam.Rect { x = bounds.x, y = bounds.y, width = bounds.width, height = 1 }
+        buf.fill(top, " ", bar)
+        buf.put_str(bounds.x + 1, bounds.y, "basalam " + basalam.Version + " demo", bar)
+        status := "key: " + last_key + " | " + bounds.width + "x" + bounds.height + " | " + seconds + "s | Tab/arrows focus, Enter press, q quit"
+        buf.put_str(bounds.x + 1, bounds.bottom() - 1, status, term.Sgr(term.StyleDim))
+    end
+end
+```
+
+`App` covers the whole screen and draws a reverse-video title bar on the first row and a dim status line on the last. It consumes nothing, so every key it does not handle bubbles up to the loop.
+
+### The frame is the focus stop
+
+```salam
+// The body of a panel: a line that counts Enter and Space presses. The frame
+// around it is a library Panel with takes_focus set, so the Panel holds the
+// focus and forwards the keys here; this body is not a focus stop itself.
+struct Body:
+    pub use basalam.BaseWidget
+    pub presses: int = 0
+
+    pub func handle_event(event: basalam.Event): bool:
+        if event.is_key(term.KeyEnter) or event.is_key(term.KeySpace):
+            this.presses += 1
+            ret true
+        end
+        ret false
+    end
+
+    pub func render(buf: basalam.Buffer, bounds: basalam.Rect):
+        buf.put_str(bounds.x + 1, bounds.y, "presses: " + this.presses, "")
+    end
+end
+```
+
+`Body` counts `Enter` and `Space`. The frame around it is a library `Panel` with `takes_focus` set, so the Panel holds the focus and forwards keys to its body; the body is never a focus stop of its own, and focus reaches it only through its frame.
+
+### Layout by hand
+
+```salam
+// The application's layout: two panels side by side, and a wide one under
+// them, between the title bar and the status line. The core has no layout
+// engine; this is the "set_bounds directly" approach the core is designed
+// for.
+func arrange(screen: basalam.Screen, left: int, right: int, bottom: int):
+    w := screen.buffer.width
+    h := screen.buffer.height - 3
+    half := w / 2
+    top_h := h - h / 3
+    screen.widget(left).set_bounds(basalam.Rect { x = 1, y = 2, width = half - 1, height = top_h })
+    screen.widget(right).set_bounds(basalam.Rect { x = half + 1, y = 2, width = w - half - 2, height = top_h })
+    screen.widget(bottom).set_bounds(basalam.Rect { x = 1, y = 2 + top_h, width = w - 2, height = h - top_h })
+end
+```
+
+`arrange` measures the current buffer and places two panels side by side with a wide one under them, between the title row and the status row. The core ships containers, but this is the direct `set_bounds` approach the demo is built on, and the loop calls `arrange` again after every resize.
+
+### A frame takes its body as a child
+
+```salam
+// Adds a framed panel under the root and returns the frame's ID. The body is
+// added first, so the frame can take it as its child; the frame is the focus
+// stop and draws the green frame while it has focus.
+func framed(screen &: basalam.Screen, label: str): int:
+    body := screen.add(basalam.RootId, Body {})
+    mut frame := basalam.Panel { border = basalam.BorderStyle.Single, title = label, takes_focus = true, focus_style = basalam.Style { fg = basalam.Green } }
+    frame.add(screen.widget(body))
+    ret screen.add(basalam.RootId, frame)
+end
+```
+
+`framed` adds the body first so the frame can take it as its child, then adds the frame and returns its ID. The frame, not the body, is the focus stop, and `focus_style` paints its border green while it has focus.
+
+### The loop
+
+```salam
+func main:
+    if not term.IsTTY(term.StdinFd) or not term.IsTerminal():
+        printerrln "demo: needs an interactive terminal"
+        ret 1
+    end
+
+    root := App {} as dyn basalam.Widget
+    mut screen := basalam.NewTerminalScreen(root)
+    screen.tick_ms = 1000
+    // Opt in to the library's default focus bindings: Tab and the four arrow
+    // keys are handled by the keymap as a dispatch fallback, after the panels.
+    screen.set_keymap(basalam.NewDefaultKeymap())
+    left := framed(screen, "Left")
+    right := framed(screen, "Right")
+    bottom := framed(screen, "Bottom")
+
+    screen.start()
+    // From here on, every return path restores the terminal.
+    defer screen.close()
+
+    arrange(screen, left, right, bottom)
+    screen.present()
+
+    mut ev := basalam.Event {}
+    until screen.next_event(ev):
+        consumed := screen.dispatch(ev)
+        if ev.kind == basalam.ResizeEvent:
+            arrange(screen, left, right, bottom)
+        end
+        if ev.kind == basalam.TickEvent:
+            seconds += 1
+        end
+        if ev.kind == basalam.KeyEvent:
+            last_key = describe(ev.key)
+        end
+        // Tab and the arrows are consumed by the keymap, and Enter/Space by
+        // the focused panel, so only q and Ctrl+C reach here unconsumed, and
+        // they quit.
+        if not consumed:
+            if ev.is_char("q") or ev.is_ctrl("c"):
+                screen.stop()
+            end
+        end
+        screen.present()
+    end
+    ret 0
+end
+```
+
+- The TTY guard exits before touching the terminal when standard input is not interactive.
+- `tick_ms = 1000` asks for a tick once a second, which the loop counts into the status line.
+- `set_keymap(basalam.NewDefaultKeymap())` opts in to the default focus bindings, so the panels themselves never handle `Tab` or the arrows.
+- `start()` then `defer screen.close()` brackets every return path.
+- Each event is dispatched once. A `ResizeEvent` re-runs `arrange`, a `TickEvent` advances the counter, and a `KeyEvent` names the key.
+- Only `q` and `Ctrl+C` arrive unconsumed, and they stop the screen. The keymap takes `Tab` and the arrows, the focused panel takes `Enter` and `Space`.
+
+## Run them
+
+From a clone of the repository:
+
+```bash
+make examples   # builds build/examples/hello and build/examples/demo
+make run        # builds and runs the demo
+```
+
+Or build one program directly:
+
+```bash
+salam build examples/hello.salam --output=hello
+./hello
+```
+
+The demo refuses to start when standard input is not a terminal, so `make run` needs a real one.
+
+## Where next
+
+- [Quickstart](/quickstart): vendor the library and build your own first program.
+- [The event loop](/concepts/event-loop): how input reaches `dispatch`.
+- [Focus](/concepts/focus): the linear and spatial navigation the demo's keymap drives.
+- [Layout](/reference/layout): the containers the demo leaves to you.
+- [The keymap](/guides/keymap): install, bind, and scope your own keys.
