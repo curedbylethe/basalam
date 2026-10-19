@@ -45,7 +45,7 @@ pub func NewTerminalScreen(root: dyn Widget): Screen
 
 | Method | Description |
 | --- | --- |
-| `add(parent: int, w: dyn Widget): int` | Adds `w` under `parent` (`RootId` for top level) and returns its ID. Unraised widgets paint in the order you add them. The first focusable widget added while nothing has focus receives it. |
+| `add(parent: int, w: dyn Widget): int` | Adds `w` under `parent` (`RootId` for top level) and returns its ID. Unraised widgets paint in the order you add them. The first reachable focusable widget added while nothing has focus receives it; a child of a hidden container is skipped. |
 | `widget(id: int): dyn Widget` | The widget with this ID; the root for an invalid ID. |
 | `focused_id(): int` | The ID of the focused widget, or `NoWidget` when nothing has focus (events then start at the root). |
 | `hit_test(x: int, y: int): int` | The ID of the widget drawn at cell (`x`, `y`), or `NoWidget`. See [Hit testing](#hit-testing). |
@@ -58,10 +58,10 @@ See [Focus](/concepts/focus) for the rules behind these methods.
 
 | Method | Description |
 | --- | --- |
-| `focus(id: int): bool` | Focuses `id`, replacing the top of the focus stack. `false` if `id` is not focusable. |
-| `push_focus(id: int): bool` | Focuses `id` and remembers the previous focus underneath it. |
+| `focus(id: int): bool` | Focuses `id`, replacing the top of the focus stack. `false` if `id` is not focusable or sits under a hidden container. |
+| `push_focus(id: int): bool` | Focuses `id` and remembers the previous focus underneath it. Refuses an id under the same conditions as `focus`. |
 | `pop_focus(): bool` | Returns to the focus before the last `push_focus`. `false` if the stack is empty. |
-| `can_focus(id: int): bool` | Whether `id` names a focusable widget. |
+| `can_focus(id: int): bool` | Whether `id` names a valid, focusable widget with no hidden ancestor. |
 | `focus_next(): bool` / `focus_prev(): bool` | Next or previous widget in the [focus order](#raise), wrapping inside it. Not always ID order. |
 | `focus_up(): bool` / `focus_down(): bool` / `focus_left(): bool` / `focus_right(): bool` | Nearest widget in that direction, chosen from the focus order. |
 
@@ -80,11 +80,11 @@ pub func unraise_subtree(id: int)
 
 `raise` assigns every id in the call one fresh stamp, shared by the whole call, so those widgets are one layer above everything raised earlier and above every unraised widget. Within the layer, paint order stays ID order. Paint order overall is ascending `(stamp, id)`: a lower stamp paints first, and the same stamp paints in ID order. An id that is not in the tree is recorded and does not crash. It affects painting only once that id is registered.
 
-The focus order is the focusable widgets in the topmost stamp layer, ascending id. When nothing is raised, or that layer has no focusable widget, the order is every focusable widget, ascending id. `focus_next` and `focus_prev` wrap inside that order. A focus outside the order jumps to the first entry on `focus_next` and the last on `focus_prev`. The spatial methods search the same order.
+The focus order is the focusable widgets in the topmost stamp layer, ascending id. When nothing is raised, or that layer has no focusable widget, the order is every focusable widget, ascending id. Only widgets that pass `can_focus` are in it, so a hidden container removes its whole subtree: a closed [Modal](/reference/modal)'s child is not in the order. `focus_next` and `focus_prev` wrap inside that order. A focus outside the order jumps to the first entry on `focus_next` and the last on `focus_prev`. The spatial methods search the same order.
 
 When that order is non-empty and the current focus is outside it, `raise` saves one restore id (the current focus) and moves to the first id of the new order. There is only one saved id. A later `raise` that also moves the focus replaces it. Otherwise `raise` leaves the focus and the saved id unchanged. The move uses `focus`, so it replaces the top of the stack. It does not `push_focus`.
 
-`unraise` writes stamp `0` on every id, so those widgets return to plain ID order. It is idempotent: an id that was not raised, or that is not in the tree, stays at `0`. It does not rewind the stamp counter, so a later `raise` is still a new layer. When nothing remains raised, it focuses the saved id if that widget is still focusable, otherwise the first focusable widget, and then clears the saved id. If the saved id is not focusable and nothing else is, it clears the focus. While a layer remains, it leaves the focus alone when the current focus is still in the new order. Otherwise it focuses the first id of that order, or clears the focus when the order is empty.
+`unraise` writes stamp `0` on every id, so those widgets return to plain ID order. It is idempotent: an id that was not raised, or that is not in the tree, stays at `0`. It does not rewind the stamp counter, so a later `raise` is still a new layer. When nothing remains raised, it focuses the saved id if `can_focus` accepts it, otherwise the first focusable widget, and then clears the saved id. If the saved id is not focusable and nothing else is, it clears the focus. While a layer remains, it leaves the focus alone when the current focus is still in the new order. Otherwise it focuses the first id of that order, or clears the focus when the order is empty.
 
 `raise_subtree(id: int)` and `unraise_subtree(id: int)` do the same for a widget and every descendant of it. `raise_subtree` gives the whole subtree one fresh stamp, so it is one layer above everything else, and inside the layer each parent still paints before its children. `unraise_subtree` returns the subtree to plain ID order. Both follow the focus rules of `raise` and `unraise`: `raise_subtree` moves the focus into the layer and saves the old one, and `unraise_subtree` restores it. An id that is not in the tree, including `NoWidget`, does nothing. A [Modal](/reference/modal) opens with `push_focus` and then `raise_subtree`, and closes with `unraise_subtree` and then `pop_focus`.
 

@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `Widget.visible()`: `true` when the widget is on screen, `false` when it is
+  hidden. Focus eligibility asks every widget on the path to the root, so one
+  hidden widget removes its whole subtree from focus navigation. The
+  `BaseWidget` default returns `true`, so every existing widget keeps its
+  behaviour; `Modal` reports its shared open state.
 - `Screen.invalidate(id)`: queues a repaint of that widget's bounds. An
   unknown id, or an empty rect, marks the whole screen. Legal before
   `start()`. (CUR-226)
@@ -239,6 +244,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   cells-still-raw boundary.
 - The layout, screen, widget, focus, and architecture pages describe weights,
   gap, measurement, grid spanning, and overlay order.
+
+### Fixed
+
+- Focus navigation skips every descendant of a hidden container. `can_focus`,
+  `focus`, `push_focus`, `focus_next`, `focus_prev`, and the spatial methods
+  consider only widgets whose whole ancestor chain reports `visible()`, so the
+  child of a closed Modal is no longer reachable by `Tab`, `Shift-Tab`, or an
+  arrow key.
 
 ## [0.1.0] - 2026-10-06
 
