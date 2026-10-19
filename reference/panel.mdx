@@ -1,7 +1,7 @@
 ---
 title: "Panel"
-description: "The Panel widget: a single child framed by a border ring, inset by the border's cost, with an optional title and an opt-in focus stop whose frame changes color while focused."
-keywords: ["panel", "frame", "border", "decorator", "title", "focus", "focus_style", "takes_focus", "inset"]
+description: "The Panel widget: a single child framed by a border ring, inset by the border's cost, reporting a preferred size from the child plus that frame, with an optional title and an opt-in focus stop whose frame changes color while focused."
+keywords: ["panel", "frame", "border", "decorator", "title", "focus", "focus_style", "takes_focus", "inset", "preferred_size", "size"]
 ---
 
 `Panel` frames one child. It draws a [border](/reference/border) ring around its rectangle, insets the child by the ring's cost, and paints nothing else. It is a decorator, not a layout engine: it holds one child, and several children go in a [`Column` or `Row`](/reference/layout) inside it.
@@ -65,7 +65,15 @@ mut frame := basalam.Panel {
 
 ## Size
 
-`Panel` reports no natural size, so it fills the space its parent gives it. Give it a size through its parent's layout, or by calling `set_bounds` directly.
+`Panel` reports a [preferred size](/reference/widget) taken from its child: the child's preferred size plus `BorderInset(border)` on each side. The inset rule is in [Inset](#inset). With a [border](/reference/border) of `BorderStyle.None` nothing is added, so the Panel reports the child's size unchanged.
+
+A child that cannot measure leaves the Panel's answer at `-1` for that axis, so the Panel fills that axis. A child that measures one axis only, such as `Progress`, makes the Panel size that axis and fill the other. A Panel with no child still fills both axes.
+
+In a [`Row` or `Column`](/reference/layout), a main-axis `Pref` slot shrinks the Panel to that size. A cross axis left at `Stretch` still fills; a cross `Start`, `Center`, or `End` uses the measured extent instead.
+
+The `max_width` the Panel receives is reduced by the frame on each side before the child is asked, never below 1. The Panel may report a size larger than the space available; the consumer clamps it.
+
+`title` does not affect the size, and a long title is still truncated on the top edge.
 
 ## Framing a focusable child
 
