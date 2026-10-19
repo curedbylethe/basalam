@@ -1,0 +1,139 @@
+---
+title: "Checkbox"
+description: "The one-row Checkbox widget: a boolean toggle drawn as [x] or [ ] with a label, toggled by Space or a left click."
+keywords: ["checkbox", "checked", "toggle", "on_toggle", "set_checked", "disabled", "focus", "boolean"]
+---
+
+`Checkbox` draws a one-row boolean toggle, `[x] label` when checked or `[ ] label` when not, into a [buffer](/reference/buffer). It holds a private checked state, a label, two [`Style`](/reference/style) values, a disabled flag, and an `on_toggle` callback. It is focusable, so the [screen's focus dispatch](/concepts/focus) routes keyboard events to it while it is focused. It is the fifth concrete widget, after [Text](/reference/text), [Input](/reference/input), [List](/reference/list) and [Button](/reference/button).
+
+```salam
+mut notify := false
+
+mut c := basalam.NewCheckbox("Notify me", false)
+c.on_toggle = (v: bool): notify = v end
+_ := screen.add(basalam.RootId, c)
+```
+
+While the checkbox is focused, `Space` toggles it. A left click inside the checkbox also toggles it, whether or not it has focus.
+
+## Checkbox
+
+`Checkbox` embeds [BaseWidget](/reference/widget), overrides the default `render`, and adds `focusable`, `hits`, `handle_event`, `checked`, `set_checked`, and `preferred_size`; it inherits `bounds` and `set_bounds` unchanged.
+
+```salam
+pub struct Checkbox:
+    pub use BaseWidget
+
+    pub label: str = ""
+    pub box_style: Style = StyleDefault
+    pub label_style: Style = StyleDefault
+    pub disabled: bool = false
+    pub on_toggle: func (bool) = (v: bool): end
+end
+```
+
+<ResponseField name="label" type="str">The text drawn after the three-cell mark and a one-cell spacer. `""` draws the mark alone. The default is `""`.</ResponseField>
+<ResponseField name="box_style" type="Style">The `Style` value for the three mark cells: `[`, the state glyph, and `]`. The default is `StyleDefault`.</ResponseField>
+<ResponseField name="label_style" type="Style">The `Style` value for the spacer, the label, and the trailing fill of the row. The default is `StyleDefault`.</ResponseField>
+<ResponseField name="disabled" type="bool">When `true`, the checkbox leaves the focus order, takes no clicks, ignores every event, and draws its row dim. The default is `false`.</ResponseField>
+<ResponseField name="on_toggle" type="func (bool)">Called with the new checked value after every toggle. The default does nothing.</ResponseField>
+
+The checked state is private. Read it with `checked()` and change it with `set_checked()` or by toggling.
+
+### Methods
+
+```salam
+pub func NewCheckbox(label: str, checked: bool): Checkbox
+pub func checked(): bool
+pub func set_checked(value: bool)
+pub func focusable(): bool
+pub func hits(): bool
+pub func preferred_size(max_width: int): Rect
+pub func handle_event(event: Event): bool
+pub func render(buf: Buffer, bounds: Rect)
+```
+
+| Method | Description |
+| --- | --- |
+| `NewCheckbox(label: str, checked: bool): Checkbox` | Creates an enabled checkbox with the given label and initial checked state, default styles, and a no-op `on_toggle`. |
+| `checked(): bool` | The current checked state. |
+| `set_checked(value: bool)` | Sets the checked state. It does not call `on_toggle`. It still works while the checkbox is disabled. |
+| `focusable(): bool` | `true` when the checkbox is enabled and its width is greater than zero. |
+| `hits(): bool` | `true` when the checkbox is enabled. A disabled checkbox lets a click fall through. |
+| `preferred_size(max_width: int): Rect` | The label width plus four cells (the three mark cells and the spacer), one row tall. When `max_width > 0`, the width is clamped to `max_width`. |
+| `handle_event(event: Event): bool` | Handles toggling as described under [Keyboard](#keyboard). Returns `true` when it toggles. |
+| `render(buf: Buffer, bounds: Rect)` | Draws the row at `bounds.y`. |
+
+The screen calls `focusable`, `hits`, `handle_event`, and `render`. You rarely call them yourself.
+
+## Keyboard
+
+`Checkbox` is focusable, so key presses reach it through dispatch only while it is focused. `handle_event` reacts as follows:
+
+| Key | Effect | Consumed |
+| --- | --- | --- |
+| `Space` | Toggles the checked state and calls `on_toggle` with the new value. | Yes |
+| `Enter` | Nothing. The host can use `Enter`, for example to submit a form. | No: the event bubbles to ancestors |
+| Anything else | Nothing. | No: the event bubbles to ancestors |
+
+Only `Space` toggles the checkbox from the keyboard.
+
+## Mouse
+
+A left press inside the checkbox's bounds toggles it and is consumed. Mouse activation does not need focus. Mouse routing never moves focus, so a click on an unfocused checkbox toggles it and leaves the focus where it was.
+
+## Focus
+
+`focusable()` returns `true` only when the checkbox is enabled and its width is greater than zero. A checkbox with zero width is not focusable, so give it bounds before you expect it to take focus. Once a layout gives it a width, it takes part in focus navigation normally.
+
+The checkbox reads focus from the buffer at render time and stores none. While it is focused and enabled, the whole row draws bold.
+
+## States
+
+A checked checkbox draws `[x]` in its first three cells, and an unchecked one draws `[ ]`. Cell 3 is a spacer, and the label starts at cell 4:
+
+```text
+[x] Notify me
+[ ] Notify me
+```
+
+Rendering never changes the checked state. Only toggles and `set_checked` change it.
+
+## Style
+
+The row has two styles:
+
+- `box_style` applies to the three mark cells, `[`, the state glyph, and `]`.
+- `label_style` applies to the spacer, the label, and the trailing fill of the row.
+
+While the checkbox is focused and enabled, bold is added to both styles. While it is disabled, dim is added to both. The overlay only adds attributes, so a bold or dim that you set in a style stays on.
+
+A narrow row clips each cell to the width. The label is clipped first, and then the mark cells are clipped from the right. A checkbox with a width of zero draws nothing.
+
+## Example
+
+A buffer is plain memory, so you can toggle and render a checkbox without a terminal:
+
+```salam
+import term
+include "basalam/basalam.salam"
+
+func key(seq: str): basalam.Event:
+    ret basalam.Event { kind = basalam.KeyEvent, key = term.Decode(seq) }
+end
+
+func main:
+    mut c := basalam.NewCheckbox("Notify me", false)
+    println c.handle_event(key(" ")) // true: Space toggles
+    println c.checked() // true
+
+    mut buf := basalam.NewBuffer(14, 1)
+    defer buf.free()
+    c.render(buf, basalam.Rect { width = 14, height = 1 })
+    println "[" + buf.row_text(0) + "]" // [[x] Notify me ]
+end
+```
+
+<Note>
+  A `dyn basalam.Widget` cannot be downcast back to a `Checkbox`. Keep a concrete `Checkbox` reference, or a shared value such as a `mut` global, to read `checked()` or call `set_checked()`.
+</Note>

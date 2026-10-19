@@ -9,7 +9,7 @@ basalam is a library for building terminal user interfaces in [Salam](https://gi
 It sits on top of Salam's standard `term` package. `term` already handles raw mode, escape sequences, colors, and key decoding. basalam adds the parts a full-screen application needs on top: geometry, widgets, events, focus, and a screen that draws frames.
 
 <Note>
-  basalam is at version 0.1.0 and under active development. This release covers the core (epic 1), the first concrete widgets (`Text`, `Input`, and `List`), the layout engine (`Row`, `Column`, `Grid`, and `Stack`), and an opt-in keymap with `NewDefaultKeymap`. More widgets are planned for later releases.
+  basalam is at version 0.1.0 and under active development. This release covers the core (epic 1), the concrete widgets (`Text`, `Input`, `List`, `Button`, `Checkbox`, and `Progress`), the layout engine (`Row`, `Column`, `Grid`, and `Stack`), and an opt-in keymap with `NewDefaultKeymap`. More widgets are planned for later releases.
 </Note>
 
 ## Design in brief
@@ -30,6 +30,9 @@ It sits on top of Salam's standard `term` package. `term` already handles raw mo
 | `Text` widget | Available; the first concrete widget |
 | `Input` widget | Available; single-line text entry |
 | `List` widget | Available; single-selection scrollable list with vim navigation |
+| `Button` widget | Available; one-row action button with Enter, Space and click activation |
+| `Checkbox` widget | Available; one-row boolean toggle with Space and click toggling |
+| `Progress` widget | Available; one-row buffer-drawn progress bar with a percent tail |
 | Layout engine (`Row`, `Column`, `Grid`, `Stack`) | Available; containers assign their children's bounds |
 | `Event` type, helpers, and bubbling dispatch | Available |
 | Widget tree with integer IDs | Available |

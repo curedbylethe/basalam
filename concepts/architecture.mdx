@@ -80,8 +80,8 @@ Each box has one job:
 ## Current limits
 
 <Warning>
-  The buffer diffs per cell at flush time; there is no dirty-region or rectangle tracking yet, so a frame with one changed cell still scans the whole grid to find it. Styles are raw SGR strings in the buffer — the [Style](/reference/style) type exists and `Text` draws with it, but cells and the other widgets still pass strings. Each cell holds one codepoint assumed to be one column wide, so wide characters are not supported (epic 2), nor is cursor placement for text input. The `Widget.render` contract will not change when these land.
+  The buffer diffs per cell at flush time; there is no dirty-region or rectangle tracking yet, so a frame with one changed cell still scans the whole grid to find it. Styles are raw SGR strings in the buffer — the [Style](/reference/style) type exists and `Text`, `Button`, `Checkbox`, and `Progress` draw with it, but cells, `Input`, and `List` still pass strings. Each cell holds one codepoint assumed to be one column wide, so wide characters are not supported (epic 2), nor is cursor placement for text input. The `Widget.render` contract will not change when these land.
 </Warning>
 
 - The tree cannot remove or reparent widgets.
-- The layout engine lives in `basalam/layout.salam`: the [Row, Column, Grid, and Stack](/reference/layout) containers compute and assign their children's bounds, though they position children rather than paint them. Concrete widgets such as `Text`, `Input`, and `List` draw strictly inside the bounds they receive.
+- The layout engine lives in `basalam/layout.salam`: the [Row, Column, Grid, and Stack](/reference/layout) containers compute and assign their children's bounds, though they position children rather than paint them. Concrete widgets such as `Text`, `Input`, `List`, `Button`, `Checkbox`, and `Progress` draw strictly inside the bounds they receive.

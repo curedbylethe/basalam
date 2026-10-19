@@ -35,6 +35,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   focused, bright black on a black background while not), vim `j`/`k`
   navigation clamped at the ends, and minimal scrolling that keeps the
   selection visible.
+- `Button`: a focusable, one-row action widget drawn as `[ label ]`, with
+  `NewButton`, `label`, `style`, `focus_style`, `disabled`, `on_click`,
+  `focusable`, `hits`, `handle_event`, `preferred_size`, and `render`. Enter,
+  Space, and a left click inside its bounds call `on_click`; a click moves no
+  focus. Focus draws bold, or `focus_style` when set. A disabled button leaves
+  the focus order and ignores input.
+- `Checkbox`: a focusable, one-row boolean toggle drawn as `[x] label` or
+  `[ ] label`, with `NewCheckbox`, `checked`, `set_checked`, `label`,
+  `box_style`, `label_style`, `disabled`, `on_toggle`, `focusable`, `hits`,
+  `handle_event`, `preferred_size`, and `render`. Space and a left click
+  toggle it; Enter bubbles on.
+- `Progress`: a one-row progress bar drawn into the buffer, with
+  `NewProgress`, `progress`, `set_progress`, `set_max`, `fill_style`,
+  `empty_style`, `text_style`, and `render`. The fill floors, so the bar is
+  full only at 100%, and a five-cell percent tail shows when the width is at
+  least six cells.
 - `Widget.preferred_size`: the measurement hook a widget reports its wanted
   size through, with a cannot-measure default on `BaseWidget` that fills
   the available axis instead.

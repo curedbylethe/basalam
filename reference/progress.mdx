@@ -1,0 +1,119 @@
+---
+title: "Progress"
+description: "The one-row Progress widget: a bar of # and - cells that fills left to right from a percentage, with an optional percent tail."
+keywords: ["progress", "bar", "percent", "set_progress", "set_max", "fill", "gauge"]
+---
+
+`Progress` draws a one-row progress bar into a [buffer](/reference/buffer). It is the Buffer-native version of a progress bar. It does not wrap `term.Bar`, because `term.Bar` writes to the terminal and widgets never do. `Progress` computes the fill itself and draws it with `#` and `-` cells. It holds a value, a maximum, and three [`Style`](/reference/style) values. It is not focusable, takes no clicks, and consumes no events. It is the sixth concrete widget, after [Text](/reference/text), [Input](/reference/input), [List](/reference/list), [Button](/reference/button) and [Checkbox](/reference/checkbox).
+
+```salam
+mut p := basalam.NewProgress()
+p.set_progress(42)
+_ := screen.add(basalam.RootId, p)
+
+// Later, after a change, mark the screen dirty so the next frame paints it.
+p.set_progress(60)
+screen.dirty = true
+```
+
+## Progress
+
+`Progress` embeds [BaseWidget](/reference/widget), overrides the default `render`, and adds `hits` and `preferred_size`; it inherits `bounds` and `set_bounds` unchanged.
+
+```salam
+pub struct Progress:
+    pub use BaseWidget
+
+    pub fill_style: Style = StyleDefault
+    pub empty_style: Style = StyleDefault
+    pub text_style: Style = StyleDefault
+end
+```
+
+<ResponseField name="fill_style" type="Style">The `Style` value for the filled `#` cells. The default is `StyleDefault`, which uses the terminal's defaults.</ResponseField>
+<ResponseField name="empty_style" type="Style">The `Style` value for the empty `-` cells. The default is `StyleDefault`.</ResponseField>
+<ResponseField name="text_style" type="Style">The `Style` value for the five-cell percent tail. The default is `StyleDefault`.</ResponseField>
+
+The value and the maximum are private. Set them with `set_progress` and `set_max`, and read the value with `progress()`.
+
+### Methods
+
+```salam
+pub func NewProgress(): Progress
+pub func progress(): int
+pub func set_progress(percent: int)
+pub func set_max(limit: int)
+pub func hits(): bool
+pub func preferred_size(max_width: int): Rect
+pub func render(buf: Buffer, bounds: Rect)
+```
+
+| Method | Description |
+| --- | --- |
+| `NewProgress(): Progress` | Creates a progress bar at 0 with a maximum of 100 and default styles. |
+| `progress(): int` | The stored value, already clamped to `0` through the maximum. |
+| `set_progress(percent: int)` | Sets the value, clamped to `0` through the maximum. |
+| `set_max(limit: int)` | Sets the value that means 100 percent, and clamps the stored value to the new range. |
+| `hits(): bool` | Always `false`, so a click falls through to the widget beneath the bar. |
+| `preferred_size(max_width: int): Rect` | An unknown width and a height of one row, so a layout gives the bar the width it has. |
+| `render(buf: Buffer, bounds: Rect)` | Draws the bar into the row at `bounds.y`. |
+
+The screen calls `hits`, `preferred_size`, and `render`. You rarely call them yourself.
+
+## Value
+
+`set_progress` clamps the value to `0` through the maximum and stores the clamped value, so `progress()` never reports a value the bar cannot show. A value above the maximum stores the maximum, and a value below `0` stores `0`.
+
+`set_max` sets the value that means 100 percent and clamps the stored value to the new range. A maximum of `0` or less makes the bar empty, and `progress()` returns `0`.
+
+`Progress` does not redraw by itself. After `set_progress` or `set_max`, set `screen.dirty` to `true` so the next frame paints the new value.
+
+## Fill
+
+The bar fills from left to right. The fill uses integer floor division, so the bar is full only when the value equals the maximum. It is never full before that.
+
+The bar takes the full width when the width is below six cells. At six cells or more, it leaves five cells for the percent tail, so the bar takes `width - 5` cells. For a bar of `B` cells, the number of filled cells is `floor(B * value / max)`, and the percentage is `floor(100 * value / max)`.
+
+Worked examples, in a row 20 cells wide, so the bar has 15 cells:
+
+- 42 of 100 fills `floor(15 * 42 / 100)` = 6 cells, and the row reads `######---------  42%`.
+- 99 of 100 fills `floor(15 * 99 / 100)` = 14 cells, so one cell stays empty: `##############-  99%`.
+
+## Percent text
+
+When the width is at least six cells, a fixed five-cell tail follows the bar. The tail is one space, the percentage right-aligned in three cells, and `%`. It draws with `text_style`. A percentage of `100` shows as ` 100%`.
+
+Below six cells, the bar uses the full width and no percentage is drawn. The tail is never truncated, so the percentage is either shown whole or not shown at all. There is no switch to hide it. The width alone decides.
+
+## Style
+
+Each part of the bar has its own `Style` value:
+
+- `fill_style` applies to the filled `#` cells.
+- `empty_style` applies to the empty `-` cells.
+- `text_style` applies to the percent tail.
+
+`Progress` has no focus or disabled look. It has no label. To show a label, place a [Text](/reference/text) widget beside the bar.
+
+## Example
+
+A buffer is plain memory, so you can set and render a progress bar without a terminal:
+
+```salam
+include "basalam/basalam.salam"
+
+func main:
+    mut p := basalam.NewProgress()
+    p.set_progress(42)
+    println p.progress() // 42
+
+    mut buf := basalam.NewBuffer(20, 1)
+    defer buf.free()
+    p.render(buf, basalam.Rect { width = 20, height = 1 })
+    println "[" + buf.row_text(0) + "]" // [######---------  42%]
+end
+```
+
+<Note>
+  A `dyn basalam.Widget` cannot be downcast back to a `Progress`. Keep a concrete `Progress` reference, or a shared value such as a `mut` global, to call `set_progress` and `set_max`.
+</Note>
