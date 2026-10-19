@@ -133,6 +133,11 @@ pub struct Buffer:
     touched: Vector<bool> = Vector {}
     row_touched: Vector<bool> = Vector {}
 
+    // clear() blanks every cell, so one flag replaces a mark per cell. While
+    // it is set, set() skips marking and commit() treats the whole grid as
+    // changed, which keeps a full frame free of per-cell mark work.
+    all_touched: bool = false
+
     // ansi()/diff() scratch. BufReset keeps the capacity; BufStr clones, so
     // the returned str does not alias it. resize() keeps this builder.
     // Only free() releases it. A copy shares data and has its own len, so
@@ -155,8 +160,10 @@ pub struct Buffer:
         end
         i := y * this.width + x
         this.cells.set(i, cell)
-        this.touched.set(i, true)
-        this.row_touched.set(y, true)
+        if not this.all_touched:
+            this.touched.set(i, true)
+            this.row_touched.set(y, true)
+        end
     end
 
     @en "get"
@@ -201,15 +208,12 @@ pub struct Buffer:
 
     @en "clear"
     /// Resets every cell of the grid to a blank default Cell, ignoring
-    /// `clip`.
+    /// `clip`. The next diff() and commit() treat every cell as changed.
     pub func clear():
         repeat this.cells.len() in i:
             this.cells.set(i, Cell {})
-            this.touched.set(i, true)
         end
-        repeat this.height in y:
-            this.row_touched.set(y, true)
-        end
+        this.all_touched = true
     end
 
     @en "row_text"
@@ -244,6 +248,7 @@ pub struct Buffer:
         this.front = fresh.front
         this.touched = fresh.touched
         this.row_touched = fresh.row_touched
+        this.all_touched = fresh.all_touched
         this.clip = fresh.clip
         this.force_full = fresh.force_full
         // out_buf stays. fresh.out_buf is unused, so dropping fresh neither
@@ -294,16 +299,17 @@ pub struct Buffer:
         mut style := ""
         mut changed := false
         repeat this.height in y:
-            if this.row_touched.get(y):
+            if this.all_touched or this.row_touched.get(y):
                 mut x := 0
                 until x < this.width:
                     idx := y * this.width + x
-                    if not this.touched.get(idx) or this.cells.get(idx) == this.front.get(idx):
+                    marked := this.all_touched or this.touched.get(idx)
+                    if not marked or this.cells.get(idx) == this.front.get(idx):
                         x += 1
                     else:
                         // Extend the run while the next cell is marked and differs.
                         mut e := x + 1
-                        until e < this.width and this.touched.get(y * this.width + e) and this.cells.get(y * this.width + e) != this.front.get(y * this.width + e):
+                        until e < this.width and (this.all_touched or this.touched.get(y * this.width + e)) and this.cells.get(y * this.width + e) != this.front.get(y * this.width + e):
                             e += 1
                         end
                         str.BufAppend(this.out_buf, term.SeqMoveTo(y + 1, x + 1))
@@ -331,12 +337,13 @@ pub struct Buffer:
     end
 
     @en "commit"
-    /// Copies every cell when `force_full` is set, and only marked cells
-    /// otherwise, then clears the marks and `force_full`, so a later diff()
-    /// reports only subsequent changes.
+    /// Copies every cell when `force_full` is set or clear() touched the
+    /// whole grid, and only marked cells otherwise, then clears the marks
+    /// and `force_full`, so a later diff() reports only subsequent changes.
     pub func commit():
-        if this.force_full:
-            // ansi() left the front grid stale everywhere.
+        if this.force_full or this.all_touched:
+            // ansi() left the front grid stale everywhere, or clear()
+            // invalidated it.
             repeat this.cells.len() in i:
                 this.front.set(i, this.cells.get(i))
             end
@@ -353,12 +360,16 @@ pub struct Buffer:
                 end
             end
         end
-        repeat this.touched.len() in i:
-            this.touched.set(i, false)
+        // A clear() frame wrote no marks, so there is nothing to clear.
+        if not this.all_touched:
+            repeat this.touched.len() in i:
+                this.touched.set(i, false)
+            end
+            repeat this.row_touched.len() in y:
+                this.row_touched.set(y, false)
+            end
         end
-        repeat this.row_touched.len() in y:
-            this.row_touched.set(y, false)
-        end
+        this.all_touched = false
         this.force_full = false
     end
 
