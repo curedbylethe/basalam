@@ -184,6 +184,8 @@ func test_render_label_and_brackets():
     dim := basalam.StyleSgr(basalam.Style { dim = true }, basalam.ColorTier.TrueColor)
     // BT01: centred label, default style.
     check_row(ok, 10, false, "[   OK   ]", "")
+    // Odd leftover width: the extra cell goes to the right, so the pad floors.
+    check_row(ok, 9, false, "[  OK   ]", "")
     // BT02: bold on every cell while focused.
     check_row(ok, 10, true, "[   OK   ]", bold)
     // BT03: dim while disabled.
