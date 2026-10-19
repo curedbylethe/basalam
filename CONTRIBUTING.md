@@ -6,7 +6,7 @@ commit. By taking part you agree to follow the
 
 ## Set up
 
-1. Install the Salam compiler, version 0.5.5 or later (`salam version` to
+1. Install the Salam compiler, version 0.5.6 or later (`salam version` to
    check). See the [Salam repository](https://github.com/SalamLang/Salam)
    for the installer.
 2. Clone the repository and run the full check:
