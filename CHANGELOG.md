@@ -12,8 +12,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `Widget.visible()`: `true` when the widget is on screen, `false` when it is
   hidden. Focus eligibility asks every widget on the path to the root, so one
   hidden widget removes its whole subtree from focus navigation. The
-  `BaseWidget` default returns `true`, so every existing widget keeps its
-  behaviour; `Modal` reports its shared open state.
+  `BaseWidget` default returns `true`, so every widget that embeds `BaseWidget`
+  keeps its behaviour; a hand-written widget adds `visible()` returning `true`.
+  `Modal` reports its shared open state.
 - `Screen.invalidate(id)`: queues a repaint of that widget's bounds. An
   unknown id, or an empty rect, marks the whole screen. Legal before
   `start()`. (CUR-226)
