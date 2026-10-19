@@ -460,6 +460,119 @@ func test_hidden_modal_lets_hit_test_fall_through():
     testing.AssertEqInt(s.hit_test(0, 0), shown)
 end
 
+// A closed Modal hides its focusable child: explicit focus refuses it and Tab and Shift-Tab only visit the base tiles.
+func test_closed_modal_hides_its_child_from_focus_order():
+    mut s := basalam.NewScreen(Root {}, 20, 10)
+    defer s.close()
+    area := rect(0, 0, 20, 10)
+    a := s.add(basalam.RootId, Probe { tag = "a", can_focus = true })
+    s.widget(a).set_bounds(rect(0, 0, 4, 1))
+    b := s.add(basalam.RootId, Probe { tag = "b", can_focus = true })
+    s.widget(b).set_bounds(rect(4, 0, 4, 1))
+    m := basalam.NewModal()
+    m.set_size(basalam.ModalSize.Fixed(10, 4))
+    m.add(Probe { tag = "c", can_focus = true })
+    m.set_bounds(area)
+    mid := s.add(basalam.RootId, m)
+    cid := s.add(mid, Probe { tag = "c", can_focus = true })
+    s.widget(cid).set_bounds(rect(6, 4, 8, 2))
+    testing.AssertEqInt(s.focused_id(), a)
+    testing.AssertFalse(s.can_focus(cid))
+    testing.AssertFalse(s.focus(cid))
+    testing.AssertFalse(s.push_focus(cid))
+    testing.AssertEqInt(s.focused_id(), a)
+
+    testing.AssertTrue(s.focus_next())
+    testing.AssertEqInt(s.focused_id(), b)
+    testing.AssertTrue(s.focus_next())
+    testing.AssertEqInt(s.focused_id(), a)
+    testing.AssertTrue(s.focus_prev())
+    testing.AssertEqInt(s.focused_id(), b)
+    testing.AssertTrue(s.focus_prev())
+    testing.AssertEqInt(s.focused_id(), a)
+end
+
+// Opening the Modal makes its child reachable: can_focus accepts it, focus lands on it, Tab reaches it after the base tiles.
+func test_opening_modal_makes_its_child_reachable():
+    mut s := basalam.NewScreen(Root {}, 20, 10)
+    defer s.close()
+    area := rect(0, 0, 20, 10)
+    a := s.add(basalam.RootId, Probe { tag = "a", can_focus = true })
+    s.widget(a).set_bounds(rect(0, 0, 4, 1))
+    b := s.add(basalam.RootId, Probe { tag = "b", can_focus = true })
+    s.widget(b).set_bounds(rect(4, 0, 4, 1))
+    m := basalam.NewModal()
+    m.set_size(basalam.ModalSize.Fixed(10, 4))
+    m.add(Probe { tag = "c", can_focus = true })
+    m.set_bounds(area)
+    mid := s.add(basalam.RootId, m)
+    cid := s.add(mid, Probe { tag = "c", can_focus = true })
+    s.widget(cid).set_bounds(rect(6, 4, 8, 2))
+    m.open()
+    testing.AssertTrue(s.can_focus(cid))
+    testing.AssertTrue(s.focus(cid))
+    testing.AssertEqInt(s.focused_id(), cid)
+
+    testing.AssertTrue(s.focus(b))
+    testing.AssertTrue(s.focus_next())
+    testing.AssertEqInt(s.focused_id(), mid)
+    testing.AssertTrue(s.focus_next())
+    testing.AssertEqInt(s.focused_id(), cid)
+end
+
+// G6: closed without unraise or pop, the hidden child keeps the stamp and focus, but the next Tab skips it to the visible base order.
+func test_close_without_unraise_keeps_child_out_of_order():
+    mut s := basalam.NewScreen(Root {}, 20, 10)
+    defer s.close()
+    area := rect(0, 0, 20, 10)
+    a := s.add(basalam.RootId, Probe { tag = "a", can_focus = true })
+    s.widget(a).set_bounds(rect(0, 0, 4, 1))
+    b := s.add(basalam.RootId, Probe { tag = "b", can_focus = true })
+    s.widget(b).set_bounds(rect(4, 0, 4, 1))
+    m := basalam.NewModal()
+    m.set_size(basalam.ModalSize.Fixed(10, 4))
+    m.add(Probe { tag = "c", can_focus = true })
+    m.set_bounds(area)
+    mid := s.add(basalam.RootId, m)
+    cid := s.add(mid, Probe { tag = "c", can_focus = true })
+    s.widget(cid).set_bounds(rect(6, 4, 8, 2))
+    m.open()
+    testing.AssertTrue(s.push_focus(cid))
+    s.raise_subtree(mid)
+    testing.AssertEqInt(s.focused_id(), cid)
+
+    m.close()
+    testing.AssertFalse(s.can_focus(cid))
+    testing.AssertEqInt(s.focused_id(), cid)
+    testing.AssertTrue(s.focus_next())
+    testing.AssertEqInt(s.focused_id(), a)
+    testing.AssertTrue(s.focus_next())
+    testing.AssertEqInt(s.focused_id(), b)
+end
+
+// A hidden child is not a spatial candidate: the right move refuses while the Modal is closed and reaches it once open.
+func test_hidden_child_is_not_a_spatial_candidate():
+    mut s := basalam.NewScreen(Root {}, 20, 10)
+    defer s.close()
+    area := rect(0, 0, 20, 10)
+    a := s.add(basalam.RootId, Probe { tag = "a", can_focus = true })
+    s.widget(a).set_bounds(rect(0, 4, 2, 1))
+    m := basalam.NewModal()
+    m.set_size(basalam.ModalSize.Fixed(10, 4))
+    m.add(Probe { tag = "c", can_focus = true })
+    m.set_bounds(area)
+    mid := s.add(basalam.RootId, m)
+    cid := s.add(mid, Probe { tag = "c", can_focus = true })
+    s.widget(cid).set_bounds(rect(6, 4, 8, 2))
+    testing.AssertEqInt(s.focused_id(), a)
+    testing.AssertFalse(s.focus_right())
+    testing.AssertEqInt(s.focused_id(), a)
+
+    m.open()
+    testing.AssertTrue(s.focus_right())
+    testing.AssertEqInt(s.focused_id(), cid)
+end
+
 // preferred_size: Fixed reports its size; Percent reports the sentinel.
 // measure is never ok, so a layout reads preferred_size.
 func test_preferred_size_and_measure():
@@ -554,6 +667,10 @@ func main:
     test_key_at_modal_does_not_reach_base()
     test_nested_esc_closes_only_inner()
     test_hidden_modal_lets_hit_test_fall_through()
+    test_closed_modal_hides_its_child_from_focus_order()
+    test_opening_modal_makes_its_child_reachable()
+    test_close_without_unraise_keeps_child_out_of_order()
+    test_hidden_child_is_not_a_spatial_candidate()
     test_preferred_size_and_measure()
     test_post_add_open_and_close_reach_tree_copy()
     test_post_add_set_title_reaches_frame()
