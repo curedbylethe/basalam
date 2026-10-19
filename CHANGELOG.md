@@ -169,10 +169,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- Widgets cache the SGR strings they draw with and rebuild one only when the
-  resolved style (or, for Modal's scrim, the underlying cell style) changes.
-  Rendered bytes are unchanged. Cells still carry an SGR string; a typed cell
-  style is separate work. (CUR-455)
+- The typed-style widgets and the Modal scrim cache the SGR strings they draw
+  with and rebuild one only when the resolved style (or, for Modal's scrim,
+  the underlying cell style) changes; `List` and `Input` build their default
+  fallbacks once per process. Borders still build one per draw. Rendered bytes
+  are unchanged. Cells still carry an SGR string; a typed cell style is
+  separate work. (CUR-455)
 - `make docs-check` validates the documentation site and its links in CI, so
   a broken page, a bad nav entry, or a dead link fails before merge. (CUR-453)
 - `Screen.present()` and `Screen.draw()` return when nothing is pending. A widget that
@@ -187,8 +189,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `Buffer.diff()` and `Buffer.commit()` skip clean rows. `set`, `fill`,
   `put_str`, and `clear` mark the cells they write; assigning `cells`
   directly does not. Frame building reuses one string builder, and
-  `put_str` no longer builds a vector of code points. Widgets now reuse
-  a cached SGR string until their style changes. (CUR-226)
+  `put_str` no longer builds a vector of code points. (CUR-226)
 - `Screen.raise_subtree(id)` and `Screen.unraise_subtree(id)`: raise or
   unraise a widget and all of its descendants as one layer, moving and
   restoring focus as `raise` and `unraise` do. A Modal uses them to stay
