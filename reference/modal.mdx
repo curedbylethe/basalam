@@ -15,7 +15,7 @@ mid := screen.add(basalam.RootId, dialog)
 
 ## Modal
 
-`Modal` embeds [BaseWidget](/reference/widget) and overrides `focusable`, `hits`, `handle_event`, `render`, `bounds`, `preferred_size` and `set_bounds`. Its title, size, open state, closable flag and rect live in one state holder that every copy shares. Read and write them through the methods below, not through fields.
+`Modal` embeds [BaseWidget](/reference/widget) and overrides `focusable`, `hits`, `visible`, `handle_event`, `render`, `bounds`, `preferred_size` and `set_bounds`. Its title, size, open state, closable flag and rect live in one state holder that every copy shares. Read and write them through the methods below, not through fields.
 
 ```salam
 pub struct Modal:
@@ -50,6 +50,7 @@ pub func bounds(): Rect
 pub func preferred_size(max_width: int): Rect
 pub func focusable(): bool
 pub func hits(): bool
+pub func visible(): bool
 pub func handle_event(event: Event): bool
 pub func render(buf: Buffer, bounds: Rect)
 ```
@@ -68,6 +69,7 @@ pub func render(buf: Buffer, bounds: Rect)
 | `preferred_size(max_width: int): Rect` | A `Fixed` size reports its exact size. A `Percent` size reports `-1` by `-1`, because it depends on the bounds. |
 | `focusable(): bool` | `true` only while the Modal is open and `takes_focus` is set. |
 | `hits(): bool` | `true` only while the Modal is open. A hidden Modal lets a click fall through. |
+| `visible(): bool` | `true` only while the Modal is open. A hidden Modal hides its whole subtree from focus navigation. |
 | `handle_event(event: Event): bool` | Handles Esc and mouse events as described under [Esc and nested modals](#esc-and-nested-modals) and [Focus isolation](#focus-isolation). |
 | `render(buf: Buffer, bounds: Rect)` | Paints the scrim and the ring. A hidden Modal paints nothing. |
 
@@ -133,11 +135,11 @@ _ := screen.pop_focus()
 
 ## Focus isolation
 
-An open Modal is a focus stop while `takes_focus` is set (the default). It is in the topmost layer, and `raise_subtree` puts its child widgets into that same layer, so the layer always holds a focusable widget. Linear navigation walks that layer's focus order, so `Tab` stays inside the Modal and cannot reach the widgets under it.
+An open Modal is a focus stop while `takes_focus` is set (the default). It is in the topmost layer, and `raise_subtree` puts its child widgets into that same layer, so the layer always holds a focusable widget. Linear navigation walks that layer's focus order, so `Tab` stays inside the Modal and cannot reach the widgets under it. A closed Modal is hidden, so its child is not in the focus order either.
 
 Mouse input is blocked by geometry. `hit_test` returns the topmost widget that accepts hits, and an open Modal accepts hits over its whole bounds. A click on the scrim therefore starts at the Modal, which consumes it. A click inside the dialog starts at the Modal too, and the Modal offers it to its child first. If the child does not consume it, the event bubbles on to the Modal's ancestors as usual. Nothing under the Modal sees a mouse event that lands on the scrim.
 
-A hidden Modal blocks nothing. Its `hits` and `focusable` are `false`, so the events and focus fall through as if it were not there.
+A hidden Modal takes no hits and no focus. Its `hits`, `focusable`, and `visible` are `false`. Focus navigation skips its whole subtree, so a closed Modal's child is not reachable by `Tab`, `Shift-Tab`, or a spatial move.
 
 ## Esc and nested modals
 

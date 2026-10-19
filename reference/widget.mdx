@@ -4,7 +4,7 @@ description: "The interface every widget satisfies, and the struct that supplies
 keywords: ["widget", "basewidget", "interface", "dyn", "render", "handle_event", "hits", "measure"]
 ---
 
-A widget is anything with the eight methods of the `Widget` interface. Salam interfaces are structural: there is no `implements` keyword, so a struct that has the methods is a widget. A list, a button, and a panel are all `Widget`s, and the screen stores them side by side as `dyn basalam.Widget`.
+A widget is anything with the nine methods of the `Widget` interface. Salam interfaces are structural: there is no `implements` keyword, so a struct that has the methods is a widget. A list, a button, and a panel are all `Widget`s, and the screen stores them side by side as `dyn basalam.Widget`.
 
 ## Widget
 
@@ -14,6 +14,7 @@ pub interface Widget:
     func handle_event(event: Event): bool
     func focusable(): bool
     func hits(): bool
+    func visible(): bool
     func bounds(): Rect
     func set_bounds(bounds: Rect)
     func preferred_size(max_width: int): Rect
@@ -43,7 +44,7 @@ Reacts to an [event](/reference/event). Return `true` to consume it. Return `fal
 func focusable(): bool
 ```
 
-Returns `true` when the widget can take keyboard focus. Only focusable widgets take part in focus navigation.
+Returns `true` when the widget can take keyboard focus. Only focusable widgets take part in focus navigation. A hidden ancestor still excludes a widget that returns `true`; see [`visible`](#visible).
 
 ### hits
 
@@ -51,7 +52,15 @@ Returns `true` when the widget can take keyboard focus. Only focusable widgets t
 func hits(): bool
 ```
 
-Returns `true` when hit-testing may land on this widget. The default is `true`. Override it to return `false` when the widget may paint and still refuse hits. The screen then skips it and keeps scanning the widgets under it. Refusing hits does not remove the widget from paint order or from focus.
+Returns `true` when hit-testing may land on this widget. The default is `true`. Override it to return `false` when the widget may paint and still refuse hits. The screen then skips it and keeps scanning the widgets under it. Refusing hits does not remove the widget from paint order or from focus. Hiding does remove it from focus; see [`visible`](#visible).
+
+### visible
+
+```salam
+func visible(): bool
+```
+
+Returns `true` when the widget is on screen. The default is `true`. Override it to return `false` while the widget is hidden: focus navigation then skips the widget and every descendant of it. A widget answers only for itself, so focus eligibility asks every widget on the path to the root.
 
 ### bounds and set_bounds
 
@@ -108,6 +117,7 @@ end
 | `handle_event` | Returns `false`, so every event bubbles on. |
 | `focusable` | Returns `false`. |
 | `hits` | Returns `true`. Override it to paint without accepting hits. |
+| `visible` | Returns `true`. Override it to hide the widget and its subtree from focus navigation. |
 | `bounds` | Returns `rect`. |
 | `set_bounds` | Stores the rect in `rect`. |
 | `preferred_size` | Returns the negative sentinel, so the layout engine fills the axis. |
@@ -115,7 +125,7 @@ end
 
 <ResponseField name="rect" type="Rect">Storage for `bounds` and `set_bounds`. An embedding widget can read it directly as `this.rect`.</ResponseField>
 
-On its own, a `BaseWidget` is an invisible, unfocusable widget that ignores every event and still accepts hits. That makes it a handy container or placeholder. A click on its rect lands on it unless you override `hits`.
+On its own, a `BaseWidget` paints nothing, is unfocusable, reports itself visible, ignores every event, and still accepts hits. That makes it a handy container or placeholder. A click on its rect lands on it unless you override `hits`.
 
 ## Storing widgets
 
@@ -129,7 +139,7 @@ println w.bounds().width // 12: both copies share the widget
 ```
 
 <Warning>
-  Salam has no downcast from `dyn` back to the concrete type, and `dyn` values cannot be compared with `==`. Once a widget is stored as `dyn basalam.Widget`, you reach it only through the eight interface methods.
+  Salam has no downcast from `dyn` back to the concrete type, and `dyn` values cannot be compared with `==`. Once a widget is stored as `dyn basalam.Widget`, you reach it only through the nine interface methods.
 </Warning>
 
 ## Example

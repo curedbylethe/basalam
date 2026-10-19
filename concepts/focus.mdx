@@ -6,7 +6,7 @@ keywords: ["focus", "focus stack", "spatial navigation", "tab order", "focus_nex
 
 The focused widget receives every event first. If it does not consume the event, the event [bubbles](/reference/event#dispatch-and-bubbling) to its ancestors. While rendering, the focused widget sees `buf.focused == true` and can draw a focus indicator.
 
-Only widgets whose `focusable()` returns `true` can take focus.
+Only widgets whose `focusable()` returns `true` can take focus, and every widget on the path from that widget to the root must report [`visible()`](/reference/widget#visible) as `true`. A hidden container hides its whole subtree from focus navigation.
 
 ## The focus stack
 
@@ -18,9 +18,9 @@ The screen tracks focus as a stack of widget IDs. The top entry is the focused w
 | `push_focus(id): bool` | Pushes `id`, remembering the previous focus underneath it. |
 | `pop_focus(): bool` | Drops the top, returning focus to what was there before. |
 | `focused_id(): int` | The top of the stack, or `NoWidget`. |
-| `can_focus(id): bool` | Whether `id` names a focusable widget. |
+| `can_focus(id): bool` | Whether `id` names a focusable widget with no hidden ancestor. |
 
-`focus` and `push_focus` refuse IDs that are invalid or not focusable and return `false` without changing anything.
+`focus` and `push_focus` refuse IDs that are invalid, not focusable, or inside a hidden container, and return `false` without changing anything.
 
 Use `push_focus` and `pop_focus` for anything temporary, such as a dialog: push the dialog's widget when it opens, pop when it closes, and the focus goes back where it was. A [Modal](/reference/modal) opens with `push_focus` and then `raise_subtree`, and closes with `unraise_subtree` and then `pop_focus`.
 
@@ -32,7 +32,7 @@ end
 ```
 
 <Note>
-  The first focusable widget you `add` while nothing has focus receives it automatically, so a new screen always starts with something focused if it can.
+  The first reachable focusable widget you `add` while nothing has focus receives it automatically, so a new screen always starts with something focused if it can. A widget under a hidden container is not reachable.
 </Note>
 
 ## Two ways to move
@@ -51,11 +51,11 @@ Every method returns `true` when the focus moved. Each focus change queues the o
 
 ### Linear: focus_next and focus_prev
 
-Linear navigation walks the focus order and wraps inside it. That order is the focusable widgets in the topmost raised layer, ascending ID, or every focusable widget in ID order when nothing is raised or that layer has no focusable widget. It matches paint order only while nothing is raised. Unfocusable widgets are skipped. With nothing focused, `focus_next` focuses the first widget in that order and `focus_prev` the last. A focus that sits outside the order jumps to the first on `focus_next` and the last on `focus_prev`. A raised subtree, such as an open Modal, is such a layer.
+Linear navigation walks the focus order and wraps inside it. That order is the focusable widgets in the topmost raised layer, ascending ID, or every focusable widget in ID order when nothing is raised or that layer has no focusable widget. Only widgets that pass `can_focus` are candidates, so a hidden container removes its whole subtree from the order: the child of a closed [Modal](/reference/modal) is never a Tab stop. It matches paint order only while nothing is raised. Unfocusable widgets are skipped. With nothing focused, `focus_next` focuses the first widget in that order and `focus_prev` the last. A focus that sits outside the order jumps to the first on `focus_next` and the last on `focus_prev`. A raised subtree, such as an open Modal, is such a layer.
 
 ### Spatial: focus_up, focus_down, focus_left, focus_right
 
-Spatial navigation moves to the nearest widget in a direction, chosen from the same focus order, not from every focusable widget on the screen. The search is `basalam.Nearest(from, candidates, dir)`, a pure function over rects that looks at each candidate once (O(n)); `dir` is `DirUp` (0), `DirDown` (1), `DirLeft` (2), or `DirRight` (3). With nothing focused, spatial moves fall back to `focus_next`.
+Spatial navigation moves to the nearest widget in a direction, chosen from the same focus order, not from every focusable widget on the screen. A hidden container removes its whole subtree from that order too, so spatial moves skip it. The search is `basalam.Nearest(from, candidates, dir)`, a pure function over rects that looks at each candidate once (O(n)); `dir` is `DirUp` (0), `DirDown` (1), `DirLeft` (2), or `DirRight` (3). With nothing focused, spatial moves fall back to `focus_next`.
 
 ## The spatial rule
 
