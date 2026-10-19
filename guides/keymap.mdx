@@ -1,0 +1,216 @@
+---
+title: "The keymap"
+description: "Put keys to work: install the focus defaults, bind and scope keys, write sequences with a timeout, swap maps for modes, and test a map without a terminal."
+keywords: ["keymap", "key binding", "key sequence", "keymap guide", "modes", "testing"]
+---
+
+Every [`Screen`](/reference/screen) carries an empty [`Keymap`](/reference/keymap). This guide fills one: install the defaults, bind a key, scope it to a widget, write a sequence, swap maps for a mode, and test the result headlessly. The [reference](/reference/keymap) has the method tables and the full resolution rules.
+
+## Why opt in
+
+A screen's `keymap` field starts as `Keymap {}`, and neither `NewScreen` nor `start()` installs a binding. Press nothing and nothing happens.
+
+`dispatch` offers each `KeyEvent` to the focused widget and its ancestors first. Only when nothing consumes it does the screen offer it to the keymap, so a widget's own handling always wins — a key a widget takes never reaches a binding, a scoped one included. Tick, resize, and mouse events never reach the keymap at all. [Key bindings](/concepts/event-loop#key-bindings) covers that spot in the event loop.
+
+## Install the defaults
+
+`NewDefaultKeymap` builds the library's only stock map: `Tab` moves to the next widget and the four arrows move spatially. Install it before the loop:
+
+```salam
+screen.set_keymap(basalam.NewDefaultKeymap())
+```
+
+Nothing else is bound: `q` and every other key stay free for your loop. See [Default bindings](/reference/keymap#default-bindings) for the five rows.
+
+<Warning>
+  Never copy a `Keymap` value. Salam has no move semantics and the fields hold raw `Vector` and `HashMap` pointers, so a copy gives two owners the same buffers and a double-free. Build one with `NewKeymap`, install it with `set_keymap`, and let the screen free it.
+</Warning>
+
+## Bind a key
+
+An action has the type `func (screen: basalam.Screen*, event: basalam.Event): bool`. The screen is a pointer so the action can move focus or mark the screen dirty; return `true` when the key is consumed and `false` to leave it to the loop.
+
+Only lambda literals can be stored in a function value, so every action is one:
+
+```salam
+screen.keymap.bind(term.Decode("n"), (screen: basalam.Screen*, event: basalam.Event): ret screen[0].focus_next() end)
+```
+
+`bind` writes to the global scope, and a later `bind` of the same key replaces the earlier one (last write wins). `unbind` removes a global key and does nothing when none exists:
+
+```salam
+screen.keymap.unbind(term.Decode("n"))
+```
+
+`unbind` leaves scoped bindings alone; replace one with the matching `bind_for`. The snippets assume a screen and `import term`.
+
+## Scope a binding
+
+`bind_for` and `bind_for_seq` take a widget ID. The action runs while that widget or one of its descendants has the focus, so scope a binding to a region rather than a leaf: the focused widget and its ancestors are checked nearest-first, then the global (`NoWidget`) binding runs. Pass `NoWidget` to `bind_for` for the same effect as `bind`.
+
+A `Panel` with `takes_focus` is a natural scope, and its ID comes straight from `screen.add`:
+
+```salam
+frame := basalam.Panel { border = basalam.BorderStyle.Single, title = "Files", takes_focus = true }
+panel := screen.add(basalam.RootId, frame)
+screen.widget(panel).set_bounds(basalam.Rect { x = 2, y = 1, width = 20, height = 5 })
+
+// Runs only while the panel, or a widget inside it, has the focus.
+screen.keymap.bind_for(panel, term.Decode("x"), (screen: basalam.Screen*, event: basalam.Event): ret screen[0].focus_next() end)
+```
+
+That is a fragment of a program with a screen. [Resolution](/reference/keymap#resolution) lists the full nearest-first walk and the cost of a global-only map.
+
+## Sequences and timeout
+
+`bind_seq` and `bind_for_seq` decode the string one rune at a time, so `"gg"` is two key presses. `bind_for_seq` takes the same widget ID as `bind_for`.
+
+```salam
+screen.keymap.bind_seq("gg", (screen: basalam.Screen*, event: basalam.Event): ret screen[0].focus_next() end)
+screen.keymap.pending_timeout_ms = 700 // abandon a half-typed sequence after 700ms
+```
+
+Four rules keep a sequence predictable:
+
+- A node that has both a binding and children defers: the single-key binding fires only when the next key breaks the path, so while a longer sequence keeps matching, the longer one wins.
+- A key that does not continue the pending prefix resets it and is reprocessed from the root, so a sequence followed by an unrelated bound key still triggers that key.
+- The timeout check is lazy. It runs only when the next `KeyEvent` arrives, never on a timer, and `pending_timeout_ms` defaults to `0`, which never expires a prefix. Nothing fires from the timeout alone: the arriving key is processed as a fresh start.
+- Non-key events never evaluate the timeout, so a pending sequence survives a tick, a resize, or a mouse move. Their elapsed time still counts: if only non-key events arrived during the gap, the next `KeyEvent` evaluates the full elapsed time.
+
+An invoked action resolves the key: nothing is reprocessed after it runs, even when the action returns `false`. See [Sequences](/reference/keymap#sequences) for the remaining edge cases.
+
+## Swap maps for modes
+
+Modes are application territory: the library ships no presets. Build one map per mode and install the next one from an action. `set_keymap` frees the current map, gives the screen ownership of the new one, and clears any pending sequence.
+
+```salam
+func insert_map(): basalam.Keymap:
+    mut km := basalam.NewKeymap()
+    km.bind(term.Decode("j"), (screen: basalam.Screen*, event: basalam.Event): ret screen[0].focus_down() end)
+    km.bind(term.Decode("\x1b"), (screen: basalam.Screen*, event: basalam.Event):
+        screen[0].set_keymap(basalam.NewDefaultKeymap())
+        ret true
+    end)
+    ret km
+end
+```
+
+That function is a fragment. Enter insert mode from the normal map the same way you bind any other key:
+
+```salam
+screen.keymap.bind(term.Decode("i"), (screen: basalam.Screen*, event: basalam.Event):
+    screen[0].set_keymap(insert_map())
+    ret true
+end)
+```
+
+<Note>
+  `set_keymap` transfers ownership: do not free or reuse the map after installing it. The map starts with no pending sequence, so a prefix from the old mode cannot leak into the new one.
+</Note>
+
+<Warning>
+  Never assign to `screen.keymap` directly. The field holds raw buffers, so assigning would leak the current map's storage and then double-free on `close()`. Use `set_keymap` to replace the map, or `screen.keymap.bind` to extend it in place.
+</Warning>
+
+A consumed `Esc`, such as one an open [`Modal`](/reference/modal) takes, never reaches the keymap fallback, so an insert map's `Esc` binding fires only while no widget takes the key.
+
+## Test it headlessly
+
+`NewScreen(root, w, h)` builds a screen without touching the terminal; only `start()` attaches it. Dispatch events directly, or queue them with `post` and run the loop. `focused_id()` and `dirty` show what a binding did.
+
+```salam
+import term
+
+include "basalam/basalam.salam"
+
+struct Root:
+    pub use basalam.BaseWidget
+end
+
+struct Field:
+    pub use basalam.BaseWidget
+
+    pub func focusable(): bool:
+        ret true
+    end
+end
+
+func key(seq: str): basalam.Event:
+    ret basalam.Event { kind = basalam.KeyEvent, key = term.Decode(seq) }
+end
+
+func main:
+    mut screen := basalam.NewScreen(Root {}, 20, 5)
+    defer screen.close()
+    first := screen.add(basalam.RootId, Field {})
+    second := screen.add(basalam.RootId, Field {})
+
+    screen.set_keymap(basalam.NewDefaultKeymap())
+    screen.keymap.bind(term.Decode("n"), (screen: basalam.Screen*, event: basalam.Event): ret screen[0].focus_next() end)
+    screen.keymap.bind_for(first, term.Decode("x"), (screen: basalam.Screen*, event: basalam.Event): ret screen[0].focus(second) end)
+    screen.keymap.bind_seq("gg", (screen: basalam.Screen*, event: basalam.Event): ret screen[0].focus(first) end)
+
+    screen.dirty = false
+
+    println screen.dispatch(key("\t"))     // true: the keymap consumed Tab
+    println screen.focused_id() == second  // true
+    println screen.dirty                   // true: the action marked the screen dirty
+
+    // A custom global binding: n moves to the next widget.
+    println screen.focus(first)            // true: a deterministic starting point
+    println screen.dispatch(key("n"))      // true
+    println screen.focused_id() == second  // true
+
+    // A scoped binding: x only applies while first has the focus.
+    _ := screen.focus(first)
+    println screen.dispatch(key("x"))      // true
+    println screen.focused_id() == second  // true
+
+    // A two-key sequence: gg returns to first.
+    _ := screen.focus(second)
+    println screen.dispatch(key("g"))      // false: the prefix is pending
+    println screen.dispatch(key("g"))      // true: the sequence completed
+    println screen.focused_id() == first   // true
+
+    // Or queue what the input thread would produce and run the loop. An
+    // unconsumed Ctrl+C ends the loop, so the call returns.
+    _ := screen.post(key("\t"))
+    _ := screen.post(key("\x03"))
+    screen.run_with_tick((): ret end)
+    println screen.focused_id() == second  // true: Tab moved to the next widget
+end
+```
+
+To test a map on its own, call `handle` directly. It takes a `Screen*`, and a free function cannot take `&screen`, so `tests/keymap_test.salam` keeps the screen in a one-element vector and calls through `ref(0)`:
+
+```salam
+struct Rig:
+    pub screens: Vector<basalam.Screen> = Vector {}
+
+    pub func open(w: int, h: int):
+        this.screens.push(basalam.NewScreen(Root {}, w, h))
+    end
+
+    pub func ptr(): basalam.Screen*:
+        ret this.screens.ref(0)
+    end
+
+    pub func release():
+        this.ptr()[0].close()
+        this.screens.free()
+    end
+end
+```
+
+That is a trimmed fragment of the test rig; `Root` is the same placeholder root. For a timeout test, do not sleep. The map maintains `pending_since_ms` while a prefix waits, so move it into the past and the next key sees an expired prefix:
+
+```salam
+km.pending_timeout_ms = 50                         // applications set the timeout
+km.pending_since_ms = (sync.NowMs() - 5000) as int // tests force the gap instead of sleeping
+```
+
+## Where next
+
+- [Keymap](/reference/keymap): every method, the defaults table, and the resolution order.
+- [Focus](/concepts/focus): the focus stack and the navigation methods your actions call.
+- [Writing a widget](/guides/writing-a-widget): build the widgets whose IDs you scope to.
