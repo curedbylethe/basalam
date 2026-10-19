@@ -1,0 +1,401 @@
+/*
+ * basalam - a terminal user interface library for Salam (2026)
+ *
+ *   +-------------------+
+ *   |   B A S A L A M   |
+ *   +-------------------+
+ *
+ * Built on the Salam standard library's std/term package
+ * Salam: https://github.com/SalamLang/Salam
+ *
+ * Repository: https://github.com/curedbylethe/basalam
+ * License: GPL-3.0-or-later
+ *
+ */
+
+// Tests for the Table widget: the golden frames TB01-TB08 of the design
+// artifact (blank cells written as real spaces), the add/set API and its
+// index returns, the three-level alignment precedence with the odd-slack
+// centring tie-break, clip and ellipsis overflow, the wide-glyph blank, the
+// header style, the shrink order when the rect is narrow, the preferred size
+// and measure numbers, the non-focusable contract, and set_bounds.
+
+import str
+import testing
+import term
+
+include "../basalam/basalam.salam"
+
+func rect(x: int, y: int, w: int, h: int): basalam.Rect:
+    ret basalam.Rect { x = x, y = y, width = w, height = h }
+end
+
+func sp(n: int): str:
+    ret str.Repeat(" ", n)
+end
+
+func dash(n: int): str:
+    ret str.Repeat("─", n)
+end
+
+func row2(a: str, b: str): Vector<str>:
+    mut v := Vector {} as Vector<str>
+    v.push(a)
+    v.push(b)
+    ret v
+end
+
+func row1(a: str): Vector<str>:
+    mut v := Vector {} as Vector<str>
+    v.push(a)
+    ret v
+end
+
+func row3(a: str, b: str, c: str): Vector<str>:
+    mut v := Vector {} as Vector<str>
+    v.push(a)
+    v.push(b)
+    v.push(c)
+    ret v
+end
+
+func fixed_col(n: int, a: basalam.Alignment): basalam.TableColumn:
+    ret basalam.TableColumn { width = basalam.LayoutSize { kind = basalam.SizeKind.Fixed, cells = n }, align = a }
+end
+
+func pref_col(lo: int, hi: int): basalam.TableColumn:
+    ret basalam.TableColumn { width = basalam.LayoutSize { kind = basalam.SizeKind.Pref }, min = lo, max = hi }
+end
+
+func key(seq: str): basalam.Event:
+    ret basalam.Event { kind = basalam.KeyEvent, key = term.Decode(seq) }
+end
+
+// Renders t into a fresh w x h buffer and returns its rows joined by "|".
+func frame(t: basalam.Table, w: int, h: int): str:
+    mut b := basalam.NewBuffer(w, h)
+    mut tt := t
+    tt.render(b, rect(0, 0, w, h))
+    mut out := ""
+    repeat h in y:
+        if y > 0:
+            out = out + "|"
+        end
+        out = out + b.row_text(y)
+    end
+    b.free()
+    ret out
+end
+
+// ---- TB01-TB08: the golden frames ---------------------------------------
+
+func test_tb01_no_header_fixed_columns():
+    mut t := basalam.NewTable()
+    t.pad_x = 0
+    testing.AssertEqInt(t.add_column(fixed_col(4, basalam.Alignment.Left)), 0)
+    testing.AssertEqInt(t.add_column(fixed_col(6, basalam.Alignment.Right)), 1)
+    testing.AssertEqInt(t.add_row(row2("ab", "1")), 0)
+    testing.AssertEqInt(t.add_row(row2("cdef", "22")), 1)
+    testing.AssertEqStr(frame(t, 10, 2), "ab" + sp(7) + "1|cdef" + sp(4) + "22")
+end
+
+func test_tb02_header_and_rule():
+    mut t := basalam.NewTable()
+    t.pad_x = 0
+    t.header = true
+    t.add_column(fixed_col(6, basalam.Alignment.Left))
+    t.add_column(fixed_col(5, basalam.Alignment.Right))
+    t.add_row(row2("Name", "Qty"))
+    t.add_row(row2("apple", "3"))
+    t.add_row(row2("kiwi", "12"))
+    testing.AssertEqStr(frame(t, 11, 4), "Name" + sp(4) + "Qty|" + dash(11) + "|apple" + sp(5) + "3|kiwi" + sp(5) + "12")
+end
+
+func test_tb03_mixed_alignment_pad1():
+    mut t := basalam.NewTable()
+    t.header = true
+    t.add_column(fixed_col(8, basalam.Alignment.Left))
+    t.add_column(fixed_col(7, basalam.Alignment.Right))
+    t.add_column(fixed_col(5, basalam.Alignment.Center))
+    t.add_row(row3("Item", "Price", "Tag"))
+    t.add_row(row3("Tea", "4.50", "hot"))
+    testing.AssertEqStr(frame(t, 20, 3), " Item" + sp(4) + "Price" + sp(2) + "Tag" + sp(1) + "|" + dash(20) + "| Tea" + sp(6) + "4.50" + sp(2) + "hot" + sp(1))
+end
+
+func test_tb04_clip():
+    mut t := basalam.NewTable()
+    t.pad_x = 0
+    t.add_column(fixed_col(4, basalam.Alignment.Left))
+    t.add_column(fixed_col(3, basalam.Alignment.Right))
+    t.add_row(row2("Description", "ok"))
+    testing.AssertEqStr(frame(t, 7, 1), "Desc ok")
+end
+
+func test_tb05_ellipsis():
+    mut t := basalam.NewTable()
+    t.pad_x = 0
+    t.add_column(fixed_col(4, basalam.Alignment.Left))
+    t.add_column(fixed_col(3, basalam.Alignment.Right))
+    t.set_column_overflow(0, basalam.CellOverflow.Ellipsis)
+    t.add_row(row2("Description", "ok"))
+    testing.AssertEqStr(frame(t, 7, 1), "Des… ok")
+end
+
+func test_tb06_header_only():
+    mut t := basalam.NewTable()
+    t.pad_x = 0
+    t.header = true
+    t.add_column(fixed_col(4, basalam.Alignment.Left))
+    t.add_column(fixed_col(6, basalam.Alignment.Right))
+    t.add_row(row2("Name", "Qty"))
+    testing.AssertEqStr(frame(t, 10, 3), "Name" + sp(3) + "Qty|" + dash(10) + "|" + sp(10))
+end
+
+func test_tb07_no_rows_paints_nothing():
+    mut t := basalam.NewTable()
+    t.pad_x = 0
+    t.add_column(fixed_col(4, basalam.Alignment.Left))
+    t.add_column(fixed_col(6, basalam.Alignment.Right))
+    testing.AssertEqStr(frame(t, 10, 2), sp(10) + "|" + sp(10))
+    testing.AssertEqInt(t.preferred_size(0).height, 0)
+end
+
+func test_tb08_narrow_clips_fixed_from_right():
+    mut t := basalam.NewTable()
+    t.pad_x = 0
+    t.add_column(fixed_col(4, basalam.Alignment.Left))
+    t.add_column(fixed_col(6, basalam.Alignment.Right))
+    t.add_row(row2("ab", "1"))
+    t.add_row(row2("cdef", "22"))
+    testing.AssertEqInt(t.preferred_size(0).width, 10)
+    testing.AssertEqStr(frame(t, 6, 3), "ab   1|cdef22|" + sp(6))
+end
+
+// ---- Columns, rows and the set API ---------------------------------------
+
+func test_set_api_changes_render():
+    mut t := basalam.NewTable()
+    t.pad_x = 0
+    t.add_column(basalam.TableColumn {})
+    t.add_column(fixed_col(2, basalam.Alignment.Left))
+    t.add_row(row2("a", "b"))
+    testing.AssertEqInt(t.preferred_size(0).width, 2)
+    t.set_column_width(0, basalam.LayoutSize { kind = basalam.SizeKind.Fixed, cells = 3 })
+    testing.AssertEqInt(t.preferred_size(0).width, 5)
+    t.set_column_width(9, basalam.LayoutSize { kind = basalam.SizeKind.Fixed, cells = 1 })
+    t.set_column_align(0, basalam.Alignment.Right)
+    t.add_row(row2("a", "b"))
+    testing.AssertEqStr(frame(t, 5, 1), "  ab ")
+end
+
+func test_pad_x_negative_clamps_to_zero():
+    mut t := basalam.NewTable()
+    t.set_pad_x(-3)
+    t.add_column(fixed_col(3, basalam.Alignment.Left))
+    t.add_row(row1("a"))
+    testing.AssertEqStr(frame(t, 3, 1), "a  ")
+end
+
+// ---- Alignment precedence and centring ----------------------------------
+
+func test_precedence_cell_over_column_over_default():
+    mut t := basalam.NewTable()
+    t.pad_x = 0
+    t.add_column(fixed_col(5, basalam.Alignment.Right))
+    t.add_column(fixed_col(3, basalam.Alignment.Left))
+    t.add_row(row2("a", "b"))
+    t.add_row(row2("c", "d"))
+    t.set_cell_align(1, 0, basalam.Alignment.Center)
+    testing.AssertEqStr(frame(t, 8, 2), "    ab  |  c  d  ")
+end
+
+func test_cell_override_wins_again_when_set_twice():
+    mut t := basalam.NewTable()
+    t.pad_x = 0
+    t.add_column(fixed_col(5, basalam.Alignment.Left))
+    t.add_row(row1("a"))
+    t.set_cell_align(0, 0, basalam.Alignment.Right)
+    t.set_cell_align(0, 0, basalam.Alignment.Center)
+    testing.AssertEqStr(frame(t, 5, 1), "  a  ")
+end
+
+func test_centre_odd_slack_extra_cell_right():
+    mut t := basalam.NewTable()
+    t.pad_x = 0
+    t.add_column(fixed_col(5, basalam.Alignment.Center))
+    t.add_row(row1("ab"))
+    testing.AssertEqStr(frame(t, 5, 1), " ab  ")
+end
+
+func test_header_takes_column_align():
+    mut t := basalam.NewTable()
+    t.pad_x = 0
+    t.header = true
+    t.rule = false
+    t.add_column(fixed_col(4, basalam.Alignment.Right))
+    t.add_row(row1("Hi"))
+    testing.AssertEqStr(frame(t, 4, 1), "  Hi")
+end
+
+// ---- Overflow and wide glyphs -------------------------------------------
+
+func test_wide_glyph_split_becomes_blank():
+    mut t := basalam.NewTable()
+    t.pad_x = 0
+    t.add_column(fixed_col(2, basalam.Alignment.Left))
+    t.add_column(fixed_col(1, basalam.Alignment.Left))
+    t.add_row(row2("a中", "X"))
+    testing.AssertEqStr(frame(t, 3, 1), "a X")
+end
+
+func test_wide_glyph_ellipsis_blank_then_dots():
+    mut t := basalam.NewTable()
+    t.pad_x = 0
+    t.add_column(fixed_col(2, basalam.Alignment.Left))
+    t.set_column_overflow(0, basalam.CellOverflow.Ellipsis)
+    t.add_row(row1("中文字"))
+    testing.AssertEqStr(frame(t, 2, 1), " …")
+end
+
+func test_wide_glyph_fits_exactly():
+    mut t := basalam.NewTable()
+    t.pad_x = 0
+    t.add_column(fixed_col(2, basalam.Alignment.Left))
+    t.add_row(row1("中"))
+    mut b := basalam.NewBuffer(2, 1)
+    mut tt := t
+    tt.render(b, rect(0, 0, 2, 1))
+    testing.AssertEqStr(b.get(0, 0).ch, "中")
+    b.free()
+end
+
+// ---- Header style and shrink order --------------------------------------
+
+func test_header_style_replaces_body_style():
+    mut t := basalam.NewTable()
+    t.pad_x = 0
+    t.header = true
+    t.add_column(fixed_col(3, basalam.Alignment.Left))
+    t.add_row(row1("H"))
+    t.add_row(row1("b"))
+    mut b := basalam.NewBuffer(3, 3)
+    mut tt := t
+    tt.render(b, rect(0, 0, 3, 3))
+    testing.AssertEqStr(b.get(0, 0).style, basalam.StyleSgr(basalam.Style { bold = true }, basalam.ColorTier.TrueColor))
+    testing.AssertEqStr(b.get(0, 2).style, "")
+    b.free()
+end
+
+func test_narrow_rect_shrink_order():
+    // Star shrinks to 0, then Pref toward min, then Fixed keeps width and is
+    // clipped by the rect from the right.
+    mut t := basalam.NewTable()
+    t.pad_x = 0
+    t.add_column(basalam.TableColumn {})
+    t.add_column(pref_col(0, -1))
+    t.add_column(fixed_col(3, basalam.Alignment.Left))
+    t.add_row(row3("aa", "bbbb", "c"))
+    testing.AssertEqStr(frame(t, 6, 1), "bbbc  ")
+end
+
+// ---- Width resolution ----------------------------------------------------
+
+func test_star_remainder_goes_to_earlier_column():
+    mut t := basalam.NewTable()
+    t.add_column(basalam.TableColumn {})
+    t.add_column(basalam.TableColumn {})
+    t.add_row(row2("a", "b"))
+    testing.AssertEqStr(frame(t, 21, 1), " a" + sp(9) + " b" + sp(8))
+end
+
+func test_pref_min_max_clamp():
+    mut t := basalam.NewTable()
+    t.add_column(pref_col(0, 6))
+    t.add_column(pref_col(4, -1))
+    t.add_row(row2("abcdefghij", "x"))
+    testing.AssertEqInt(t.preferred_size(0).width, 10)
+end
+
+// ---- Measurement ----------------------------------------------------------
+
+func test_measure_auto_only():
+    mut t := basalam.NewTable()
+    t.header = true
+    t.add_column(pref_col(0, -1))
+    t.add_column(pref_col(0, -1))
+    t.add_row(row2("name", "qty"))
+    t.add_row(row2("apple", "3"))
+    t.add_row(row2("kiwi", "12"))
+    testing.AssertEqInt(t.preferred_size(0).width, 12)
+    testing.AssertEqInt(t.preferred_size(0).height, 4)
+    testing.AssertEqInt(t.measure(basalam.Axis.X, 0).extent, 12)
+    testing.AssertEqInt(t.measure(basalam.Axis.Y, 0).extent, 4)
+    testing.AssertTrue(t.measure(basalam.Axis.X, 0).ok)
+end
+
+func test_measure_star_counts_zero_and_clamps():
+    mut t := basalam.NewTable()
+    t.add_column(basalam.TableColumn {})
+    t.add_column(fixed_col(7, basalam.Alignment.Left))
+    t.add_row(row2("a", "b"))
+    testing.AssertEqInt(t.preferred_size(0).width, 7)
+    testing.AssertEqInt(t.preferred_size(4).width, 4)
+    testing.AssertEqInt(t.measure(basalam.Axis.X, 4).extent, 4)
+end
+
+func test_empty_table_is_zero():
+    mut t := basalam.NewTable()
+    testing.AssertEqInt(t.preferred_size(0).width, 0)
+    testing.AssertEqInt(t.preferred_size(0).height, 0)
+end
+
+// ---- Non-focusable contract and bounds -----------------------------------
+
+func test_not_focusable_not_hit_not_consuming():
+    mut t := basalam.NewTable()
+    t.add_column(fixed_col(2, basalam.Alignment.Left))
+    t.add_row(row1("x"))
+    testing.AssertFalse(t.focusable())
+    testing.AssertFalse(t.hits())
+    testing.AssertFalse(t.handle_event(key("j")))
+    testing.AssertFalse(t.handle_event(key("\r")))
+end
+
+func test_bounds_survive_set_bounds():
+    mut t := basalam.NewTable()
+    t.set_bounds(rect(2, 1, 8, 3))
+    testing.AssertEqInt(t.bounds().x, 2)
+    testing.AssertEqInt(t.bounds().y, 1)
+    testing.AssertEqInt(t.bounds().width, 8)
+    testing.AssertEqInt(t.bounds().height, 3)
+end
+
+func main:
+    test_tb01_no_header_fixed_columns()
+    test_tb02_header_and_rule()
+    test_tb03_mixed_alignment_pad1()
+    test_tb04_clip()
+    test_tb05_ellipsis()
+    test_tb06_header_only()
+    test_tb07_no_rows_paints_nothing()
+    test_tb08_narrow_clips_fixed_from_right()
+    test_set_api_changes_render()
+    test_pad_x_negative_clamps_to_zero()
+    test_precedence_cell_over_column_over_default()
+    test_cell_override_wins_again_when_set_twice()
+    test_centre_odd_slack_extra_cell_right()
+    test_header_takes_column_align()
+    test_wide_glyph_split_becomes_blank()
+    test_wide_glyph_ellipsis_blank_then_dots()
+    test_wide_glyph_fits_exactly()
+    test_header_style_replaces_body_style()
+    test_narrow_rect_shrink_order()
+    test_star_remainder_goes_to_earlier_column()
+    test_pref_min_max_clamp()
+    test_measure_auto_only()
+    test_measure_star_counts_zero_and_clamps()
+    test_empty_table_is_zero()
+    test_not_focusable_not_hit_not_consuming()
+    test_bounds_survive_set_bounds()
+    ret testing.Summary()
+end
