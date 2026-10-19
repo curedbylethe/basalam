@@ -13,7 +13,7 @@ endif
 
 EXAMPLES := $(patsubst examples/%.salam,$(BUILD)/examples/%,$(wildcard examples/*.salam))
 
-.PHONY: help build test example examples run format check docs clean
+.PHONY: help build test example examples run format check docs docs-check clean
 
 help:
 	@echo "make build     type-check and compile every file in basalam/"
@@ -21,8 +21,9 @@ help:
 	@echo "make examples  build every program in examples/ into build/examples/"
 	@echo "make run       build and run the demo example"
 	@echo "make format    format all Salam sources in place"
-	@echo "make check     what CI runs: format check, build, examples, tests"
+	@echo "make check     format check, build, examples, tests (the library checks)"
 	@echo "make docs      preview the documentation site (needs: npm i -g mint)"
+	@echo "make docs-check validate the documentation site and its links"
 	@echo "make clean     remove build output"
 
 # `salam obj basalam/basalam.salam` does not load the package's sibling
@@ -55,6 +56,10 @@ check:
 
 docs:
 	mint dev
+
+docs-check:
+	mint validate
+	mint broken-links --check-anchors
 
 clean:
 	rm -rf $(BUILD) .salam-build
