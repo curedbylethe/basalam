@@ -74,10 +74,14 @@ npm i -g mint
 mint dev
 ```
 
+Run `make docs-check` to validate the site and its links the way CI does; it
+needs the same `mint` install.
+
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md). `make check` runs everything CI
-runs. This project follows the [Contributor Covenant](CODE_OF_CONDUCT.md).
+See [CONTRIBUTING.md](CONTRIBUTING.md). `make check` runs the library checks
+and `make docs-check` checks the documentation site; CI runs both. This
+project follows the [Contributor Covenant](CODE_OF_CONDUCT.md).
 
 ## License
 
