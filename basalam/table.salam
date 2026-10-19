@@ -24,9 +24,11 @@
  * columns shrink to 0 first, then Pref columns shrink toward min, and Fixed
  * columns keep their width and are clipped by the rect from the right.
  *
- * Widths are resolved on every call (render, preferred_size and measure use
- * the same helper, so they agree). That is cheap for a first version. A cache
- * belongs in set_bounds if a profile ever asks for one.
+ * Widths are resolved on every call by one helper, so measure reports what
+ * preferred_size reports. preferred_size resolves without a width, so Fill
+ * columns count 0 there; render resolves at the real rect width. That is cheap
+ * for a first version. A cache belongs in set_bounds if a profile ever asks
+ * for one.
  *
  * Cells cost the display width of their codepoints, where East Asian wide
  * glyphs count 2 (term.Width counts codepoints, so it cannot answer that).
@@ -447,12 +449,19 @@ pub struct Table:
                 buf.fill(cell, " ", sgr)
                 area := cw - 2 * pad
                 mut text := ""
+                mut shown := 0
                 if area > 0:
                     overflow := this.columns.get(c).overflow
-                    text = _fit(this._cell_text(r, c), area, overflow)
+                    raw := this._cell_text(r, c)
+                    raw_w := _text_width(raw)
+                    text = _fit(raw, raw_w, area, overflow)
+                    shown = raw_w
+                    if shown > area:
+                        shown = area
+                    end
                 end
                 mut offset := 0
-                slack := area - _text_width(text)
+                slack := area - shown
                 align := this._align_for(r, c)
                 if align == Alignment.Right:
                     offset = slack
@@ -487,8 +496,11 @@ func _first_line(s: str): str:
 end
 
 // Display cells of s.
+// ponytail: _cell_width is shared with separator.salam (same package). Move it
+// to a shared module when a third widget needs it.
 func _text_width(s: str): int:
     cps := str.CodePoints(s)
+    defer cps.free()
     mut w := 0
     repeat cps.len() in i:
         w = w + _cell_width(cps.get(i))
@@ -499,11 +511,12 @@ end
 // Text fitted to exactly n cells when it is cut: clipped, or clipped to n - 1
 // cells and followed by the ellipsis. Text that already fits is returned as is.
 // A wide glyph that would be split at the edge leaves a blank cell instead.
-func _fit(s: str, n: int, overflow: CellOverflow): str:
+// w is the display width of s, measured once by the caller.
+func _fit(s: str, w: int, n: int, overflow: CellOverflow): str:
     if n <= 0:
         ret ""
     end
-    if _text_width(s) <= n:
+    if w <= n:
         ret s
     end
     if overflow == CellOverflow.Ellipsis:
@@ -515,6 +528,7 @@ end
 // The longest prefix of s that fits in n cells, padded with blanks to n.
 func _clip(s: str, n: int): str:
     cps := str.CodePoints(s)
+    defer cps.free()
     mut b := str.NewBuilder()
     defer str.BufFree(b)
     mut used := 0
