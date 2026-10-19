@@ -10,7 +10,8 @@
 // by BorderInset on set_bounds, resize re-insetting, a degenerate one-row
 // panel, the attribute-free border_style, add replacing the child, a Column
 // child being positioned inside the frame, and the preferred size it reports:
-// the child's size plus the ring, the max_width forwarded to the child, the
+// the child's natural size plus the ring (including a container child that
+// answers through measure), the max_width forwarded to the child, the
 // per-axis sentinel, and the empty slot. Expected SGR strings come from
 // basalam.StyleSgr, so no escape appears by hand.
 
@@ -212,6 +213,18 @@ func test_preferred_size_adds_frame():
     testing.AssertEqInt(r.height, 4)
 end
 
+func test_preferred_size_measures_container_child():
+    // A Column has measure but no preferred_size. The Panel must use the
+    // measured extent, not fall back to the base sentinel.
+    mut col := basalam.Column {}
+    _ := col.add(FixedSizer { w = 4, h = 2 })
+    mut p := basalam.Panel { border = basalam.BorderStyle.Single }
+    p.add(col)
+    r := p.preferred_size(80)
+    testing.AssertEqInt(r.width, 6)
+    testing.AssertEqInt(r.height, 4)
+end
+
 func test_preferred_size_fits_requested_width():
     mut p := basalam.Panel { border = basalam.BorderStyle.Single }
     p.add(FixedSizer { w = 4, h = 2, expect = 4 })
@@ -335,6 +348,7 @@ func main:
     test_add_replaces_child()
     test_column_child_positioned_inside_frame()
     test_preferred_size_adds_frame()
+    test_preferred_size_measures_container_child()
     test_preferred_size_fits_requested_width()
     test_preferred_size_floors_forwarded_width()
     test_preferred_size_forwards_unbounded()

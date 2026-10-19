@@ -30,7 +30,8 @@
 // out-of-range cell, R15 row and column spans, R11 stack overlap, R8 Pref
 // through Text, a measurable container's natural cross extent, a Panel as a
 // measured child of a Row and a Column with its border included in the
-// reserved size, and an unmeasurable child that still fills the axis, R12
+// reserved size (including a Panel whose own child is a Column), and an
+// unmeasurable child that still fills the axis, R12
 // empty propagation, and R13 idempotence. Main-axis Pref reserves a measured
 // size and degrades to Fill weight 1 when it cannot measure. The full per-AC
 // matrix is a later stage.
@@ -1759,6 +1760,23 @@ func test_panel_column_measured_pref():
     checkRect(p.slot.get(0).child.bounds(), 1, 1, 6, 2)
 end
 
+func test_panel_container_child_measured_pref():
+    // The Panel's child is a Column, which has measure but no
+    // preferred_size. The Pref slot must still reserve the Panel's natural
+    // width: the Column's 4 plus one ring cell each side.
+    mut col := basalam.Column {}
+    _ := col.add(sizer(4, 2))
+    mut p := basalam.Panel { border = basalam.BorderStyle.Single }
+    p.add(col)
+    row := basalam.NewRow()
+    pd := p as dyn basalam.Widget
+    i := row.add(pd)
+    row.set_width(i, prefSize())
+    row.set_bounds(rect(0, 0, 20, 6))
+    checkRect(pd.bounds(), 0, 0, 6, 6)
+    checkRect(p.slot.get(0).child.bounds(), 1, 1, 4, 4)
+end
+
 func test_panel_unmeasurable_pref_is_fill():
     // An unmeasurable child leaves the Panel's preference at the -1 sentinel
     // on both axes, so Pref degrades to Fill weight 1: the Panel and its
@@ -2212,6 +2230,7 @@ func main:
     test_cross_fill_means_pref()
     test_panel_row_measured_pref()
     test_panel_column_measured_pref()
+    test_panel_container_child_measured_pref()
     test_panel_unmeasurable_pref_is_fill()
     test_panel_none_border_pref()
     test_normal_form_outputs()

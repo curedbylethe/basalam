@@ -25,7 +25,7 @@ package basalam
 /// like its child. Add the child with add; it must also be added to the
 /// Screen's tree to be painted, like any other child.
 ///
-/// Panel reports the child's preferred size plus BorderInset of `border` on
+/// Panel reports the child's natural size plus BorderInset of `border` on
 /// each side, so the ring it draws is part of that size. It is not focusable
 /// unless takes_focus is set.
 pub struct Panel:
@@ -89,10 +89,11 @@ pub struct Panel:
     end
 
     @en "preferred_size"
-    /// The child's preferred size plus BorderInset of `border` on each side.
-    /// The child is measured at max_width minus that inset on both sides,
+    /// The child's natural size plus BorderInset of `border` on each side.
+    /// Each axis is measured at max_width minus that inset on both sides,
     /// floored at 1; a non-positive max_width is forwarded unchanged as
-    /// unbounded. A negative child component means no preference on that
+    /// unbounded. A child that cannot measure falls back to its
+    /// preferred_size. A negative component means no preference on that
     /// axis and stays -1. An empty Panel reports no preference.
     pub func preferred_size(max_width: int): Rect:
         if this.slot.len() == 0:
@@ -106,14 +107,36 @@ pub struct Panel:
                 inner_max = 1
             end
         end
-        child := this.slot.get(0).child.preferred_size(inner_max)
+        child := this.slot.get(0).child
+        mx := child.measure(Axis.X, inner_max)
+        my := child.measure(Axis.Y, inner_max)
+        mut pref := Rect { width = -1, height = -1 }
+        if not mx.ok or not my.ok:
+            pref = child.preferred_size(inner_max)
+        end
         mut w := -1
-        if child.width >= 0:
-            w = child.width + 2 * n
+        if mx.ok:
+            w = mx.extent
+            if w < 0:
+                w = 0
+            end
+            w = w + 2 * n
+        else:
+            if pref.width >= 0:
+                w = pref.width + 2 * n
+            end
         end
         mut h := -1
-        if child.height >= 0:
-            h = child.height + 2 * n
+        if my.ok:
+            h = my.extent
+            if h < 0:
+                h = 0
+            end
+            h = h + 2 * n
+        else:
+            if pref.height >= 0:
+                h = pref.height + 2 * n
+            end
         end
         ret Rect { width = w, height = h }
     end
