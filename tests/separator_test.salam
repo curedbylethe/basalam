@@ -187,6 +187,46 @@ func test_style_fg_without_bg_leaves_off_line_cells():
     testing.AssertEqStr(b.get(0, 1).style, "")
 end
 
+// ---- Style memo ---------------------------------------------------------
+
+// The style cache: a repeated render with unchanged inputs builds no SGR
+// string, changing the rule style rebuilds exactly that string, and an unset
+// background never builds a fill at all.
+func test_style_memo():
+    mut s := basalam.NewSeparator()
+    s.set_style(basalam.Style { fg = basalam.Green, bg = basalam.Color.Ansi(4) })
+    b := basalam.NewBuffer(6, 3)
+    defer b.free()
+
+    // First render builds the background fill and the rule: two strings.
+    before := basalam.SgrBuilds()
+    s.render(b, rect(0, 0, 6, 3))
+    testing.AssertEqInt(basalam.SgrBuilds() - before, 2)
+
+    // Unchanged inputs: nothing is rebuilt.
+    mid := basalam.SgrBuilds()
+    s.render(b, rect(0, 0, 6, 3))
+    testing.AssertEqInt(basalam.SgrBuilds() - mid, 0)
+
+    // A new foreground changes the rule only; the background fill is reused.
+    s.set_style(basalam.Style { fg = basalam.Red, bg = basalam.Color.Ansi(4) })
+    changed := basalam.SgrBuilds()
+    s.render(b, rect(0, 0, 6, 3))
+    testing.AssertEqInt(basalam.SgrBuilds() - changed, 1)
+
+    // Without a background only the rule is built, and only once.
+    mut u := basalam.NewSeparator()
+    u.set_style(basalam.Style { fg = basalam.Red })
+    ub := basalam.NewBuffer(4, 3)
+    defer ub.free()
+    first := basalam.SgrBuilds()
+    u.render(ub, rect(0, 0, 4, 3))
+    testing.AssertEqInt(basalam.SgrBuilds() - first, 1)
+    again := basalam.SgrBuilds()
+    u.render(ub, rect(0, 0, 4, 3))
+    testing.AssertEqInt(basalam.SgrBuilds() - again, 0)
+end
+
 // ---- Predicates ----------------------------------------------------------
 
 func test_predicates():
@@ -248,6 +288,7 @@ func main:
     test_zero_length_paints_nothing()
     test_style_fg_and_bg()
     test_style_fg_without_bg_leaves_off_line_cells()
+    test_style_memo()
     test_predicates()
     test_defaults()
     test_preferred_size_and_measure()

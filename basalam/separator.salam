@@ -69,6 +69,13 @@ pub struct Separator:
     /// background fills the whole rect before the rune is drawn.
     pub style: Style = StyleDefault
 
+    // The SGR of the rule style and of the background fill, kept between
+    // renders. Two memos because an unset background emits no string at all,
+    // which one memo would turn into "". Written only by render, never by the
+    // app.
+    rule_memo: _SgrMemo = _SgrMemo {}
+    fill_memo: _SgrMemo = _SgrMemo {}
+
     @en "focusable"
     /// Returns false: a separator never takes focus.
     pub func focusable(): bool:
@@ -160,10 +167,10 @@ pub struct Separator:
             ret
         end
         if this.style.bg != Color.Default:
-            buf.fill(bounds, " ", StyleSgr(Style { bg = this.style.bg }, ColorTier.TrueColor))
+            buf.fill(bounds, " ", this.fill_memo._sgr(Style { bg = this.style.bg }, ColorTier.TrueColor))
         end
         r := _rune(this.orientation, this.ch)
-        sgr := StyleSgr(this.style, ColorTier.TrueColor)
+        sgr := this.rule_memo._sgr(this.style, ColorTier.TrueColor)
         if this.orientation == Orientation.Vertical:
             repeat bounds.height in i:
                 buf.set(bounds.x, bounds.y + i, Cell { ch = r, style = sgr })
