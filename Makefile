@@ -13,15 +13,16 @@ endif
 
 EXAMPLES := $(patsubst examples/%.salam,$(BUILD)/examples/%,$(wildcard examples/*.salam))
 
-.PHONY: help build test example examples run format check docs docs-check clean
+.PHONY: help build test test-llvm example examples run format check docs docs-check clean
 
 help:
 	@echo "make build     type-check and compile every file in basalam/"
 	@echo "make test      build and run the test suite (tests/run.sh)"
+	@echo "make test-llvm build and run the test suite with --backend=llvm"
 	@echo "make examples  build every program in examples/ into build/examples/"
 	@echo "make run       build and run the demo example"
 	@echo "make format    format all Salam sources in place"
-	@echo "make check     format check, build, examples, tests (the library checks)"
+	@echo "make check     format check, build, examples, tests (the library checks; CI also runs test-llvm and docs-check)"
 	@echo "make docs      preview the documentation site (needs: npm i -g mint)"
 	@echo "make docs-check validate the documentation site and its links"
 	@echo "make clean     remove build output"
@@ -36,6 +37,9 @@ build:
 
 test:
 	SALAM=$(SALAM) sh tests/run.sh
+
+test-llvm:
+	SALAM=$(SALAM) SALAM_BACKEND=llvm sh tests/run.sh
 
 examples: $(EXAMPLES)
 example: examples

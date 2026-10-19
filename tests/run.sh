@@ -10,13 +10,17 @@
 # Usage: tests/run.sh [name ...]      (default: every tests/*.salam)
 # Env:   SALAM=path/to/salam          (default: salam on PATH)
 #        TEST_TIMEOUT=seconds          (default: 30; bound on each test run)
+#        SALAM_BACKEND=llvm|c          (default: the compiler's own backend)
+#
+# SALAM_BACKEND is expanded unquoted, so only one word works: llvm or c.
 
 set -u
 
 SALAM="${SALAM:-salam}"
 TEST_TIMEOUT="${TEST_TIMEOUT:-30}"
+SALAM_BACKEND="${SALAM_BACKEND:-}"
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
-OUT="$ROOT/build/tests"
+OUT="$ROOT/build/tests${SALAM_BACKEND:+-$SALAM_BACKEND}"
 mkdir -p "$OUT"
 
 # Salam links with the host toolchain on macOS; pin the deployment target to
@@ -40,7 +44,7 @@ for name in $names; do
     bin="$OUT/$name"
     got="$OUT/$name.stdout"
 
-    if ! "$SALAM" build "$src" --output="$bin" --log-level=warn; then
+    if ! "$SALAM" build "$src" --output="$bin" ${SALAM_BACKEND:+--backend=$SALAM_BACKEND} --log-level=warn; then
         echo "FAIL $name (build)"
         fail=$((fail + 1))
         continue
