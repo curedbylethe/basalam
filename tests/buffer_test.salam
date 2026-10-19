@@ -24,6 +24,7 @@
 // front-buffer machinery: diff() is a whole frame while force_full and then
 // only the changed runs (one cursor move per run), commit() silences it, and
 // resize() reallocates both grids and forces a full repaint.
+// Touched-cell tracking marks each write so diff() emits only those cells.
 
 import testing
 import term
@@ -339,6 +340,65 @@ func test_front_shared_through_copies():
     b.free()
 end
 
+func test_diff_sparse_rows():
+    mut b := basalam.NewBuffer(6, 3)
+    b.commit()
+    b.set(0, 0, basalam.Cell { ch = "a" })
+    b.set(4, 2, basalam.Cell { ch = "b" })
+    // Changed cells on different rows are separate runs.
+    want := term.SeqMoveTo(1, 1) + "a" + term.SeqMoveTo(3, 5) + "b" + term.Reset
+    testing.AssertEqStr(b.diff(), want)
+    b.free()
+end
+
+func test_diff_identical_write():
+    mut b := basalam.NewBuffer(3, 1)
+    b.commit()
+    // A blank is the default cell, so writing it again is not a change.
+    b.set(1, 0, basalam.Cell { ch = " " })
+    testing.AssertEqStr(b.diff(), "")
+    b.free()
+end
+
+func test_clear_round_trip():
+    mut b := basalam.NewBuffer(4, 1)
+    b.put_str(0, 0, "ab", "")
+    b.commit()
+    b.clear()
+    // Only the two cells that held text differ from the front grid.
+    want := term.SeqMoveTo(1, 1) + "  " + term.Reset
+    testing.AssertEqStr(b.diff(), want)
+    b.commit()
+    testing.AssertEqStr(b.diff(), "")
+    testing.AssertEqStr(b.row_text(0), "    ")
+    b.free()
+end
+
+func test_commit_front_matches_cells():
+    mut b := basalam.NewBuffer(3, 2)
+    bold := term.Sgr(term.StyleBold)
+    b.set(0, 0, basalam.Cell { ch = "a" })
+    b.set(2, 0, basalam.Cell { ch = "b", style = bold })
+    b.set(1, 1, basalam.Cell { ch = "c" })
+    b.commit()
+    // commit filled front. Read it; nothing here writes it.
+    repeat b.cells.len() in i:
+        testing.AssertEqStr(b.front.get(i).ch, b.cells.get(i).ch)
+        testing.AssertEqStr(b.front.get(i).style, b.cells.get(i).style)
+    end
+    b.free()
+end
+
+func test_diff_outside_clip():
+    mut b := basalam.NewBuffer(4, 2)
+    b.commit()
+    b.clip = rect(1, 0, 2, 1)
+    // Inside the grid, outside the clip: set drops it, so diff stays empty.
+    b.set(0, 0, basalam.Cell { ch = "x" })
+    testing.AssertEqStr(b.diff(), "")
+    b.free()
+end
+
 func main:
     test_new_is_blank()
     test_set_get()
@@ -362,5 +422,10 @@ func main:
     test_clear_redraw_is_empty()
     test_resize_forces_full()
     test_front_shared_through_copies()
+    test_diff_sparse_rows()
+    test_diff_identical_write()
+    test_clear_round_trip()
+    test_commit_front_matches_cells()
+    test_diff_outside_clip()
     ret testing.Summary()
 end
