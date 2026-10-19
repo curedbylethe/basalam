@@ -102,6 +102,23 @@ struct Spot:
     end
 end
 
+// One cell: "*" while focused, otherwise blank.
+struct Flag:
+    pub use basalam.BaseWidget
+
+    pub func focusable(): bool:
+        ret true
+    end
+
+    pub func render(buf: basalam.Buffer, bounds: basalam.Rect):
+        mut ch := " "
+        if buf.focused:
+            ch = "*"
+        end
+        buf.put_str(bounds.x, bounds.y, ch, "")
+    end
+end
+
 // Writes its current digit, then advances it. A later frame that still
 // shows the old digit was not rendered.
 struct Counter:
@@ -412,6 +429,8 @@ end
 func test_resize_forces_full_repaint():
     mut s := basalam.NewScreen(Frame { title = "g" }, 8, 2)
     defer s.close()
+    counter := s.add(basalam.RootId, Counter {})
+    s.widget(counter).set_bounds(rect(0, 1, 1, 1))
     // A resize reallocates both grids and refits the root to the new area.
     big := basalam.Event { kind = basalam.ResizeEvent, width = 12, height = 3 }
     testing.AssertFalse(s.dispatch(big))
@@ -423,6 +442,9 @@ func test_resize_forces_full_repaint():
     testing.AssertEqStr(s.buffer.row_text(2), "            ")
     testing.AssertTrue(s.buffer.force_full)
     testing.AssertEqStr(s.buffer.diff(), s.buffer.ansi())
+    // Resize set dirty, so this present re-renders every widget.
+    s.present()
+    testing.AssertEqStr(s.buffer.get(0, 1).ch, "1")
     // Simulate the flush an attached present() would do: front catches up.
     s.buffer.commit()
     testing.AssertFalse(s.buffer.force_full)
@@ -538,6 +560,100 @@ func test_raise_subtree_focus():
 end
 
 // Ids outside the tree, and NoWidget, change nothing and do not crash.
+// present returns immediately when nothing is pending. commit clears
+// force_full, so the skipped frame also emits no diff.
+func test_present_with_nothing_pending_is_a_noop():
+    mut s := basalam.NewScreen(basalam.BaseWidget {}, 8, 1)
+    defer s.close()
+    counter := s.add(basalam.RootId, Counter {})
+    s.widget(counter).set_bounds(rect(0, 0, 1, 1))
+    s.present()
+    testing.AssertEqStr(s.buffer.get(0, 0).ch, "1")
+    s.buffer.commit()
+    s.present()
+    testing.AssertEqStr(s.buffer.get(0, 0).ch, "1")
+    testing.AssertEqStr(s.buffer.diff(), "")
+end
+
+// invalidate(id) repaints that widget. An unknown id, or an empty rect,
+// marks the whole screen.
+func test_invalidate_targets_one_widget():
+    mut s := basalam.NewScreen(basalam.BaseWidget {}, 8, 1)
+    defer s.close()
+    spot := Spot {} as dyn basalam.Widget
+    spot_id := s.add(basalam.RootId, spot)
+    counter := s.add(basalam.RootId, Counter {})
+    ghost := s.add(basalam.RootId, Spot {})
+    s.widget(spot_id).set_bounds(rect(0, 0, 1, 1))
+    s.widget(counter).set_bounds(rect(4, 0, 1, 1))
+    s.widget(ghost).set_bounds(rect(7, 0, 0, 1))
+    s.present()
+    testing.AssertEqStr(s.buffer.get(0, 0).ch, "a")
+    testing.AssertEqStr(s.buffer.get(4, 0).ch, "1")
+    // The dyn handle shares the box the screen stores. No region is queued.
+    testing.AssertTrue(spot.handle_event(key("r")))
+    s.present()
+    testing.AssertEqStr(s.buffer.get(0, 0).ch, "a")
+    s.invalidate(spot_id)
+    s.present()
+    testing.AssertEqStr(s.buffer.get(0, 0).ch, "b")
+    testing.AssertEqStr(s.buffer.get(4, 0).ch, "1")
+    s.invalidate(99)
+    s.present()
+    testing.AssertEqStr(s.buffer.get(4, 0).ch, "2")
+    s.invalidate(ghost)
+    s.present()
+    testing.AssertEqStr(s.buffer.get(4, 0).ch, "3")
+end
+
+// A focus change queues the old and new cells. A third widget stays put.
+func test_focus_change_repaints_old_and_new_only():
+    mut s := basalam.NewScreen(basalam.BaseWidget {}, 8, 1)
+    defer s.close()
+    a := s.add(basalam.RootId, Flag {})
+    b := s.add(basalam.RootId, Flag {})
+    counter := s.add(basalam.RootId, Counter {})
+    s.widget(a).set_bounds(rect(0, 0, 1, 1))
+    s.widget(b).set_bounds(rect(2, 0, 1, 1))
+    s.widget(counter).set_bounds(rect(6, 0, 1, 1))
+    s.present()
+    testing.AssertEqStr(s.buffer.get(0, 0).ch, "*")
+    testing.AssertEqStr(s.buffer.get(2, 0).ch, " ")
+    testing.AssertEqStr(s.buffer.get(6, 0).ch, "1")
+    testing.AssertTrue(s.focus_next())
+    s.present()
+    testing.AssertEqStr(s.buffer.get(0, 0).ch, " ")
+    testing.AssertEqStr(s.buffer.get(2, 0).ch, "*")
+    testing.AssertEqStr(s.buffer.get(6, 0).ch, "1")
+end
+
+// Four regions stay partial. A fifth takes the full path.
+func test_too_many_regions_repaint_everything():
+    mut s := basalam.NewScreen(basalam.BaseWidget {}, 12, 1)
+    defer s.close()
+    mut ids := Vector {} as Vector<int>
+    defer ids.free()
+    repeat 5 in i:
+        id := s.add(basalam.RootId, Spot {})
+        s.widget(id).set_bounds(rect(i, 0, 1, 1))
+        ids.push(id)
+    end
+    counter := s.add(basalam.RootId, Counter {})
+    s.widget(counter).set_bounds(rect(10, 0, 1, 1))
+    s.present()
+    testing.AssertEqStr(s.buffer.get(10, 0).ch, "1")
+    repeat 4 in i:
+        s.invalidate(ids.get(i))
+    end
+    s.present()
+    testing.AssertEqStr(s.buffer.get(10, 0).ch, "1")
+    repeat 5 in i:
+        s.invalidate(ids.get(i))
+    end
+    s.present()
+    testing.AssertEqStr(s.buffer.get(10, 0).ch, "2")
+end
+
 func test_raise_subtree_ignores_unknown_ids():
     mut s := subtree_screen()
     defer s.close()
@@ -571,5 +687,9 @@ func main:
     test_raise_subtree_leaf_matches_raise()
     test_raise_subtree_focus()
     test_raise_subtree_ignores_unknown_ids()
+    test_present_with_nothing_pending_is_a_noop()
+    test_invalidate_targets_one_widget()
+    test_focus_change_repaints_old_and_new_only()
+    test_too_many_regions_repaint_everything()
     ret testing.Summary()
 end
