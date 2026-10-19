@@ -28,11 +28,12 @@
 // The container smoke exercises the R1 recursion (a Column containing a Row
 // is moved by one set_bounds), R5 packing, R10 grid cells including an
 // out-of-range cell, R15 row and column spans, R11 stack overlap, R8 Pref
-// through Text, a measurable
-// container's natural cross extent, and an unmeasurable child that still
-// fills the axis, R12 empty propagation, and R13 idempotence. Main-axis Pref
-// reserves a measured size and degrades to Fill weight 1 when it cannot
-// measure. The full per-AC matrix is a later stage.
+// through Text, a measurable container's natural cross extent, a Panel as a
+// measured child of a Row and a Column with its border included in the
+// reserved size, and an unmeasurable child that still fills the axis, R12
+// empty propagation, and R13 idempotence. Main-axis Pref reserves a measured
+// size and degrades to Fill weight 1 when it cannot measure. The full per-AC
+// matrix is a later stage.
 
 import mem
 import testing
@@ -1727,6 +1728,72 @@ func test_cross_fill_means_pref():
     checkRect(a.bounds(), 0, 0, 8, 2)
 end
 
+// ---- A Panel as a measured child ----------------------------------------
+
+func test_panel_row_measured_pref():
+    // The Panel's natural width is the Sizer's 4 plus one ring cell each
+    // side, so the Pref slot reserves 6, not the whole row. Stretch fills the
+    // cross axis and the child sits one cell inside the frame.
+    mut p := basalam.Panel { border = basalam.BorderStyle.Single }
+    p.add(sizer(4, 2))
+    row := basalam.NewRow()
+    pd := p as dyn basalam.Widget
+    i := row.add(pd)
+    row.set_width(i, prefSize())
+    row.set_bounds(rect(0, 0, 20, 6))
+    checkRect(pd.bounds(), 0, 0, 6, 6)
+    checkRect(p.slot.get(0).child.bounds(), 1, 1, 4, 4)
+end
+
+func test_panel_column_measured_pref():
+    // Same reservation on the vertical axis: height 4, not 30. The width
+    // stretches to the column's 8.
+    mut p := basalam.Panel { border = basalam.BorderStyle.Single }
+    p.add(sizer(4, 2))
+    col := basalam.NewColumn()
+    pd := p as dyn basalam.Widget
+    i := col.add(pd)
+    col.set_height(i, prefSize())
+    col.set_bounds(rect(0, 0, 8, 30))
+    checkRect(pd.bounds(), 0, 0, 8, 4)
+    checkRect(p.slot.get(0).child.bounds(), 1, 1, 6, 2)
+end
+
+func test_panel_unmeasurable_pref_is_fill():
+    // An unmeasurable child leaves the Panel's preference at the -1 sentinel
+    // on both axes, so Pref degrades to Fill weight 1: the Panel and its
+    // sibling split the row 10/10 with no hole. The child is inset anyway.
+    mut p := basalam.Panel { border = basalam.BorderStyle.Single }
+    p.add(leaf())
+    row := basalam.NewRow()
+    pd := p as dyn basalam.Widget
+    i := row.add(pd)
+    row.set_width(i, prefSize())
+    other := leaf()
+    _ := row.add(other)
+    row.set_bounds(rect(0, 0, 20, 2))
+    checkRect(pd.bounds(), 0, 0, 10, 2)
+    // The 2-tall box leaves no room inside a 1-cell ring: R3/R6 collapse the
+    // child to an empty rect anchored at the inset origin.
+    checkRect(p.slot.get(0).child.bounds(), 1, 1, 0, 0)
+    checkRect(other.bounds(), 10, 0, 10, 2)
+end
+
+func test_panel_none_border_pref():
+    // BorderStyle.None costs no inset, so the Panel reserves the child's 4x2
+    // and both rects coincide. Start keeps the height natural.
+    mut p := basalam.Panel { border = basalam.BorderStyle.None }
+    p.add(sizer(4, 2))
+    row := basalam.NewRow()
+    pd := p as dyn basalam.Widget
+    i := row.add(pd)
+    row.set_width(i, prefSize())
+    row.set_align(i, basalam.CrossAlign.Stretch, basalam.CrossAlign.Start)
+    row.set_bounds(rect(0, 0, 20, 3))
+    checkRect(pd.bounds(), 0, 0, 4, 2)
+    checkRect(p.slot.get(0).child.bounds(), 0, 0, 4, 2)
+end
+
 // ---- AC6: set_bounds contract and paint smoke ----------------------------
 
 func test_normal_form_outputs():
@@ -2143,6 +2210,10 @@ func main:
     test_measure_memo_once()
     test_gap_reserved_pref()
     test_cross_fill_means_pref()
+    test_panel_row_measured_pref()
+    test_panel_column_measured_pref()
+    test_panel_unmeasurable_pref_is_fill()
+    test_panel_none_border_pref()
     test_normal_form_outputs()
     test_draw_containers_smoke()
     test_row_gap_four_fill()
