@@ -74,6 +74,8 @@ Each returns `true` when the focus moved, and every change marks the screen dirt
 ```salam
 pub func raise(ids: Vector<int>)
 pub func unraise(ids: Vector<int>)
+pub func raise_subtree(id: int)
+pub func unraise_subtree(id: int)
 ```
 
 `raise` assigns every id in the call one fresh stamp, shared by the whole call, so those widgets are one layer above everything raised earlier and above every unraised widget. Within the layer, paint order stays ID order. Paint order overall is ascending `(stamp, id)`: a lower stamp paints first, and the same stamp paints in ID order. An id that is not in the tree is recorded and does not crash. It affects painting only once that id is registered.
@@ -83,6 +85,8 @@ The focus order is the focusable widgets in the topmost stamp layer, ascending i
 When that order is non-empty and the current focus is outside it, `raise` saves one restore id (the current focus) and moves to the first id of the new order. There is only one saved id. A later `raise` that also moves the focus replaces it. Otherwise `raise` leaves the focus and the saved id unchanged. The move uses `focus`, so it replaces the top of the stack. It does not `push_focus`.
 
 `unraise` writes stamp `0` on every id, so those widgets return to plain ID order. It is idempotent: an id that was not raised, or that is not in the tree, stays at `0`. It does not rewind the stamp counter, so a later `raise` is still a new layer. When nothing remains raised, it focuses the saved id if that widget is still focusable, otherwise the first focusable widget, and then clears the saved id. If the saved id is not focusable and nothing else is, it clears the focus. While a layer remains, it leaves the focus alone when the current focus is still in the new order. Otherwise it focuses the first id of that order, or clears the focus when the order is empty.
+
+`raise_subtree(id: int)` and `unraise_subtree(id: int)` do the same for a widget and every descendant of it. `raise_subtree` gives the whole subtree one fresh stamp, so it is one layer above everything else, and inside the layer each parent still paints before its children. `unraise_subtree` returns the subtree to plain ID order. Both follow the focus rules of `raise` and `unraise`: `raise_subtree` moves the focus into the layer and saves the old one, and `unraise_subtree` restores it. An id that is not in the tree, including `NoWidget`, does nothing. A [Modal](/reference/modal) opens with `push_focus` and then `raise_subtree`, and closes with `unraise_subtree` and then `pop_focus`.
 
 ## Terminal lifecycle
 
