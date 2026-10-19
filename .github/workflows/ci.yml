@@ -31,3 +31,24 @@ jobs:
       # Format check, library build, examples build, test suite.
       - name: make check
         run: make check
+
+  docs:
+    runs-on: ubuntu-latest
+    env:
+      MINTLIFY_TELEMETRY_DISABLED: 1
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      # The CLI is pinned so a new Mintlify release cannot break CI without a
+      # deliberate change in this file; bump it on purpose.
+      - name: Install the Mintlify CLI
+        run: npm i -g mint@4.2.988
+
+      # MDX and frontmatter validation, then the link and anchor check.
+      - name: Check the docs
+        run: make docs-check
