@@ -25,8 +25,9 @@ package basalam
 /// like its child. Add the child with add; it must also be added to the
 /// Screen's tree to be painted, like any other child.
 ///
-/// Panel reports no natural size, so it fills the space its parent gives it.
-/// It is not focusable unless takes_focus is set.
+/// Panel reports the child's preferred size plus BorderInset of `border` on
+/// each side, so the ring it draws is part of that size. It is not focusable
+/// unless takes_focus is set.
 pub struct Panel:
     pub use BaseWidget
 
@@ -85,6 +86,36 @@ pub struct Panel:
             this.slot.get(0).child.set_bounds(inner)
         end
         _leave_pass()
+    end
+
+    @en "preferred_size"
+    /// The child's preferred size plus BorderInset of `border` on each side.
+    /// The child is measured at max_width minus that inset on both sides,
+    /// floored at 1; a non-positive max_width is forwarded unchanged as
+    /// unbounded. A negative child component means no preference on that
+    /// axis and stays -1. An empty Panel reports no preference.
+    pub func preferred_size(max_width: int): Rect:
+        if this.slot.len() == 0:
+            ret Rect { width = -1, height = -1 }
+        end
+        n := BorderInset(this.border)
+        mut inner_max := max_width
+        if max_width > 0:
+            inner_max = max_width - 2 * n
+            if inner_max < 1:
+                inner_max = 1
+            end
+        end
+        child := this.slot.get(0).child.preferred_size(inner_max)
+        mut w := -1
+        if child.width >= 0:
+            w = child.width + 2 * n
+        end
+        mut h := -1
+        if child.height >= 0:
+            h = child.height + 2 * n
+        end
+        ret Rect { width = w, height = h }
     end
 
     @en "focusable"
