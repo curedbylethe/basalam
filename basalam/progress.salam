@@ -35,6 +35,7 @@
 package basalam
 
 import str
+import term
 
 @en "Progress"
 /// A one-row progress bar. It fills left to right from the value, which is a
@@ -128,14 +129,7 @@ pub struct Progress:
             end
         end
         if tail:
-            mut pad := ""
-            if pct < 100:
-                pad = " "
-            end
-            if pct < 10:
-                pad = pad + " "
-            end
-            buf.put_str(bounds.x + bar, bounds.y, " " + pad + str.FromInt(pct) + "%", text_sgr)
+            buf.put_str(bounds.x + bar, bounds.y, " " + term.PadLeft(str.FromInt(pct), 3) + "%", text_sgr)
         end
     end
 end
