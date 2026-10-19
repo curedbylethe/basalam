@@ -200,6 +200,42 @@ func test_render_placeholder_default():
     testing.AssertEqStr(e.value(), "")
 end
 
+func test_render_default_fallbacks_built_once():
+    // Prime both fallbacks with one focused render of a placeholder, then
+    // render again into a fresh buffer: no SGR may be built the second time.
+    mut e := basalam.NewInput()
+    e.set_placeholder("Name")
+    mut b := basalam.NewBuffer(8, 1)
+    defer b.free()
+    b.focused = true
+    e.render(b, rect(0, 0, 8, 1))
+    primed := basalam.SgrBuilds()
+    mut b2 := basalam.NewBuffer(8, 1)
+    defer b2.free()
+    b2.focused = true
+    e.render(b2, rect(0, 0, 8, 1))
+    testing.AssertEqInt(basalam.SgrBuilds(), primed)
+    // Bytes are unchanged: the cursor cell is reverse, the placeholder dim.
+    testing.AssertEqStr(b2.get(0, 0).ch, "N")
+    testing.AssertEqStr(b2.get(0, 0).style, term.Sgr(term.StyleReverse))
+    testing.AssertEqStr(b2.get(1, 0).style, term.Sgr(term.FgBlack + term.FgBright))
+
+    // A caller-supplied style is still used verbatim: the "" sentinel is
+    // the only thing that selects a fallback.
+    bold := term.Sgr(term.StyleBold)
+    italic := term.Sgr(term.StyleItalic)
+    mut c := basalam.NewInput()
+    c.set_placeholder("Name")
+    c.cursor_style = italic
+    c.placeholder_style = bold
+    mut b3 := basalam.NewBuffer(8, 1)
+    defer b3.free()
+    b3.focused = true
+    c.render(b3, rect(0, 0, 8, 1))
+    testing.AssertEqStr(b3.get(0, 0).style, italic)
+    testing.AssertEqStr(b3.get(1, 0).style, bold)
+end
+
 func test_render_themed_styles():
     base := term.Sgr(term.FgBlack) + term.Sgr(term.BgWhite)
     gray := term.Sgr(term.FgBlack + term.FgBright)
@@ -405,6 +441,7 @@ func main:
     test_render_value_unfocused()
     test_render_cursor_default()
     test_render_placeholder_default()
+    test_render_default_fallbacks_built_once()
     test_render_themed_styles()
     test_cursor_tracks_value_and_backspace()
     test_render_overflow_wide_value()
