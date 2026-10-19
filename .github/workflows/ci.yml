@@ -32,6 +32,10 @@ jobs:
       - name: make check
         run: make check
 
+      # LLVM strict: an LLVM codegen failure must not fall back to the C backend.
+      - name: make test-llvm
+        run: make test-llvm
+
   docs:
     runs-on: ubuntu-latest
     env:
