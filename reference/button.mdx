@@ -1,0 +1,130 @@
+---
+title: "Button"
+description: "The one-row Button widget: a bracketed label that calls on_click on Enter, Space or a left click, with a focus style and a disabled state."
+keywords: ["button", "on_click", "disabled", "focus", "focus_style", "action", "click"]
+---
+
+`Button` draws a one-row action button, `[ label ]`, into a [buffer](/reference/buffer). It holds a label, two [`Style`](/reference/style) values for its base and focused looks, a disabled flag, and an `on_click` callback. It is focusable, so the [screen's focus dispatch](/concepts/focus) routes keyboard events to it while it is focused. It is the fourth concrete widget, after [Text](/reference/text), [Input](/reference/input) and [List](/reference/list).
+
+```salam
+mut saved := false
+
+mut b := basalam.NewButton("Save")
+b.on_click = (): saved = true end
+_ := screen.add(basalam.RootId, b)
+```
+
+While the button is focused, `Enter` or `Space` calls `on_click`. A left click inside the button also calls `on_click`, whether or not the button has focus.
+
+## Button
+
+`Button` embeds [BaseWidget](/reference/widget), overrides the default `render`, and adds `focusable`, `hits`, `handle_event`, and `preferred_size`; it inherits `bounds` and `set_bounds` unchanged.
+
+```salam
+pub struct Button:
+    pub use BaseWidget
+
+    pub label: str = ""
+    pub style: Style = StyleDefault
+    pub focus_style: Style = StyleDefault
+    pub disabled: bool = false
+    pub on_click: func () = (): end
+end
+```
+
+<ResponseField name="label" type="str">The text drawn between the brackets. The label is clipped to the width and never shortened with an ellipsis. The default is `""`.</ResponseField>
+<ResponseField name="style" type="Style">The base `Style` value of every cell in the button. The default is `StyleDefault`.</ResponseField>
+<ResponseField name="focus_style" type="Style">The `Style` value drawn instead of `style` while the button is focused and enabled. The default, `StyleDefault`, draws bold on every cell instead.</ResponseField>
+<ResponseField name="disabled" type="bool">When `true`, the button draws dim, leaves the focus order, takes no clicks, and ignores every event. The default is `false`.</ResponseField>
+<ResponseField name="on_click" type="func ()">Called when the button is activated. The default does nothing.</ResponseField>
+
+### Methods
+
+```salam
+pub func NewButton(label: str): Button
+pub func focusable(): bool
+pub func hits(): bool
+pub func preferred_size(max_width: int): Rect
+pub func handle_event(event: Event): bool
+pub func render(buf: Buffer, bounds: Rect)
+```
+
+| Method | Description |
+| --- | --- |
+| `NewButton(label: str): Button` | Creates an enabled button with the given label, default styles, and a no-op `on_click`. |
+| `focusable(): bool` | `true` when the button is enabled and its width is greater than zero. |
+| `hits(): bool` | `true` when the button is enabled. A disabled button lets a click fall through. |
+| `preferred_size(max_width: int): Rect` | The label width plus two cells for the brackets, one row tall. When `max_width > 0`, the width is clamped to `max_width`. |
+| `handle_event(event: Event): bool` | Handles activation as described under [Keyboard](#keyboard). Returns `true` when it calls `on_click`. |
+| `render(buf: Buffer, bounds: Rect)` | Draws the button into the first row of `bounds`. |
+
+The screen calls `focusable`, `hits`, `handle_event`, and `render`. You rarely call them yourself.
+
+## Keyboard
+
+`Button` is focusable, so key presses reach it through dispatch only while it is focused. `handle_event` reacts as follows:
+
+| Key | Effect | Consumed |
+| --- | --- | --- |
+| `Enter` | Calls `on_click`. | Yes |
+| `Space` | Calls `on_click`. | Yes |
+| Anything else | Nothing. | No: the event bubbles to ancestors |
+
+A disabled button consumes nothing. Every key bubbles.
+
+## Mouse
+
+A left press inside the button's bounds calls `on_click` and is consumed. The button reacts to the press, not to the release. Mouse routing never moves focus, so a click on an unfocused button calls `on_click` and leaves the focus where it was. Keyboard activation still needs focus.
+
+## Focus
+
+`focusable()` returns `true` only when the button is enabled and its width is greater than zero. A button with zero width is not focusable, so give it bounds before you expect it to take focus. Once a layout gives the button a width, it takes part in focus navigation normally.
+
+The button reads focus from the buffer at render time and stores none. A focused, enabled button draws `focus_style` instead of `style`. With the default `StyleDefault`, it draws bold on every cell. To change the background on focus, set a `Style` value:
+
+```salam
+b.focus_style = basalam.Style { bg = basalam.Blue }
+```
+
+## Disabled
+
+Set `disabled` to `true` to turn the button off. A disabled button:
+
+- leaves the focus order, so keyboard focus never reaches it.
+- takes no clicks. A click falls through to whatever is painted beneath it.
+- consumes no events, so `handle_event` returns `false` for every event.
+- draws `style` with dim added on every cell. It ignores `focus_style`, even when it has focus.
+
+Disabled wins over focus. Set `disabled` back to `false` to restore the button.
+
+## Example
+
+A buffer is plain memory, so you can activate and render a button without a terminal:
+
+```salam
+import term
+include "basalam/basalam.salam"
+
+mut clicks := 0
+
+func key(seq: str): basalam.Event:
+    ret basalam.Event { kind = basalam.KeyEvent, key = term.Decode(seq) }
+end
+
+func main:
+    mut b := basalam.NewButton("OK")
+    b.on_click = (): clicks = clicks + 1 end
+    println b.handle_event(key(" ")) // true
+    println clicks // 1
+
+    mut buf := basalam.NewBuffer(6, 1)
+    defer buf.free()
+    buf.focused = true
+    b.render(buf, basalam.Rect { width = 6, height = 1 })
+    println buf.row_text(0) // [ OK ]
+end
+```
+
+<Note>
+  A `dyn basalam.Widget` cannot be downcast back to a `Button`. Keep a concrete `Button` reference, or a shared value such as a `mut` global, to set `on_click` and change `disabled`.
+</Note>

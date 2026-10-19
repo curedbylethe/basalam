@@ -41,6 +41,9 @@
  *     text.salam     the Text widget and the pure line rules it draws through
  *     input.salam    the Input widget: single-line text entry with a caret
  *     list.salam     the List widget: single-selection scrollable list
+ *     button.salam   the Button widget: one-row action button with on_click
+ *     checkbox.salam the Checkbox widget: one-row boolean toggle
+ *     progress.salam the Progress widget: one-row buffer-drawn progress bar
  *     tree.salam     the widget registry (IDs, parents) and event bubbling
  *     screen.salam   Screen: terminal session, input thread, event loop
  *     signal.salam   SIGWINCH listening primitives for the resize watch
