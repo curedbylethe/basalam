@@ -1,0 +1,360 @@
+/*
+ * basalam - a terminal user interface library for Salam (2026)
+ *
+ *   +-------------------+
+ *   |   B A S A L A M   |
+ *   +-------------------+
+ *
+ * Built on the Salam standard library's std/term package
+ * Salam: https://github.com/SalamLang/Salam
+ *
+ * Repository: https://github.com/curedbylethe/basalam
+ * License: GPL-3.0-or-later
+ *
+ */
+
+// Tests for the Button widget: the defaults, the key and click tables
+// (activation on Enter, Space and a left press, everything else bubbling),
+// the predicates (focusable, hits, and the disabled gate), the one-row render
+// vectors (brackets, label centring and clipping, bold focus, dim disabled,
+// focus_style), the preferred size, and the screen-level focus gating. Keys
+// and clicks are built from the exact bytes a terminal sends. Styles are
+// compared as StyleSgr output, never as hand-written escapes.
+
+import testing
+import term
+
+include "../basalam/basalam.salam"
+
+// Counts the on_click invocations. Handlers cannot capture locals, so a
+// global is the shared counter.
+mut taps := 0
+
+// A focusable widget that consumes nothing, so it can steal the focus from
+// the button.
+struct Sink:
+    pub use basalam.BaseWidget
+
+    pub func focusable(): bool:
+        ret true
+    end
+end
+
+func tap():
+    taps = taps + 1
+end
+
+func rect(x: int, y: int, w: int, h: int): basalam.Rect:
+    ret basalam.Rect { x = x, y = y, width = w, height = h }
+end
+
+func key(seq: str): basalam.Event:
+    ret basalam.Event { kind = basalam.KeyEvent, key = term.Decode(seq) }
+end
+
+func special(code: int): basalam.Event:
+    ret basalam.Event { kind = basalam.KeyEvent, key = term.Key { code = code } }
+end
+
+func mouse(seq: str): basalam.Event:
+    ret basalam.Event { kind = basalam.MouseEvent, key = term.Key { raw = seq }, mouse = term.DecodeMouse(seq) }
+end
+
+// A left-button press as the terminal reports it: SGR coordinates are
+// 1-based, so cell (x, y) arrives as column x + 1, row y + 1.
+func click(x: int, y: int): basalam.Event:
+    ret mouse("\x1b[<0;" + (x + 1) + ";" + (y + 1) + "M")
+end
+
+// Renders b into a fresh w x h buffer, bounds (0, 0, w, h); the caller frees it.
+func paint(b: basalam.Button, w: int, h: int, focused: bool): basalam.Buffer:
+    mut buf := basalam.NewBuffer(w, h)
+    buf.focused = focused
+    mut bb := b
+    bb.render(buf, rect(0, 0, w, h))
+    ret buf
+end
+
+// The bytes Buffer.ansi emits for a one-row buffer whose cells all carry sgr
+// and whose text is text: a cursor move, the style when it is not the
+// default, the text, and a trailing reset.
+func row_bytes(sgr: str, text: str): str:
+    if sgr == "":
+        ret term.SeqMoveTo(1, 1) + text + term.Reset
+    end
+    ret term.SeqMoveTo(1, 1) + term.Reset + sgr + text + term.Reset
+end
+
+// Renders b at width w, unfocused or focused, and checks the whole row.
+func check_row(b: basalam.Button, w: int, focused: bool, text: str, sgr: str):
+    buf := paint(b, w, 1, focused)
+    testing.AssertEqStr(buf.ansi(), row_bytes(sgr, text))
+    buf.free()
+end
+
+// ---- Defaults ---------------------------------------------------------
+
+func test_defaults():
+    b := basalam.NewButton("OK")
+    testing.AssertEqStr(b.label, "OK")
+    testing.AssertFalse(b.disabled)
+    testing.AssertTrue(basalam.StyleEq(b.style, basalam.StyleDefault))
+    testing.AssertTrue(basalam.StyleEq(b.focus_style, basalam.StyleDefault))
+    testing.AssertTrue(b.hits())
+    // No bounds yet: the width is zero, so the button is not focusable.
+    testing.AssertFalse(b.focusable())
+end
+
+// ---- Predicates -------------------------------------------------------
+
+func test_predicates():
+    mut b := basalam.NewButton("OK")
+    b.set_bounds(rect(0, 0, 10, 1))
+    testing.AssertTrue(b.focusable())
+    testing.AssertTrue(b.hits())
+    b.disabled = true
+    testing.AssertFalse(b.focusable())
+    testing.AssertFalse(b.hits())
+    b.disabled = false
+    b.set_bounds(rect(0, 0, 0, 1))
+    testing.AssertFalse(b.focusable())
+end
+
+// ---- Keys (widget level) ----------------------------------------------
+
+func test_keys():
+    taps = 0
+    mut b := basalam.NewButton("OK")
+    b.on_click = (): tap() end
+    b.set_bounds(rect(0, 0, 10, 1))
+    // BK01, BK02: Enter and Space activate and are consumed.
+    testing.AssertTrue(b.handle_event(special(term.KeyEnter)))
+    testing.AssertEqInt(taps, 1)
+    testing.AssertTrue(b.handle_event(key(" ")))
+    testing.AssertEqInt(taps, 2)
+    // BK03: any other key bubbles on and activates nothing.
+    testing.AssertFalse(b.handle_event(key("a")))
+    testing.AssertEqInt(taps, 2)
+    // BK05 (widget half): disabled consumes nothing.
+    b.disabled = true
+    testing.AssertFalse(b.handle_event(special(term.KeyEnter)))
+    testing.AssertFalse(b.handle_event(key(" ")))
+    testing.AssertEqInt(taps, 2)
+end
+
+// ---- Clicks (widget level) --------------------------------------------
+
+func test_clicks():
+    taps = 0
+    mut b := basalam.NewButton("OK")
+    b.on_click = (): tap() end
+    b.set_bounds(rect(0, 0, 10, 1))
+    // BK06: a left press inside the bounds activates, focus or not.
+    testing.AssertTrue(b.handle_event(click(3, 0)))
+    testing.AssertEqInt(taps, 1)
+    // BK07: a press just outside the right edge does not.
+    testing.AssertFalse(b.handle_event(click(10, 0)))
+    // BK09: a press one row below the bounds does not.
+    testing.AssertFalse(b.handle_event(click(0, 1)))
+    testing.AssertEqInt(taps, 1)
+    // BK08: a disabled button ignores a press inside its bounds.
+    b.disabled = true
+    testing.AssertFalse(b.handle_event(click(3, 0)))
+    testing.AssertEqInt(taps, 1)
+end
+
+// Only a left press activates: a release, a motion report and a right press
+// all bubble on.
+func test_mouse_gates():
+    taps = 0
+    mut b := basalam.NewButton("OK")
+    b.on_click = (): tap() end
+    b.set_bounds(rect(0, 0, 10, 1))
+    testing.AssertFalse(b.handle_event(mouse("\x1b[<0;4;1m")))
+    testing.AssertFalse(b.handle_event(mouse("\x1b[<32;4;1M")))
+    testing.AssertFalse(b.handle_event(mouse("\x1b[<2;4;1M")))
+    testing.AssertEqInt(taps, 0)
+end
+
+// ---- Render vectors (one row, exact bytes) ----------------------------
+
+func test_render_label_and_brackets():
+    ok := basalam.NewButton("OK")
+    bold := basalam.StyleSgr(basalam.Style { bold = true }, basalam.ColorTier.TrueColor)
+    dim := basalam.StyleSgr(basalam.Style { dim = true }, basalam.ColorTier.TrueColor)
+    // BT01: centred label, default style.
+    check_row(ok, 10, false, "[   OK   ]", "")
+    // BT02: bold on every cell while focused.
+    check_row(ok, 10, true, "[   OK   ]", bold)
+    // BT03: dim while disabled.
+    mut dis := ok
+    dis.disabled = true
+    check_row(dis, 10, false, "[   OK   ]", dim)
+    // BT04: a long label is clipped to the inner width, no ellipsis.
+    check_row(basalam.NewButton("Save and continue"), 10, false, "[Save and]", "")
+    // BT05: the label fills the inner width exactly.
+    check_row(ok, 4, true, "[OK]", bold)
+    // BT06: one inner cell.
+    check_row(ok, 3, false, "[O]", "")
+    // BT07: no inner cell, both brackets still drawn.
+    check_row(ok, 2, false, "[]", "")
+    // BT08: a width of one draws only the opening bracket.
+    check_row(ok, 1, false, "[", "")
+end
+
+// BT09: a width of zero draws nothing, even when focused.
+func test_render_zero_width():
+    mut buf := basalam.NewBuffer(10, 1)
+    buf.focused = true
+    mut b := basalam.NewButton("OK")
+    b.render(buf, rect(0, 0, 0, 1))
+    testing.AssertEqStr(buf.ansi(), row_bytes("", "          "))
+    buf.free()
+end
+
+// BT10: the base style's colours survive focus; bold is added on top.
+func test_render_keeps_colours():
+    mut b := basalam.NewButton("OK")
+    b.style = basalam.Style { fg = basalam.Blue, bg = basalam.White }
+    want := basalam.StyleSgr(basalam.Style { fg = basalam.Blue, bg = basalam.White, bold = true }, basalam.ColorTier.TrueColor)
+    check_row(b, 10, true, "[   OK   ]", want)
+end
+
+// BT11: disabled wins over focus: dim, no bold.
+func test_render_disabled_beats_focus():
+    mut b := basalam.NewButton("OK")
+    b.disabled = true
+    dim := basalam.StyleSgr(basalam.Style { dim = true }, basalam.ColorTier.TrueColor)
+    check_row(b, 10, true, "[   OK   ]", dim)
+end
+
+// G14: a focus_style replaces the base style while focused and enabled, and
+// leaves the base style alone otherwise; disabled still ignores it.
+func test_focus_style():
+    mut b := basalam.NewButton("OK")
+    b.style = basalam.Style { fg = basalam.Blue }
+    b.focus_style = basalam.Style { bg = basalam.White }
+    check_row(b, 10, true, "[   OK   ]", basalam.StyleSgr(basalam.Style { bg = basalam.White }, basalam.ColorTier.TrueColor))
+    check_row(b, 10, false, "[   OK   ]", basalam.StyleSgr(basalam.Style { fg = basalam.Blue }, basalam.ColorTier.TrueColor))
+    b.disabled = true
+    dim := basalam.StyleSgr(basalam.Style { fg = basalam.Blue, dim = true }, basalam.ColorTier.TrueColor)
+    check_row(b, 10, true, "[   OK   ]", dim)
+end
+
+// The label is centred between the brackets on the first row only: the rows
+// below the bounds stay blank.
+func test_render_one_row_only():
+    mut buf := basalam.NewBuffer(12, 3)
+    mut b := basalam.NewButton("OK")
+    b.render(buf, rect(2, 1, 10, 2))
+    testing.AssertEqStr(buf.row_text(0), "            ")
+    testing.AssertEqStr(buf.row_text(1), "  [   OK   ]")
+    testing.AssertEqStr(buf.row_text(2), "            ")
+    buf.free()
+end
+
+// ---- Preferred size ---------------------------------------------------
+
+func test_preferred_size():
+    b := basalam.NewButton("OK")
+    testing.AssertEqInt(b.preferred_size(0).width, 4)
+    testing.AssertEqInt(b.preferred_size(0).height, 1)
+    testing.AssertEqInt(b.preferred_size(3).width, 3)
+    testing.AssertEqInt(basalam.NewButton("").preferred_size(0).width, 2)
+    testing.AssertEqInt(basalam.NewButton("Save and continue").preferred_size(0).width, 19)
+end
+
+// ---- Screen gating ----------------------------------------------------
+
+// BK04: keys reach the button only while it holds the focus.
+func test_screen_keys_follow_focus():
+    taps = 0
+    mut s := basalam.NewScreen(basalam.BaseWidget {}, 24, 3)
+    defer s.close()
+    sink := s.add(basalam.RootId, Sink {})
+    s.widget(sink).set_bounds(rect(0, 0, 24, 1))
+    mut b := basalam.NewButton("OK")
+    b.on_click = (): tap() end
+    btn := s.add(basalam.RootId, b as dyn basalam.Widget)
+    s.widget(btn).set_bounds(rect(0, 1, 10, 1))
+    testing.AssertEqInt(s.focused_id(), sink)
+    testing.AssertFalse(s.dispatch(special(term.KeyEnter)))
+    testing.AssertEqInt(taps, 0)
+    testing.AssertTrue(s.focus(btn))
+    testing.AssertTrue(s.dispatch(special(term.KeyEnter)))
+    testing.AssertEqInt(taps, 1)
+end
+
+// BK05 (screen half): a disabled button never takes the focus, and its
+// presses fall through to the root.
+func test_screen_disabled_never_focused():
+    taps = 0
+    mut s := basalam.NewScreen(basalam.BaseWidget {}, 24, 3)
+    defer s.close()
+    sink := s.add(basalam.RootId, Sink {})
+    s.widget(sink).set_bounds(rect(0, 0, 24, 1))
+    mut b := basalam.NewButton("OK")
+    b.disabled = true
+    b.on_click = (): tap() end
+    btn := s.add(basalam.RootId, b as dyn basalam.Widget)
+    s.widget(btn).set_bounds(rect(0, 1, 10, 1))
+    testing.AssertFalse(s.focus(btn))
+    testing.AssertEqInt(s.focused_id(), sink)
+    testing.AssertFalse(s.dispatch(special(term.KeyEnter)))
+    testing.AssertFalse(s.dispatch(click(3, 1)))
+    testing.AssertEqInt(taps, 0)
+end
+
+// A click reaches the button through hit-test and activates it, and the
+// click moves no focus.
+func test_screen_click_activates_without_focus():
+    taps = 0
+    mut s := basalam.NewScreen(basalam.BaseWidget {}, 24, 3)
+    defer s.close()
+    sink := s.add(basalam.RootId, Sink {})
+    s.widget(sink).set_bounds(rect(0, 0, 24, 1))
+    mut b := basalam.NewButton("OK")
+    b.on_click = (): tap() end
+    btn := s.add(basalam.RootId, b as dyn basalam.Widget)
+    s.widget(btn).set_bounds(rect(0, 1, 10, 1))
+    testing.AssertTrue(s.dispatch(click(3, 1)))
+    testing.AssertEqInt(taps, 1)
+    testing.AssertEqInt(s.focused_id(), sink)
+end
+
+// G15: a button added before it has bounds is not focusable, so the first
+// focusable rule passes it over; after set_bounds it joins the focus order.
+func test_screen_focus_waits_for_bounds():
+    mut s := basalam.NewScreen(basalam.BaseWidget {}, 24, 3)
+    defer s.close()
+    sink := s.add(basalam.RootId, Sink {})
+    s.widget(sink).set_bounds(rect(0, 0, 24, 1))
+    btn := s.add(basalam.RootId, basalam.NewButton("OK") as dyn basalam.Widget)
+    testing.AssertFalse(s.can_focus(btn))
+    s.focus_next()
+    testing.AssertEqInt(s.focused_id(), sink)
+    s.widget(btn).set_bounds(rect(0, 1, 10, 1))
+    testing.AssertTrue(s.can_focus(btn))
+    s.focus_next()
+    testing.AssertEqInt(s.focused_id(), btn)
+end
+
+func main:
+    test_defaults()
+    test_predicates()
+    test_keys()
+    test_clicks()
+    test_mouse_gates()
+    test_render_label_and_brackets()
+    test_render_zero_width()
+    test_render_keeps_colours()
+    test_render_disabled_beats_focus()
+    test_focus_style()
+    test_render_one_row_only()
+    test_preferred_size()
+    test_screen_keys_follow_focus()
+    test_screen_disabled_never_focused()
+    test_screen_click_activates_without_focus()
+    test_screen_focus_waits_for_bounds()
+    ret testing.Summary()
+end
