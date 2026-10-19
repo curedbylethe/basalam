@@ -25,6 +25,10 @@ import term
 
 include "../basalam/basalam.salam"
 
+// Widget ids in scene(), fixed by add order.
+SaveId := 3
+WrapId := 4
+
 // Draws "no" in reverse video. Text's Style has no reverse attribute, so this
 // keeps the ANSI snapshot a real reverse-video cell.
 struct RevText:
@@ -52,10 +56,10 @@ func frame(s: basalam.Screen): str:
     ret out
 end
 
-// A composed scene: title, rule, button, checkbox, progress and status.
-func test_scene_frame_is_a_snapshot():
+// The composed scene shared by the snapshot tests: title, rule, button,
+// checkbox, progress and status on a 24x6 screen.
+func scene(): basalam.Screen:
     mut s := basalam.NewScreen(basalam.BaseWidget {}, 24, 6)
-    defer s.close()
     title := s.add(basalam.RootId, basalam.NewText("basalam") as dyn basalam.Widget)
     s.widget(title).set_bounds(rect(1, 0, 10, 1))
     rule := s.add(basalam.RootId, basalam.NewSeparator() as dyn basalam.Widget)
@@ -70,33 +74,23 @@ func test_scene_frame_is_a_snapshot():
     s.widget(load).set_bounds(rect(1, 3, 20, 1))
     status := s.add(basalam.RootId, basalam.NewText("ready") as dyn basalam.Widget)
     s.widget(status).set_bounds(rect(1, 4, 20, 1))
+    ret s
+end
 
-    testing.AssertTrue(s.focus(save))
-    testing.AssertEqInt(s.focused_id(), save)
+func test_scene_frame_is_a_snapshot():
+    mut s := scene()
+    defer s.close()
+    testing.AssertTrue(s.focus(SaveId))
+    testing.AssertEqInt(s.focused_id(), SaveId)
     s.present()
     testing.AssertEqStr(frame(s), " basalam                | ────────────────────   | [  Save  ] [x] Wrap    | ######---------  40%   | ready                  |                        ")
 end
 
 // Focus must repaint style only, never shift a glyph.
 func test_focus_changes_only_styles():
-    mut s := basalam.NewScreen(basalam.BaseWidget {}, 24, 6)
+    mut s := scene()
     defer s.close()
-    title := s.add(basalam.RootId, basalam.NewText("basalam") as dyn basalam.Widget)
-    s.widget(title).set_bounds(rect(1, 0, 10, 1))
-    rule := s.add(basalam.RootId, basalam.NewSeparator() as dyn basalam.Widget)
-    s.widget(rule).set_bounds(rect(1, 1, 20, 1))
-    save := s.add(basalam.RootId, basalam.NewButton("Save") as dyn basalam.Widget)
-    s.widget(save).set_bounds(rect(1, 2, 10, 1))
-    wrap := s.add(basalam.RootId, basalam.NewCheckbox("Wrap", true) as dyn basalam.Widget)
-    s.widget(wrap).set_bounds(rect(12, 2, 10, 1))
-    mut p := basalam.NewProgress()
-    p.set_progress(40)
-    load := s.add(basalam.RootId, p as dyn basalam.Widget)
-    s.widget(load).set_bounds(rect(1, 3, 20, 1))
-    status := s.add(basalam.RootId, basalam.NewText("ready") as dyn basalam.Widget)
-    s.widget(status).set_bounds(rect(1, 4, 20, 1))
-
-    testing.AssertTrue(s.focus(save))
+    testing.AssertTrue(s.focus(SaveId))
     s.present()
     before := frame(s)
     save_style := s.buffer.get(1, 2).style
@@ -104,7 +98,7 @@ func test_focus_changes_only_styles():
     testing.AssertNeStr(save_style, "")
 
     testing.AssertTrue(s.focus_next())
-    testing.AssertEqInt(s.focused_id(), wrap)
+    testing.AssertEqInt(s.focused_id(), WrapId)
     s.present()
     testing.AssertEqStr(frame(s), before)
     testing.AssertEqStr(s.buffer.get(1, 2).style, "")
