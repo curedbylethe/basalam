@@ -28,7 +28,8 @@
       {
         "group": "Guides",
         "pages": [
-          "guides/writing-a-widget"
+          "guides/writing-a-widget",
+          "guides/keymap"
         ]
       },
       {
