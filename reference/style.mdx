@@ -154,7 +154,7 @@ The conversion holds no state, so the caller owns the transition. When the next 
 
 ## Build counter
 
-`SgrBuilds` reports how many SGR strings the widget caching layer has built in the current process. The typed-style widgets (`Button`, `Checkbox`, `Text`, `Progress`, `Separator`, `Table`) and the Modal scrim cache the string for their current style and tier; `List` and `Input` cache their default fallback strings once per process. A redraw with unchanged inputs builds nothing and leaves the count where it was; a changed style field costs one build per memo it affects. `DrawBorder` still builds one string per call.
+`SgrBuilds` reports how many SGR strings the widget caching layer has built in the current process. The typed-style widgets (`Button`, `Checkbox`, `Text`, `Progress`, `Separator`, `Table`) cache the string for their current style and tier; the Modal scrim caches one dimmed string per underlying cell style, and `List` and `Input` cache their default fallback strings once per process. A redraw with unchanged inputs builds nothing and leaves the count where it was; for a typed-style widget, a changed style field costs one build per memo it affects. `DrawBorder` still builds one string per call.
 
 ```salam
 pub func SgrBuilds(): int
