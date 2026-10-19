@@ -99,9 +99,9 @@
  * vim-style modes (an application concern, built on set_keymap).
  *
  * Compiler workaround. The issue specifies `events: chan Event`. Salam
- * 0.4.9 and the 0.5.0 nightly cannot spell chan.Chan<Event> inside the
- * package that declares Event (the type argument does not resolve), but
- * they do resolve it through a generic parameter. Channel<T> is therefore
+ * cannot spell chan.Chan<Event> inside the package that declares Event (the
+ * type argument does not resolve), but it does resolve the type through a
+ * generic parameter. Channel<T> is therefore
  * a one-field wrapper whose only job is to name chan.Chan<T>;
  * screen.events.ch is the std/chan channel itself.
  */

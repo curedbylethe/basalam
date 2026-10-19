@@ -88,7 +88,7 @@ A key's identity includes its code, the `Ctrl`/`Alt`/`Shift` modifiers, and — 
 `q` and every other key stay unbound, so they bubble to your loop for the quit pattern.
 
 <Note>
-  Shift+Tab is deliberately not bound. Salam 0.4.9 decodes the backtab sequence (`ESC [ Z`) to `KeyUnknown`, so binding it would need an escape literal. If your terminal sends a Shift+Tab sequence you can decode, bind it yourself with `term.Decode`.
+  Shift+Tab is deliberately not bound. Salam decodes the backtab sequence (`ESC [ Z`) to `KeyUnknown`, so binding it would need an escape literal. If your terminal sends a Shift+Tab sequence you can decode, bind it yourself with `term.Decode`.
 </Note>
 
 ## Resolution

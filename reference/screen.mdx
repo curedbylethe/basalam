@@ -189,7 +189,7 @@ pub struct Channel<T>:
 end
 ```
 
-The specification calls for `events: chan Event`. Salam 0.4.9 and the 0.5.0 nightly cannot spell `chan.Chan<Event>` inside the package that declares `Event`, but they do resolve it through a generic parameter. `Channel<T>` exists only to name the channel; use `screen.events.ch` for the full `std/chan` API.
+The specification calls for `events: chan Event`. Salam cannot spell `chan.Chan<Event>` inside the package that declares `Event`, but it does resolve the type through a generic parameter. `Channel<T>` exists only to name the channel; use `screen.events.ch` for the full `std/chan` API.
 
 ## Running headless
 
