@@ -270,7 +270,7 @@ func test_resize_event():
     testing.AssertEqStr(s.buffer.row_text(6), "                              ")
 end
 
-func test_dirty_only_after_consumed_key():
+func test_consumed_key_repaints_region_without_dirty():
     mut s := basalam.NewScreen(basalam.BaseWidget {}, 8, 1)
     defer s.close()
     spot := s.add(basalam.RootId, Spot {})
@@ -654,6 +654,30 @@ func test_too_many_regions_repaint_everything():
     testing.AssertEqStr(s.buffer.get(10, 0).ch, "2")
 end
 
+// Two regions covering more than half the screen take the full path.
+func test_wide_regions_repaint_everything():
+    mut s := basalam.NewScreen(basalam.BaseWidget {}, 12, 1)
+    defer s.close()
+    a := s.add(basalam.RootId, Spot {})
+    b := s.add(basalam.RootId, Spot {})
+    counter := s.add(basalam.RootId, Counter {})
+    s.widget(a).set_bounds(rect(0, 0, 4, 1))
+    s.widget(b).set_bounds(rect(8, 0, 4, 1))
+    s.widget(counter).set_bounds(rect(6, 0, 1, 1))
+    s.present()
+    testing.AssertEqStr(s.buffer.get(6, 0).ch, "1")
+    // One 4x1 region doubled is 8, below the 12-cell screen, so it stays
+    // partial and the counter is not rendered again.
+    s.invalidate(a)
+    s.present()
+    testing.AssertEqStr(s.buffer.get(6, 0).ch, "1")
+    // 4 + 4 cells doubled is 16, above 12, so everything repaints.
+    s.invalidate(a)
+    s.invalidate(b)
+    s.present()
+    testing.AssertEqStr(s.buffer.get(6, 0).ch, "2")
+end
+
 func test_raise_subtree_ignores_unknown_ids():
     mut s := subtree_screen()
     defer s.close()
@@ -674,7 +698,7 @@ func main:
     test_widget_clipped_to_own_bounds()
     test_zero_size_widget_is_skipped()
     test_resize_event()
-    test_dirty_only_after_consumed_key()
+    test_consumed_key_repaints_region_without_dirty()
     test_run_with_tick()
     test_ansi_frame()
     test_close_is_idempotent()
@@ -691,5 +715,6 @@ func main:
     test_invalidate_targets_one_widget()
     test_focus_change_repaints_old_and_new_only()
     test_too_many_regions_repaint_everything()
+    test_wide_regions_repaint_everything()
     ret testing.Summary()
 end
