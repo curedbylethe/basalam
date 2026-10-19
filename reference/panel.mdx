@@ -65,13 +65,13 @@ mut frame := basalam.Panel {
 
 ## Size
 
-`Panel` reports a [preferred size](/reference/widget) taken from its child: the child's preferred size plus `BorderInset(border)` on each side. The inset rule is in [Inset](#inset). With a [border](/reference/border) of `BorderStyle.None` nothing is added, so the Panel reports the child's size unchanged.
+`Panel` reports a [preferred size](/reference/widget) taken from its child: the child's natural size plus `BorderInset(border)` on each side. The inset rule is in [Inset](#inset). With a [border](/reference/border) of `BorderStyle.None` nothing is added, so the Panel reports the child's size unchanged.
 
 A child that cannot measure leaves the Panel's answer at `-1` for that axis, so the Panel fills that axis. A child that measures one axis only, such as `Progress`, makes the Panel size that axis and fill the other. A Panel with no child still fills both axes.
 
 In a [`Row` or `Column`](/reference/layout), a main-axis `Pref` slot shrinks the Panel to that size. A cross axis left at `Stretch` still fills; a cross `Start`, `Center`, or `End` uses the measured extent instead.
 
-The `max_width` the Panel receives is reduced by the frame on each side before the child is asked, never below 1. The Panel may report a size larger than the space available; the consumer clamps it.
+The `max_width` the Panel receives is reduced by the frame on each side before the child is asked, never below 1. A non-positive `max_width` means unbounded and is forwarded unchanged. The Panel may report a size larger than the space available; the consumer clamps it.
 
 `title` does not affect the size, and a long title is still truncated on the top edge.
 
