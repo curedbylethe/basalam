@@ -691,6 +691,23 @@ func test_invalidate_subtree():
     testing.AssertFalse(e.dirty)
     e.present()
     testing.AssertEqStr(e.buffer.get(0, 3).ch, "1")
+
+    // F: the parent's own rect is empty, so the union starts at the child's
+    // rect, not at the origin.
+    mut f := basalam.NewScreen(basalam.BaseWidget {}, 8, 4)
+    defer f.close()
+    ghost := f.add(basalam.RootId, ZBox { mark = "p" })
+    fkid := f.add(ghost, Counter {})
+    near := f.add(basalam.RootId, Counter {})
+    f.widget(fkid).set_bounds(rect(5, 2, 1, 1))
+    f.widget(near).set_bounds(rect(0, 0, 1, 1))
+    f.present()
+    testing.AssertEqStr(f.buffer.get(0, 0).ch, "1")
+    f.invalidate_subtree(ghost)
+    testing.AssertFalse(f.dirty)
+    f.present()
+    testing.AssertEqStr(f.buffer.get(5, 2).ch, "2")
+    testing.AssertEqStr(f.buffer.get(0, 0).ch, "1")
 end
 
 // A focus change queues the old and new cells. A third widget stays put.
