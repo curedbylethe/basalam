@@ -714,6 +714,54 @@ func test_unicode_codepoint_clip():
     testing.AssertEqStr(b2.row_text(0), "éé")
 end
 
+// ---- CUR-455 probe ----------------------------------------------------
+
+// The two selection fallbacks are package-level constants: once built they are
+// reused, so a render that falls back adds no build. A style the caller
+// assigns is used verbatim and never builds.
+func test_sgr_defaults_probe():
+    // Prime both fallbacks: focused uses reverse video, unfocused uses
+    // bright-on-black.
+    mut lp := basalam.NewList(items3())
+    lp.set_bounds(rect(0, 0, 10, 3))
+    mut bp := basalam.NewBuffer(10, 3)
+    bp.focused = true
+    lp.render(bp, rect(0, 0, 10, 3))
+    bp.free()
+    mut lq := basalam.NewList(items3())
+    lq.set_bounds(rect(0, 0, 10, 3))
+    mut bq := basalam.NewBuffer(10, 3)
+    bq.focused = false
+    lq.render(bq, rect(0, 0, 10, 3))
+    bq.free()
+
+    primed := basalam.SgrBuilds()
+    mut lf := basalam.NewList(items3())
+    lf.set_bounds(rect(0, 0, 10, 3))
+    mut bf := basalam.NewBuffer(10, 3)
+    defer bf.free()
+    bf.focused = true
+    lf.render(bf, rect(0, 0, 10, 3))
+    mut lu := basalam.NewList(items3())
+    lu.set_bounds(rect(0, 0, 10, 3))
+    mut bu := basalam.NewBuffer(10, 3)
+    defer bu.free()
+    bu.focused = false
+    lu.render(bu, rect(0, 0, 10, 3))
+    testing.AssertEqInt(basalam.SgrBuilds() - primed, 0)
+
+    custom := term.Sgr(term.StyleBold)
+    mut lc := basalam.NewList(items3())
+    lc.set_bounds(rect(0, 0, 10, 3))
+    lc.selected_style = custom
+    mut bc := basalam.NewBuffer(10, 3)
+    defer bc.free()
+    bc.focused = true
+    lc.render(bc, rect(0, 0, 10, 3))
+    testing.AssertEqStr(bc.get(0, 0).style, custom)
+    testing.AssertEqInt(basalam.SgrBuilds() - primed, 0)
+end
+
 func main:
     test_defaults_selection()
     test_defaults_empty()
@@ -757,6 +805,7 @@ func main:
     test_screen_focused_list_receives_j()
     test_screen_unfocused_list_does_not_consume()
     test_unicode_codepoint_clip()
+    test_sgr_defaults_probe()
     picks.free()
     ret testing.Summary()
 end

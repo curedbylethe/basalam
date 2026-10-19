@@ -42,6 +42,15 @@ package basalam
 import str
 import term
 
+// The two selection fallbacks read no List field, so they are constants, not
+// per-instance state: built on first use and never cleared (str has no free).
+// A ready flag keeps a legitimate "" distinct from "not built". The first
+// build bumps the package-level counter so the tests can see it.
+mut _sel_sgr := ""
+mut _sel_sgr_ready := false
+mut _unsel_sgr := ""
+mut _unsel_sgr_ready := false
+
 @en "List"
 /// A single-selection scrollable list of strings. It is focusable, so
 /// keyboard events reach it through the screen's focus dispatch: j moves the
@@ -143,11 +152,11 @@ pub struct List:
         base := this.style
         mut sel := this.selected_style
         if sel == "":
-            sel = term.Sgr(term.StyleReverse)
+            sel = _default_selected_sgr()
         end
         mut unsel := this.selected_unfocused_style
         if unsel == "":
-            unsel = term.Sgr(term.BgBlack + term.FgBright)
+            unsel = _default_unselected_sgr()
         end
         this._reveal(bounds.height)
         n := this.items.len()
@@ -199,6 +208,26 @@ pub struct List:
         end
         this.window_start = s
     end
+end
+
+// Reverse video, the fallback for an empty selected_style.
+func _default_selected_sgr(): str:
+    if not _sel_sgr_ready:
+        _sel_sgr = term.Sgr(term.StyleReverse)
+        _sel_sgr_ready = true
+        _sgr_builds = _sgr_builds + 1
+    end
+    ret _sel_sgr
+end
+
+// Bright black on black, the fallback for an empty selected_unfocused_style.
+func _default_unselected_sgr(): str:
+    if not _unsel_sgr_ready:
+        _unsel_sgr = term.Sgr(term.BgBlack + term.FgBright)
+        _unsel_sgr_ready = true
+        _sgr_builds = _sgr_builds + 1
+    end
+    ret _unsel_sgr
 end
 
 @en "NewList"
