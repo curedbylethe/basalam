@@ -60,12 +60,23 @@ func sgr(s: basalam.Style): str:
     ret basalam.StyleSgr(s, basalam.ColorTier.TrueColor)
 end
 
-// Renders c into a one-row buffer of width bufw, clipped to bounds width bw.
-func paint(c: basalam.Checkbox, bufw: int, bw: int, focused: bool): basalam.Buffer:
+// Renders c into a one-row buffer of width bufw, clipped to bounds width bw,
+// and returns the row text. The buffer is freed before returning.
+func row_of(c: basalam.Checkbox, bufw: int, bw: int, focused: bool): str:
     mut b := basalam.NewBuffer(bufw, 1)
+    defer b.free()
     b.focused = focused
     c.render(b, rect(0, 0, bw, 1))
-    ret b
+    ret b.row_text(0)
+end
+
+// As row_of, but returns the whole row as Buffer.ansi() bytes.
+func ansi_of(c: basalam.Checkbox, bufw: int, bw: int, focused: bool): str:
+    mut b := basalam.NewBuffer(bufw, 1)
+    defer b.free()
+    b.focused = focused
+    c.render(b, rect(0, 0, bw, 1))
+    ret b.ansi()
 end
 
 // ---- Defaults and predicates ------------------------------------------
@@ -90,6 +101,9 @@ func test_getter_and_setter():
     mut e := basalam.NewCheckbox("Notify me", false)
     e.set_checked(true)
     testing.AssertTrue(e.checked())
+    // Rendering draws the state but never changes it.
+    testing.AssertEqStr(row_of(e, 14, 14, false), "[x] Notify me ")
+    testing.AssertTrue(e.checked())
     e.set_checked(false)
     testing.AssertFalse(e.checked())
 end
@@ -98,38 +112,39 @@ end
 
 func test_render_cb01_unchecked():
     e := basalam.NewCheckbox("Notify me", false)
-    testing.AssertEqStr(paint(e, 14, 14, false).row_text(0), "[ ] Notify me ")
+    testing.AssertEqStr(row_of(e, 14, 14, false), "[ ] Notify me ")
 end
 
 func test_render_cb05_narrow_label():
     e := basalam.NewCheckbox("Notify me", true)
-    testing.AssertEqStr(paint(e, 6, 6, false).row_text(0), "[x] No")
+    testing.AssertEqStr(row_of(e, 6, 6, false), "[x] No")
 end
 
 func test_render_cb06_mark_only():
     e := basalam.NewCheckbox("Notify me", true)
-    testing.AssertEqStr(paint(e, 3, 3, false).row_text(0), "[x]")
+    testing.AssertEqStr(row_of(e, 3, 3, false), "[x]")
 end
 
 func test_render_cb07_two_cells():
     e := basalam.NewCheckbox("Notify me", true)
-    testing.AssertEqStr(paint(e, 2, 2, false).row_text(0), "[x")
+    testing.AssertEqStr(row_of(e, 2, 2, false), "[x")
 end
 
 func test_render_cb08_one_cell():
     e := basalam.NewCheckbox("Notify me", false)
-    testing.AssertEqStr(paint(e, 1, 1, false).row_text(0), "[")
+    testing.AssertEqStr(row_of(e, 1, 1, false), "[")
 end
 
 func test_render_cb09_zero_width():
     e := basalam.NewCheckbox("Notify me", true)
     blank := basalam.NewBuffer(14, 1)
-    testing.AssertEqStr(paint(e, 14, 0, false).ansi(), blank.ansi())
+    defer blank.free()
+    testing.AssertEqStr(ansi_of(e, 14, 0, false), blank.ansi())
 end
 
 func test_render_cb10_empty_label():
     e := basalam.NewCheckbox("", true)
-    testing.AssertEqStr(paint(e, 5, 5, false).row_text(0), "[x]  ")
+    testing.AssertEqStr(row_of(e, 5, 5, false), "[x]  ")
 end
 
 // ---- Render: styled rows (CB02-CB04) ----------------------------------
@@ -137,7 +152,7 @@ end
 func test_render_cb02_checked_focused_bold():
     e := basalam.NewCheckbox("Notify me", true)
     want := term.SeqMoveTo(1, 1) + term.Reset + sgr(basalam.Style { bold = true }) + "[x] Notify me " + term.Reset
-    testing.AssertEqStr(paint(e, 14, 14, true).ansi(), want)
+    testing.AssertEqStr(ansi_of(e, 14, 14, true), want)
 end
 
 func test_render_cb03_checked_disabled_dim():
@@ -145,7 +160,7 @@ func test_render_cb03_checked_disabled_dim():
     e.disabled = true
     // Disabled wins over focus: bold is dropped and dim is set.
     want := term.SeqMoveTo(1, 1) + term.Reset + sgr(basalam.Style { dim = true }) + "[x] Notify me " + term.Reset
-    testing.AssertEqStr(paint(e, 14, 14, true).ansi(), want)
+    testing.AssertEqStr(ansi_of(e, 14, 14, true), want)
 end
 
 func test_render_cb04_box_style_only():
@@ -153,13 +168,15 @@ func test_render_cb04_box_style_only():
     e.box_style = basalam.Style { fg = basalam.Green }
     // Only the three mark cells carry the box style; the label stays bare.
     want := term.SeqMoveTo(1, 1) + term.Reset + sgr(basalam.Style { fg = basalam.Green }) + "[ ]" + term.Reset + " Notify me " + term.Reset
-    testing.AssertEqStr(paint(e, 14, 14, false).ansi(), want)
+    testing.AssertEqStr(ansi_of(e, 14, 14, false), want)
 end
 
 func test_render_styled_label_frame():
     mut e := basalam.NewCheckbox("Notify me", false)
     e.label_style = basalam.Style { underline = true }
-    b := paint(e, 14, 14, false)
+    mut b := basalam.NewBuffer(14, 1)
+    defer b.free()
+    e.render(b, rect(0, 0, 14, 1))
     // The label run carries label_style, including the spacer and trailing fill.
     testing.AssertEqStr(b.get(0, 0).style, "")
     testing.AssertEqStr(b.get(4, 0).style, sgr(basalam.Style { underline = true }))
@@ -246,6 +263,7 @@ func test_ck08_click_outside_bounds_misses():
     mut e := basalam.NewCheckbox("Notify me", false)
     e.set_bounds(rect(0, 0, 14, 1))
     testing.AssertFalse(e.handle_event(click(14, 0)))
+    testing.AssertFalse(e.handle_event(click(3, 1)))
     testing.AssertFalse(e.checked())
 end
 
