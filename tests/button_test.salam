@@ -17,7 +17,8 @@
 // (activation on Enter, Space and a left press, everything else bubbling),
 // the predicates (focusable, hits, and the disabled gate), the one-row render
 // vectors (brackets, label centring and clipping, bold focus, dim disabled,
-// focus_style), the preferred size, and the screen-level focus gating. Keys
+// focus_style), the preferred size, the screen-level focus gating, and the
+// SGR memo probe (a second identical render builds nothing). Keys
 // and clicks are built from the exact bytes a terminal sends. Styles are
 // compared as StyleSgr output, never as hand-written escapes.
 
@@ -243,6 +244,35 @@ func test_focus_style():
     check_row(b, 10, true, "[   OK   ]", dim)
 end
 
+// CUR-455 probe. A second render with an unchanged style reuses the cached
+// SGR, so the build counter does not move; changing a style field costs exactly
+// one build. Rendering through a Screen covers the real frame path, where the
+// widget is a copy stored in the tree.
+func test_sgr_memo_probe():
+    mut b := basalam.NewButton("OK")
+    buf := basalam.NewBuffer(10, 1)
+    before := basalam.SgrBuilds()
+    b.render(buf, rect(0, 0, 10, 1))
+    first := basalam.SgrBuilds()
+    testing.AssertEqInt(first - before, 1)
+    b.render(buf, rect(0, 0, 10, 1))
+    testing.AssertEqInt(basalam.SgrBuilds() - first, 0)
+    b.style = basalam.Style { fg = basalam.Blue }
+    b.render(buf, rect(0, 0, 10, 1))
+    testing.AssertEqInt(basalam.SgrBuilds() - first, 1)
+    buf.free()
+
+    mut s := basalam.NewScreen(basalam.BaseWidget {}, 10, 1)
+    defer s.close()
+    id := s.add(basalam.RootId, basalam.NewButton("OK") as dyn basalam.Widget)
+    s.widget(id).set_bounds(rect(0, 0, 10, 1))
+    s.present()
+    built := basalam.SgrBuilds()
+    s.invalidate(id)
+    s.present()
+    testing.AssertEqInt(basalam.SgrBuilds(), built)
+end
+
 // The label is centred between the brackets on the first row only: the rows
 // below the bounds stay blank.
 func test_render_one_row_only():
@@ -352,6 +382,7 @@ func main:
     test_render_keeps_colours()
     test_render_disabled_beats_focus()
     test_focus_style()
+    test_sgr_memo_probe()
     test_render_one_row_only()
     test_preferred_size()
     test_screen_keys_follow_focus()
