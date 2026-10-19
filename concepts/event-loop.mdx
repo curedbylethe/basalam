@@ -26,7 +26,7 @@ sequenceDiagram
     M->>C: next_event(ev)
     C-->>M: ev
     M->>W: dispatch(ev): first widget, then ancestors
-    M->>W: present(): render every widget into the buffer
+    M->>W: present(): repaint queued regions, or every widget when dirty
     M->>T: one write of the changed cells
 ```
 
@@ -63,9 +63,9 @@ end
 - `next_event` blocks until an event arrives. It returns `false` when the screen was stopped and the queue is empty.
 - `dispatch` handles a resize (the buffer is reallocated and the root refitted first, forcing a full repaint), then offers the event to a starting widget and [bubbles it up](/reference/event#dispatch-and-bubbling). The starting widget is the focused one, except for mouse events (see [Mouse routing](#mouse-routing)), and a click on an open [Modal](/reference/modal)'s scrim starts at the Modal. It returns whether a widget — or the [keymap](/reference/keymap) fallback — consumed it.
 - An unconsumed `KeyEvent` is then offered to the screen's opt-in [keymap](/reference/keymap), if you installed one. Whatever is still left — quitting, modes — is yours: application decisions, not library ones.
-- `present` draws every widget into the buffer and writes only the cells that changed since the last frame.
+- `present` returns immediately when nothing is pending. Otherwise it repaints the queued regions, or every widget when `dirty` is set, and writes only the cells that changed since the last frame. A change you make outside `dispatch` stays invisible until you set `dirty` or call `invalidate(id)`.
 
-`run()` and `run_with_tick(on_tick)` are this loop with two additions: they redraw only when something changed (`screen.dirty`), and an unconsumed Ctrl+C stops them. In raw mode, Ctrl+C is an ordinary key, so without this a program that forgets to handle it could not be left.
+`run()` and `run_with_tick(on_tick)` call `present` only when `dirty` is set or a region is pending. An unconsumed Ctrl+C stops them. In raw mode, Ctrl+C is an ordinary key, so without this a program that forgets to handle it could not be left.
 
 ## Stopping and restoring the terminal
 

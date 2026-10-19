@@ -7,7 +7,7 @@ keywords: ["buffer", "cell", "draw", "clip", "style"]
 A `Buffer` is a grid of `Cell`s. Widgets draw into it; they never write to the terminal. Every write outside the grid or outside the buffer's clip rect is silently dropped, so drawing can never fail.
 
 <Warning>
-  A `Buffer` holds two grids: a back grid widgets draw into and a front grid of what the terminal currently shows. `flush()` diffs the two and writes only the cells that changed. What is still absent: dirty-region and rectangle tracking, structured styles (styles are raw SGR strings today; the [Style](/reference/style) type exists and `Text`, `Panel`, `Button`, `Checkbox`, `Progress`, `Table`, `Modal`, and `Separator` carry it, but cells still hold strings — the buffer migration is a follow-up), and wide-character support (each cell holds one codepoint and is assumed to be one column wide, epic 2).
+  A `Buffer` holds two grids: a back grid widgets draw into and a front grid of what the terminal currently shows. `flush()` writes the touched cells that differ from the front grid and skips clean rows. Mark cells with `set`, `fill`, `put_str`, or `clear`. A direct write to `cells` is not marked, so `diff` can skip it. What is still absent: structured styles (styles are raw SGR strings today; the [Style](/reference/style) type exists and `Text`, `Panel`, `Button`, `Checkbox`, `Progress`, `Table`, `Modal`, and `Separator` carry it, but cells still hold strings — the buffer migration is a follow-up), and wide-character support (each cell holds one codepoint and is assumed to be one column wide, epic 2).
 </Warning>
 
 ## Cell
@@ -38,7 +38,7 @@ end
 
 <ResponseField name="width" type="int">Number of columns.</ResponseField>
 <ResponseField name="height" type="int">Number of rows.</ResponseField>
-<ResponseField name="cells" type="Vector<Cell>">The back grid: row-major storage where widgets draw. The cell at `(x, y)` is `cells[y * width + x]`. Prefer `get` and `set`, which bounds-check and clip.</ResponseField>
+<ResponseField name="cells" type="Vector<Cell>">The back grid: row-major storage where widgets draw. The cell at `(x, y)` is `cells[y * width + x]`. Write it through `set`, `fill`, `put_str`, or `clear`, which mark the cell. A direct assignment is not marked, and `diff` can skip it. `get` bounds-checks.</ResponseField>
 <ResponseField name="front" type="Vector<Cell>">The front grid: what the terminal currently shows, with the same length and layout as `cells`. Widgets never write it; only `commit()` advances it.</ResponseField>
 <ResponseField name="clip" type="Rect">Writes outside this rect are dropped. `NewBuffer` sets it to the whole grid. While a widget renders, the screen narrows it to that widget's bounds.</ResponseField>
 <ResponseField name="focused" type="bool">`true` while the screen renders the focused widget. Use it to draw a focus indicator.</ResponseField>
@@ -69,8 +69,8 @@ Creates a blank grid with `clip` covering all of it. A negative size is treated 
 | `row_text(y: int): str` | The characters of row `y` of the back grid, without styles. `""` outside the grid. Meant for tests and debugging. |
 | `resize(width: int, height: int)` | Replaces both grids with blank ones and resets the clip, forcing a full repaint on the next `diff()`. Only the original buffer may call it. |
 | `ansi(): str` | The whole grid as one frame: per row a cursor move and every cell, switching style only where it changes. Nothing is diffed. For tests and debugging. |
-| `diff(): str` | The bytes `flush()` would write: the whole frame (see `ansi`) while `force_full`, otherwise only the cells that differ from `front`. `""` when the grids match. |
-| `commit()` | Copies the back grid into the front grid and clears `force_full`, so a later `diff()` reports only subsequent changes. |
+| `diff(): str` | The bytes `flush()` would write: the whole frame (see `ansi`) while `force_full`, otherwise the touched cells that differ from `front`, skipping clean rows. `""` when nothing marked differs. |
+| `commit()` | Copies marked cells on marked rows into the front grid (every cell while `force_full`), then clears the marks and `force_full`. |
 | `flush()` | Writes the changed cells (see `diff`) to the terminal, then commits. Writes nothing when the diff is empty. |
 | `free()` | Releases both grids. Call once, on the original. |
 

@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `Screen.invalidate(id)`: queues a repaint of that widget's bounds. An
+  unknown id, or an empty rect, marks the whole screen. Legal before
+  `start()`. (CUR-226)
 - `DrawBorder(buf, rect, border, style, title)`: paints a one-cell box-drawing
   ring (`BorderStyle.Single`, `Double`, or `Rounded`) with an optional title on
   the top edge, in one foreground color from `style.fg`. `BorderStyle.None`
@@ -153,6 +156,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `Screen.present()` returns when nothing is pending. A widget that
+  consumes an event queues its own bounds, and a focus change queues the
+  old and new bounds. `dirty` still means a full repaint: resize, ticks,
+  `raise` / `unraise`, and a keymap-consumed key set it. More than four
+  pending regions, or regions covering more than half the screen, repaint
+  every widget too. A region is that widget's bounds, not its subtree.
+  (CUR-226)
+- `Buffer.diff()` and `Buffer.commit()` skip clean rows. `set`, `fill`,
+  `put_str`, and `clear` mark the cells they write; assigning `cells`
+  directly does not. Frame building reuses one string builder, and
+  `put_str` no longer builds a vector of code points. Widgets still
+  allocate a new SGR string each time they draw. (CUR-226)
 - `Screen.raise_subtree(id)` and `Screen.unraise_subtree(id)`: raise or
   unraise a widget and all of its descendants as one layer, moving and
   restoring focus as `raise` and `unraise` do. A Modal uses them to stay
