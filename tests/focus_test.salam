@@ -70,6 +70,20 @@ struct Shutter:
     end
 end
 
+// A focusable widget that hides itself. The Screen must consult Widget.visible
+// on the id itself, not only on its parents.
+struct HiddenTile:
+    pub use basalam.BaseWidget
+
+    pub func focusable(): bool:
+        ret true
+    end
+
+    pub func visible(): bool:
+        ret false
+    end
+end
+
 func rect(x: int, y: int, w: int, h: int): basalam.Rect:
     ret basalam.Rect { x = x, y = y, width = w, height = h }
 end
@@ -518,6 +532,17 @@ func test_hidden_container_hides_its_subtree():
     hidden.widget(sh2).set_bounds(rect(2, 0, 2, 1))
     hidden.widget(b2).set_bounds(rect(2, 0, 2, 1))
     hidden.widget(c2).set_bounds(rect(4, 0, 2, 1))
+    // A hidden container two levels above the widget: its immediate parent is
+    // a visible Shutter, so checking only tree.parent is not enough.
+    dh := hidden.add(basalam.RootId, Shutter { shown = false })
+    dv := hidden.add(dh, Shutter { shown = true })
+    deep := hidden.add(dv, Tile { name = "d" })
+    hidden.widget(dh).set_bounds(rect(6, 0, 2, 1))
+    hidden.widget(dv).set_bounds(rect(6, 0, 2, 1))
+    hidden.widget(deep).set_bounds(rect(6, 0, 2, 1))
+    // A focusable widget that reports itself hidden.
+    sf := hidden.add(basalam.RootId, HiddenTile {})
+    hidden.widget(sf).set_bounds(rect(6, 0, 2, 1))
     testing.AssertEqInt(hidden.focused_id(), a2)
     testing.AssertFalse(hidden.can_focus(b2))
     testing.AssertFalse(hidden.focus(b2))
@@ -533,6 +558,11 @@ func test_hidden_container_hides_its_subtree():
     testing.AssertEqInt(hidden.focused_id(), c2)
     testing.AssertTrue(hidden.focus_left())
     testing.AssertEqInt(hidden.focused_id(), a2)
+    // The deep widget and the self-hidden widget stay unreachable.
+    testing.AssertFalse(hidden.can_focus(deep))
+    testing.AssertFalse(hidden.focus(deep))
+    testing.AssertFalse(hidden.can_focus(sf))
+    testing.AssertFalse(hidden.focus(sf))
 end
 
 func main:
