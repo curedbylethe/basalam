@@ -1,7 +1,7 @@
 ---
 title: "Screen"
 description: "The terminal session: widget tree, buffer, input thread, and the event loop."
-keywords: ["screen", "event loop", "next_event", "run", "run_with_tick", "start", "close", "dispatch", "hit_test", "mouse", "raise", "unraise", "hits", "invalidate", "dirty"]
+keywords: ["screen", "event loop", "next_event", "run", "run_with_tick", "start", "close", "dispatch", "hit_test", "mouse", "raise", "unraise", "hits", "invalidate", "subtree", "dirty"]
 ---
 
 A `Screen` owns the terminal session. It holds the widget [tree](/reference/tree), the [buffer](/reference/buffer), and the channel the input thread sends [events](/reference/event) on. You create one per program.
@@ -38,7 +38,7 @@ pub func NewTerminalScreen(root: dyn Widget): Screen
 <ResponseField name="tick_ms" type="int" default="0">Interval of `TickEvent`s in milliseconds. `0` sends none. Set it before `start()`.</ResponseField>
 <ResponseField name="mouse" type="bool" default="false">When `true`, `start()` enables mouse reporting and clicks arrive as `MouseEvent`s. Set it before `start()`.</ResponseField>
 <ResponseField name="keymap" type="Keymap" default="Keymap {}">The opt-in [keymap](/reference/keymap) consulted as a fallback for a `KeyEvent` no widget consumed. Empty by default, so a screen behaves exactly as before until you install or extend it. Bind through this field to extend the map in place, or use `set_keymap` to replace it. Never assign a `Keymap` directly.</ResponseField>
-<ResponseField name="dirty" type="bool">`true` requests a full repaint. Set by a resize, a tick from `run_with_tick`, an added widget, `raise` / `unraise`, a keymap-consumed key, and `invalidate` of an unknown id or an empty rect. Set it yourself after changing state outside `dispatch`; a tick you dispatch yourself does not set it. A consumed widget event does not set it. That event queues the widget's own bounds.</ResponseField>
+<ResponseField name="dirty" type="bool">`true` requests a full repaint. Set by a resize, a tick from `run_with_tick`, an added widget, `raise` / `unraise`, a keymap-consumed key, and an `invalidate` call for an unknown id or an empty rect. Set it yourself after changing state outside `dispatch`; a tick you dispatch yourself does not set it. A consumed widget event does not set it. That event queues the widget's own bounds.</ResponseField>
 <ResponseField name="focus_stack" type="Vector<int>">Widget IDs; the last entry is the focused widget. Change it only through the focus methods, which keep `focused` in sync and queue the old and new bounds.</ResponseField>
 
 ## Building the tree
@@ -102,9 +102,10 @@ When that order is non-empty and the current focus is outside it, `raise` saves 
 | --- | --- |
 | `next_event(event &: Event): bool` | Waits for the next event. Returns `false` once the screen is stopped and every queued event was delivered. |
 | `dispatch(event: Event): bool` | Handles one event synchronously. A `ResizeEvent` first resizes the screen. Then the event goes to a starting widget and bubbles up: the widget under the cursor for a mouse event, the focused widget for everything else. An unconsumed `KeyEvent` is then offered to the [keymap](/reference/keymap) fallback. Returns `true` if a widget or the keymap consumed it. See [Hit testing](#hit-testing). |
-| `draw()` | Repaints pending regions, or every widget when `dirty` is set, more than four regions are pending, or those regions cover more than half the screen. Does nothing when nothing is pending. Paint order stays ascending `(stamp, id)`. |
-| `present()` | Returns immediately when nothing is pending. Otherwise `draw()`, then, once attached, writes only the cells that changed since the last frame. Clears `dirty` and the pending regions. A change you make outside `dispatch` needs `dirty = true` or `invalidate(id)`. |
-| `invalidate(id: int)` | Queues a repaint of widget `id`'s bounds. An unknown id, or a widget whose rect is empty, marks the whole screen. Legal before `start()`. A region is that widget's bounds, not its subtree. |
+| `draw()` | Repaints pending regions, or every widget when `dirty` is set, more than four regions are pending, or those regions cover more than half the screen. Does nothing when nothing is pending. Paint order stays ascending `(stamp, id)`. An `invalidate_subtree(id)` call contributes one pending region. |
+| `present()` | Returns immediately when nothing is pending. Otherwise `draw()`, then, once attached, writes only the cells that changed since the last frame. Clears `dirty` and the pending regions. A change you make outside `dispatch` needs `dirty = true`, `invalidate(id)`, or `invalidate_subtree(id)`. |
+| `invalidate(id: int)` | Queues a repaint of widget `id`'s bounds. An unknown id, or a widget whose rect is empty, marks the whole screen. Legal before `start()`. `invalidate` repaints that widget's bounds; `invalidate_subtree(id)` repaints the union of the widget and its descendants. |
+| `invalidate_subtree(id: int)` | Queues a repaint of widget `id` and every descendant, as one region covering their combined bounds. Use it when a widget's look depends on a child, or when a child can extend past the widget's own rect. An unknown id, or a subtree whose rects are all empty, marks the whole screen. Legal before `start()`. |
 | `post(event: Event): bool` | Queues an event as if the input thread had produced it. Safe from any thread. |
 | `run()` | Runs the loop until `stop()`. Redraws only when something changed. An unconsumed Ctrl+C stops it. |
 | `run_with_tick(on_tick: func ())` | Like `run`, and also calls `on_tick` on the main thread for every `TickEvent`. |
