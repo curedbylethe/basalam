@@ -42,7 +42,7 @@ It sits on top of Salam's standard `term` package. `term` already handles raw mo
 | `Screen`: event loop, input thread, resize, ticks | Available |
 | Focus: stack, linear, and spatial navigation | Available |
 | Keymap: opt-in key bindings with scopes and sequences | Available; install with `set_keymap`, defaults via `NewDefaultKeymap` |
-| `Buffer` (double-buffered) | Available; a change repaints that widget's rect, and flush writes the touched cells |
+| `Buffer` (double-buffered) | Available; a consumed event repaints the widget that consumed it, and flush writes the touched cells that differ |
 
 <Columns cols={2}>
   <Card title="Quickstart" icon="rocket" href="/quickstart">
