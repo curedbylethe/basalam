@@ -214,9 +214,9 @@ pub struct Screen:
     /// invalidate of an unknown widget. A precise change is a region.
     pub dirty: bool = true
 
-    // One rect per changed widget, not its subtree. A parent whose look
-    // depends on a child must cover that child with its own bounds, or set
-    // dirty. Upgrade: per-widget subtree invalidation.
+    // One rect per invalidation request: invalidate queues a widget's own
+    // bounds, invalidate_subtree queues the union of a widget and its
+    // descendants, and draw_regions repaints whatever intersects either.
     regions: Vector<Rect> = Vector {}
 
     @en "focus_stack"
@@ -342,6 +342,48 @@ pub struct Screen:
             end
         end
         ret ids
+    end
+
+    // Bounding union of the rects of id and its descendants, skipping empty
+    // rects. Rect {} when every rect is empty, which queue_region escalates
+    // to a full repaint. The caller passes an id the tree knows.
+    func subtree_bounds(id: int): Rect:
+        ids := this.subtree_ids(id)
+        defer ids.free()
+        mut has := false
+        mut x0 := 0
+        mut y0 := 0
+        mut x1 := 0
+        mut y1 := 0
+        repeat ids.len() in i:
+            r := this.tree.get(ids.get(i)).bounds()
+            if not r.is_empty():
+                if not has:
+                    x0 = r.x
+                    y0 = r.y
+                    x1 = r.right()
+                    y1 = r.bottom()
+                    has = true
+                else:
+                    if r.x < x0:
+                        x0 = r.x
+                    end
+                    if r.y < y0:
+                        y0 = r.y
+                    end
+                    if r.right() > x1:
+                        x1 = r.right()
+                    end
+                    if r.bottom() > y1:
+                        y1 = r.bottom()
+                    end
+                end
+            end
+        end
+        if not has:
+            ret Rect {}
+        end
+        ret Rect { x = x0, y = y0, width = x1 - x0, height = y1 - y0 }
     end
 
     @en "widget"
@@ -560,6 +602,24 @@ pub struct Screen:
             ret
         end
         this.queue_region(this.tree.get(id).bounds())
+    end
+
+    @en "invalidate_subtree"
+    /// Queues one repaint region covering widget id and every descendant,
+    /// instead of only the widget's own bounds as invalidate does. Use it
+    /// when a widget's look depends on a child, or when a child can extend
+    /// past the widget's own rect. The region is the bounding union, so a
+    /// spread-out subtree also repaints the gaps between its rects, and one
+    /// over half the screen escalates to a full repaint. An unknown id,
+    /// including NoWidget, or a subtree whose rects are all empty marks the
+    /// whole screen instead. Legal before start(): it only marks, and the
+    /// flush still waits until the screen is attached.
+    pub func invalidate_subtree(id: int):
+        if not this.tree.valid(id):
+            this.dirty = true
+            ret
+        end
+        this.queue_region(this.subtree_bounds(id))
     end
 
     // dirty, too many regions, or too much area. force_full is not a reason:

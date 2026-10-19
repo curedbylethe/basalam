@@ -153,6 +153,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the background. Colors lower to the tier first and a color that is
   `Default` after lowering is skipped. Both return `""` when nothing is set
   and never emit a reset.
+- `Screen.invalidate_subtree(id)`: queues one repaint region covering a widget
+  and all of its descendants, instead of only the widget's own bounds as
+  `Screen.invalidate(id)` does. The region is the bounding union, so a
+  spread-out subtree also repaints the gaps between its rects. An unknown id,
+  or a subtree whose rects are all empty, marks the whole screen. (CUR-456)
 
 ### Changed
 
