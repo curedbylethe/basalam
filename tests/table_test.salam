@@ -370,6 +370,31 @@ func test_bounds_survive_set_bounds():
     testing.AssertEqInt(t.bounds().height, 3)
 end
 
+// Rows past the rect height are not drawn: the buffer is pre-filled with "x",
+// so a row written past the height would show up in place of the "x" cells.
+func test_rows_past_height_are_not_painted():
+    mut t := basalam.NewTable()
+    t.pad_x = 0
+    t.add_column(fixed_col(2, basalam.Alignment.Left))
+    t.add_row(row1("r0"))
+    t.add_row(row1("r1"))
+    t.add_row(row1("r2"))
+    t.add_row(row1("r3"))
+    t.add_row(row1("r4"))
+    mut b := basalam.NewBuffer(2, 5)
+    b.fill(rect(0, 0, 2, 5), "x", "")
+    t.render(b, rect(0, 0, 2, 3))
+    mut out := ""
+    repeat 5 in y:
+        if y > 0:
+            out = out + "|"
+        end
+        out = out + b.row_text(y)
+    end
+    b.free()
+    testing.AssertEqStr(out, "r0|r1|r2|xx|xx")
+end
+
 func main:
     test_tb01_no_header_fixed_columns()
     test_tb02_header_and_rule()
@@ -397,5 +422,6 @@ func main:
     test_empty_table_is_zero()
     test_not_focusable_not_hit_not_consuming()
     test_bounds_survive_set_bounds()
+    test_rows_past_height_are_not_painted()
     ret testing.Summary()
 end
