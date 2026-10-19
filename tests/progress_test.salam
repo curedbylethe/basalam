@@ -226,6 +226,25 @@ func test_render_colours():
     testing.AssertEqStr(c.get(18, 0).style, green)
 end
 
+// CUR-455 probe. A second render with unchanged styles reuses all three cached
+// SGRs, so the build counter does not move; changing one style field costs
+// exactly one build.
+func test_sgr_memo_probe():
+    mut p := basalam.NewProgress()
+    p.set_progress(42)
+    buf := basalam.NewBuffer(20, 1)
+    defer buf.free()
+    before := basalam.SgrBuilds()
+    p.render(buf, rect(0, 0, 20, 1))
+    first := basalam.SgrBuilds()
+    testing.AssertEqInt(first - before, 3)
+    p.render(buf, rect(0, 0, 20, 1))
+    testing.AssertEqInt(basalam.SgrBuilds() - first, 0)
+    p.fill_style = basalam.Style { fg = basalam.Green }
+    p.render(buf, rect(0, 0, 20, 1))
+    testing.AssertEqInt(basalam.SgrBuilds() - first, 1)
+end
+
 func main:
     test_defaults()
     test_predicates()
@@ -235,5 +254,6 @@ func main:
     test_render_vectors_narrow()
     test_render_offset_bounds()
     test_render_colours()
+    test_sgr_memo_probe()
     ret testing.Summary()
 end

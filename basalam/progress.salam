@@ -61,6 +61,12 @@ pub struct Progress:
     value: int = 0
     max: int = 100
 
+    // The SGR of each of the three styles, kept between renders. Written only
+    // by render, never by the app.
+    fill_memo: _SgrMemo = _SgrMemo {}
+    empty_memo: _SgrMemo = _SgrMemo {}
+    text_memo: _SgrMemo = _SgrMemo {}
+
     @en "hits"
     /// Returns false: a click on the bar falls through to the widget painted
     /// beneath it.
@@ -106,9 +112,9 @@ pub struct Progress:
         if w <= 0:
             ret
         end
-        fill_sgr := StyleSgr(this.fill_style, ColorTier.TrueColor)
-        empty_sgr := StyleSgr(this.empty_style, ColorTier.TrueColor)
-        text_sgr := StyleSgr(this.text_style, ColorTier.TrueColor)
+        fill_sgr := this.fill_memo._sgr(this.fill_style, ColorTier.TrueColor)
+        empty_sgr := this.empty_memo._sgr(this.empty_style, ColorTier.TrueColor)
+        text_sgr := this.text_memo._sgr(this.text_style, ColorTier.TrueColor)
         tail := w >= 6
         mut bar := w
         if tail:
