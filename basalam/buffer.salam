@@ -226,7 +226,8 @@ pub struct Buffer:
             repeat this.width in x:
                 c := this.cells.get(y * this.width + x)
                 if c.style != style:
-                    str.BufAppend(b, term.Reset + c.style)
+                    str.BufAppend(b, term.Reset)
+                    str.BufAppend(b, c.style)
                     style = c.style
                 end
                 str.BufAppend(b, c.ch)
@@ -267,7 +268,8 @@ pub struct Buffer:
                     until i < e:
                         c := this.cells.get(y * this.width + i)
                         if c.style != style:
-                            str.BufAppend(b, term.Reset + c.style)
+                            str.BufAppend(b, term.Reset)
+                            str.BufAppend(b, c.style)
                             style = c.style
                         end
                         str.BufAppend(b, c.ch)
