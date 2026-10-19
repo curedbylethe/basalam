@@ -185,6 +185,32 @@ func test_render_styled_label_frame():
     testing.AssertEqStr(b.ansi(), want)
 end
 
+// ---- SGR memo (CUR-455 probe) -----------------------------------------
+
+// A second render with unchanged styles reuses both cached strings, so the
+// build counter does not move; changing one style field costs exactly one
+// build; focus arrives only through the buffer and folds into both resolved
+// styles, so the frame after a focus change rebuilds both.
+func test_sgr_memo_probe():
+    mut e := basalam.NewCheckbox("Notify me", true)
+    buf := basalam.NewBuffer(14, 1)
+    defer buf.free()
+    before := basalam.SgrBuilds()
+    e.render(buf, rect(0, 0, 14, 1))
+    first := basalam.SgrBuilds()
+    testing.AssertEqInt(first - before, 2)
+    e.render(buf, rect(0, 0, 14, 1))
+    testing.AssertEqInt(basalam.SgrBuilds() - first, 0)
+    e.box_style = basalam.Style { fg = basalam.Green }
+    e.render(buf, rect(0, 0, 14, 1))
+    testing.AssertEqInt(basalam.SgrBuilds() - first, 1)
+    buf.focused = true
+    e.render(buf, rect(0, 0, 14, 1))
+    testing.AssertEqInt(basalam.SgrBuilds() - first, 3)
+    e.render(buf, rect(0, 0, 14, 1))
+    testing.AssertEqInt(basalam.SgrBuilds() - first, 3)
+end
+
 // ---- Preferred size ---------------------------------------------------
 
 func test_preferred_size():
@@ -324,6 +350,7 @@ func main:
     test_render_cb03_checked_disabled_dim()
     test_render_cb04_box_style_only()
     test_render_styled_label_frame()
+    test_sgr_memo_probe()
     test_preferred_size()
     test_ck01_space_checks()
     test_ck02_space_unchecks()
