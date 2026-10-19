@@ -321,7 +321,7 @@ end
 <ResponseField name="pad" type="Insets">The inset between the container's bounds and its content box. `Insets {}` by default.</ResponseField>
 <ResponseField name="items" type="Vector<LayoutSlot>">The children in placement order, one slot each.</ResponseField>
 
-A zero-margin child is exactly the content box. Size and alignment fields are ignored. With no children nothing is placed; the stack still receives its own bounds. Stack does not paint or raise its children. With nothing raised, later registry ids paint on top, so the last child added draws over the others. [`raise`](/reference/screen#raise) can put an earlier child above a later one.
+A zero-margin child is exactly the content box. Size and alignment fields are ignored. With no children nothing is placed; the stack still receives its own bounds. Stack does not paint or raise its children. With nothing raised, later registry ids paint on top, so the last child added draws over the others. [`raise`](/reference/screen#raise) can put an earlier child above a later one. For an overlay that must cover its surroundings, use a [Modal](/reference/modal) instead: Stack only overlaps rects, and the Modal dims and centres its dialog.
 
 ### add
 

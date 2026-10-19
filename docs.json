@@ -43,6 +43,8 @@
           "reference/button",
           "reference/checkbox",
           "reference/progress",
+          "reference/table",
+          "reference/separator",
           "reference/event",
           "reference/tree",
           "reference/buffer",
@@ -50,6 +52,7 @@
           "reference/style",
           "reference/border",
           "reference/panel",
+          "reference/modal",
           "reference/keymap",
           "reference/screen"
         ]

@@ -51,6 +51,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `empty_style`, `text_style`, and `render`. The fill floors, so the bar is
   full only at 100%, and a five-cell percent tail shows when the width is at
   least six cells.
+- `Table`: a non-focusable grid of single-line rows, with `NewTable`,
+  `add_column`, `add_row`, `set_column_width`, `set_column_align`,
+  `set_column_overflow`, `set_cell_align`, `set_pad_x`, `preferred_size`,
+  `measure`, and `render`. Column widths are `LayoutSize` values, and star
+  columns shrink first when the rect is narrow. An optional bold header and
+  rule come from `header` and `rule`, and East Asian wide glyphs count as
+  two cells.
+- `Modal`: an overlay dialog drawn over a DIM scrim, with `NewModal`, `add`,
+  `open`, `close`, `set_title`, `set_size`, `set_closable`, `set_bounds`,
+  `bounds`, and `render`. While open it is the focus stop of its layer, it
+  takes clicks on the scrim, and Esc closes it. The app raises and focuses
+  it with `push_focus` then `raise_subtree`, and undoes both with
+  `unraise_subtree` then `pop_focus`.
+- `Separator`: a one-line horizontal or vertical rule, with `NewSeparator`,
+  `set_orientation`, `set_ch`, `set_style`, `preferred_size`, `measure`, and
+  `render`. `set_ch` takes exactly one cell wide rune: a wide or zero-width
+  rune returns `false` and keeps the old one, and `""` resets to the default.
 - `Widget.preferred_size`: the measurement hook a widget reports its wanted
   size through, with a cannot-measure default on `BaseWidget` that fills
   the available axis instead.
@@ -136,6 +153,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `Screen.raise_subtree(id)` and `Screen.unraise_subtree(id)`: raise or
+  unraise a widget and all of its descendants as one layer, moving and
+  restoring focus as `raise` and `unraise` do. A Modal uses them to stay
+  above its own children.
 - `Text.style` is now a `basalam.Style` value instead of a raw SGR string
   built with `std/term`, and `set_style` takes a `Style`. This is a breaking
   change at every `Text` style-construction site; the escape bytes a given

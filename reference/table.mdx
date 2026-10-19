@@ -1,0 +1,191 @@
+---
+title: "Table"
+description: "The Table widget: a non-focusable grid of single-line rows with column widths, an optional bold header and rule, cell and column alignment, and clip or ellipsis overflow."
+keywords: ["table", "grid", "columns", "rows", "header", "rule", "alignment", "overflow", "ellipsis", "width", "layout_size"]
+---
+
+`Table` draws a grid of single-line rows into a [buffer](/reference/buffer). It is the seventh concrete widget, after [Progress](/reference/progress). It holds column definitions and cell text, paints an optional header row and rule, and takes no focus and no clicks. Each column's width comes from a [`LayoutSize`](/reference/layout), so the same width rules the layout engine uses apply to a column.
+
+```salam
+mut t := basalam.NewTable()
+t.header = true
+t.add_column(basalam.TableColumn { width = basalam.LayoutSize { kind = basalam.SizeKind.Fixed, cells = 6 } })
+t.add_row(header_cells)
+_ := screen.add(basalam.RootId, t)
+```
+
+## Table
+
+`Table` embeds [BaseWidget](/reference/widget), overrides the default `render`, and adds `preferred_size`, `measure`, `hits`, `focusable`, and `handle_event`. Each column is a `TableColumn`, and each row is a `Vector<str>`.
+
+```salam
+pub struct Table:
+    pub use BaseWidget
+
+    pub columns: Vector<TableColumn> = Vector {}
+    pub rows: Vector<Vector<str>> = Vector {}
+    pub header: bool = false
+    pub rule: bool = true
+    pub pad_x: int = 1
+    pub style: Style = StyleDefault
+    pub header_style: Style = Style { bold = true }
+end
+```
+
+<ResponseField name="columns" type="Vector<TableColumn>">The column definitions, left to right. Each `TableColumn` holds a `width` (a `LayoutSize`), `min` and `max` cell bounds, an `align`, and an `overflow`.</ResponseField>
+<ResponseField name="rows" type="Vector<Vector<str>>">The cell text by row, then column. When `header` is on, row `0` is the header. A row shorter than the column count reads as blank in its missing cells.</ResponseField>
+<ResponseField name="header" type="bool">When `true`, row `0` is the header. It is painted in `header_style`, and each of its cells takes its column's alignment. Defaults to `false`.</ResponseField>
+<ResponseField name="rule" type="bool">Draws a line of `─` under the header. Only meaningful when `header` is on. Defaults to `true`.</ResponseField>
+<ResponseField name="pad_x" type="int">Blank cells on each side of every cell's text. A negative value counts as `0`. Defaults to `1`.</ResponseField>
+<ResponseField name="style" type="Style">The style of the data rows. Defaults to `StyleDefault`.</ResponseField>
+<ResponseField name="header_style" type="Style">The style of the header row. It replaces `style` on that row rather than merging with it. Defaults to bold.</ResponseField>
+
+The alignment overrides are private. Set them with `set_cell_align`.
+
+### Methods
+
+```salam
+pub func NewTable(): Table
+pub func add_column(col: TableColumn): int
+pub func add_row(cells: Vector<str>): int
+pub func set_column_width(i: int, w: LayoutSize)
+pub func set_column_align(i: int, a: Alignment)
+pub func set_column_overflow(i: int, o: CellOverflow)
+pub func set_cell_align(row: int, col: int, a: Alignment)
+pub func set_pad_x(n: int)
+pub func focusable(): bool
+pub func hits(): bool
+pub func handle_event(event: Event): bool
+pub func preferred_size(max_width: int): Rect
+pub func measure(axis: Axis, max_width: int): Measure
+pub func render(buf: Buffer, bounds: Rect)
+```
+
+| Method | Description |
+| --- | --- |
+| `NewTable(): Table` | Creates an empty table: no columns, no rows, no header, a rule, and `pad_x` of `1`. |
+| `add_column(col: TableColumn): int` | Appends a column and returns its index. |
+| `add_row(cells: Vector<str>): int` | Appends a row and returns its index. Missing cells read as blank. |
+| `set_column_width(i: int, w: LayoutSize)` | Sets a column's width rule. An index out of range does nothing. |
+| `set_column_align(i: int, a: Alignment)` | Sets a column's default alignment. An index out of range does nothing. |
+| `set_column_overflow(i: int, o: CellOverflow)` | Sets a column's overflow. An index out of range does nothing. |
+| `set_cell_align(row: int, col: int, a: Alignment)` | Overrides one cell's alignment. `row` indexes `rows`, so `0` is the header when `header` is on. |
+| `set_pad_x(n: int)` | Sets the blank space on each side of a cell. |
+| `focusable(): bool` | Always `false`, so a table takes no keyboard focus. |
+| `hits(): bool` | Always `false`, so a click on the table falls through to whatever is beneath it. |
+| `handle_event(event: Event): bool` | Always `false`. The table consumes nothing and changes nothing. |
+| `preferred_size(max_width: int): Rect` | The natural size, described under [Preferred size](#preferred-size). |
+| `measure(axis: Axis, max_width: int): Measure` | The preferred extent along `axis`. `ok` is always `true`. |
+| `render(buf: Buffer, bounds: Rect)` | Draws the table into `bounds`. |
+
+The screen calls `hits` and `render`, and the layout engine calls `measure` or `preferred_size`. You rarely call them yourself.
+
+The table is read-only to the screen: it never takes focus and never consumes an event. To change what it shows, change its columns or rows and set `screen.dirty` so the next frame paints it.
+
+## Columns and width
+
+Each column's `width` is a [`LayoutSize`](/reference/layout) with one of three kinds:
+
+- `SizeKind.Fixed` is an exact width in `cells`. A negative value clamps to `0`.
+- `SizeKind.Pref` is the column's content width plus `2 * pad_x`, clamped to `[min, max]`. `max = -1` means no upper bound. When `min` and `max` conflict, `min` wins.
+- `SizeKind.Fill` is a weighted share of whatever is left after the other columns. A `TableColumn` defaults to a `Fill` of weight `1`.
+
+Star (`Fill`) columns share the leftover space by weight. Each gets the floor of its share, and the remaining cells go one each to the earliest weighted columns.
+
+When the rect is narrower than the table, the columns give up width in this order:
+
+1. Star columns shrink to `0` first.
+2. `Pref` columns shrink toward their `min`, left to right, as far as needed.
+3. `Fixed` columns keep their width. The rect clips them from the right.
+
+```salam
+t.add_column(basalam.TableColumn { width = basalam.LayoutSize { kind = basalam.SizeKind.Fixed, cells = 6 } })
+t.add_column(basalam.TableColumn { width = basalam.LayoutSize { kind = basalam.SizeKind.Pref }, min = 4, max = 12 })
+t.add_column(basalam.TableColumn { width = basalam.LayoutSize { kind = basalam.SizeKind.Fill, weight = 2 } })
+```
+
+Widths are resolved on every call, so `render`, `preferred_size` and `measure` always agree.
+
+## Overflow
+
+`overflow` decides what happens to cell text wider than its text area, which is the column width less `2 * pad_x`:
+
+| Value | Effect |
+| --- | --- |
+| `CellOverflow.Clip` | The text is cut at the edge. The default. |
+| `CellOverflow.Ellipsis` | The text is cut to one cell less, and the `…` character takes the last visible cell. |
+
+Only the first line of a cell's text is shown, since a cell is single-line. A wide glyph that would be split at the edge leaves a blank cell instead of half a glyph.
+
+Table counts display cells per codepoint, with East Asian wide glyphs at 2 cells and zero-width characters at 0. This is not the same as [Text](/reference/text), which counts each codepoint as one cell, so a `Table` and a `Text` that share a row can disagree about wide glyphs.
+
+## Alignment
+
+A cell's alignment comes from the first of three sources that is set:
+
+1. The cell's own override, from `set_cell_align`.
+2. The column's `align`, from `set_column_align` or the `TableColumn`.
+3. `Alignment.Left`.
+
+`Right` places the text at the right edge of the cell's text area. `Center` places it at `floor(slack / 2)` cells, where `slack` is the free space. When the slack is odd, the extra cell lands on the **right**, the same tie-break as [Text](/reference/text#alignment). Padding is applied on both sides before alignment.
+
+## Header and rule
+
+With `header` on, row `0` is painted in `header_style` and each of its cells takes its column's alignment. With `rule` on too, a line of `─` is drawn under the header. The rule runs the width of the table's columns, not the width of the rect. The data rows follow in `style`.
+
+The header and the rule each take one row. A table with a header, a rule and two data rows is four rows high.
+
+## Preferred size
+
+`preferred_size` reports the table's natural size:
+
+- The width is the sum of the resolved column widths, with `Fill` columns at `0`. When `max_width` is positive and the sum is larger, the width is `max_width`.
+- The height is the header, the rule and the data rows. A table with no rows is `0` high, and a table with no columns is `0` by `0`.
+
+A table with columns but no rows keeps its column widths in `preferred_size`. Only the height is `0`.
+
+`measure` reports the same size along one axis. It is always measurable, so a layout never falls back to a stub for a table.
+
+Cells that the table does not reach are not painted. Each cell paints its own rectangle, and nothing else in the table's rect is written, so a table is transparent over whatever lies beneath it.
+
+## Example
+
+A buffer is plain memory, so you can render a table without a terminal. This is the TB02 frame: a header with a rule over two data rows.
+
+```salam
+include "basalam/basalam.salam"
+
+func row2(a: str, b: str): Vector<str>:
+    mut v := Vector {} as Vector<str>
+    v.push(a)
+    v.push(b)
+    ret v
+end
+
+func main:
+    mut t := basalam.NewTable()
+    t.pad_x = 0
+    t.header = true
+    t.add_column(basalam.TableColumn { width = basalam.LayoutSize { kind = basalam.SizeKind.Fixed, cells = 6 }, align = basalam.Alignment.Left })
+    t.add_column(basalam.TableColumn { width = basalam.LayoutSize { kind = basalam.SizeKind.Fixed, cells = 5 }, align = basalam.Alignment.Right })
+    t.add_row(row2("Name", "Qty"))
+    t.add_row(row2("apple", "3"))
+    t.add_row(row2("kiwi", "12"))
+    buf := basalam.NewBuffer(11, 4)
+    defer buf.free()
+    t.render(buf, basalam.Rect { width = 11, height = 4 })
+    repeat 4 in y:
+        println "[" + buf.row_text(y) + "]"
+    end
+    println t.preferred_size(0).width, t.preferred_size(0).height
+end
+// [Name    Qty]
+// [───────────]
+// [apple     3]
+// [kiwi     12]
+// 11 4
+```
+
+<Note>
+  A `dyn basalam.Widget` cannot be downcast back to a `Table`. Keep a concrete `Table` reference, or a shared value such as a `mut` global, to call `add_row` and the other setters after the table is in a `Screen`.
+</Note>

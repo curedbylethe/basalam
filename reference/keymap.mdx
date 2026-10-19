@@ -106,7 +106,7 @@ The scope walk is O(tree depth) and only runs at nodes that carry scoped binding
   Nothing fires from the timeout alone: an expired prefix is dropped silently and the arriving key is processed as a fresh start, so it may open a new sequence or trigger a single binding.
 - Non-key events (tick, resize, mouse) never reach the keymap and never evaluate the timeout, so a pending sequence survives them. Elapsed time still counts, though: if only non-key events arrived during the gap, the next `KeyEvent` evaluates the full elapsed time.
 - An invoked action resolves the key: nothing is reprocessed after an action runs, even when the action returns `false`.
-- An unbound `Esc` or `Ctrl+C` leaves the pending state reset and returns `false`, so the loop's auto-stop still works.
+- An unbound `Esc` or `Ctrl+C` leaves the pending state reset and returns `false`, so the loop's auto-stop still works. A consumed `Esc`, such as one an open Modal takes, never reaches the keymap fallback.
 
 ## Installing and extending
 
@@ -155,4 +155,4 @@ end
 
 ## Modes
 
-basalam ships no modes and no presets: modes are application territory. Your app can wrap the library in its own state and an action can call `set_keymap` to swap the whole map — for example a normal map that binds `i` to an insert map, and an insert map that binds `Esc` back. The swapped-in map starts with no pending sequence. See [Focus](/concepts/focus) for the navigation methods your actions call.
+basalam ships no modes and no presets: modes are application territory. Your app can wrap the library in its own state and an action can call `set_keymap` to swap the whole map — for example a normal map that binds `i` to an insert map, and an insert map that binds `Esc` back. The swapped-in map starts with no pending sequence. A consumed Esc, such as an open Modal's, never reaches the keymap fallback, so a mode's Esc binding fires only while no widget takes the key. See [Focus](/concepts/focus) for the navigation methods your actions call.

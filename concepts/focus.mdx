@@ -10,7 +10,7 @@ Only widgets whose `focusable()` returns `true` can take focus.
 
 ## The focus stack
 
-The screen tracks focus as a stack of widget IDs. The top entry is the focused widget; an empty stack means nothing has focus, and events start at the root.
+The screen tracks focus as a stack of widget IDs. The top entry is the focused widget; an empty stack means nothing has focus, and events start at the root. A dialog such as a [Modal](/reference/modal) pushes itself here when it opens.
 
 | Method | Effect |
 | --- | --- |
@@ -22,7 +22,7 @@ The screen tracks focus as a stack of widget IDs. The top entry is the focused w
 
 `focus` and `push_focus` refuse IDs that are invalid or not focusable and return `false` without changing anything.
 
-Use `push_focus` and `pop_focus` for anything temporary, such as a dialog: push the dialog's widget when it opens, pop when it closes, and the focus goes back where it was.
+Use `push_focus` and `pop_focus` for anything temporary, such as a dialog: push the dialog's widget when it opens, pop when it closes, and the focus goes back where it was. A [Modal](/reference/modal) opens with `push_focus` and then `raise_subtree`, and closes with `unraise_subtree` and then `pop_focus`.
 
 ```salam
 if screen.push_focus(dialog):
@@ -51,7 +51,7 @@ Every method returns `true` when the focus moved. Each focus change marks the sc
 
 ### Linear: focus_next and focus_prev
 
-Linear navigation walks the focus order and wraps inside it. That order is the focusable widgets in the topmost raised layer, ascending ID, or every focusable widget in ID order when nothing is raised or that layer has no focusable widget. It matches paint order only while nothing is raised. Unfocusable widgets are skipped. With nothing focused, `focus_next` focuses the first widget in that order and `focus_prev` the last. A focus that sits outside the order jumps to the first on `focus_next` and the last on `focus_prev`.
+Linear navigation walks the focus order and wraps inside it. That order is the focusable widgets in the topmost raised layer, ascending ID, or every focusable widget in ID order when nothing is raised or that layer has no focusable widget. It matches paint order only while nothing is raised. Unfocusable widgets are skipped. With nothing focused, `focus_next` focuses the first widget in that order and `focus_prev` the last. A focus that sits outside the order jumps to the first on `focus_next` and the last on `focus_prev`. A raised subtree, such as an open Modal, is such a layer.
 
 ### Spatial: focus_up, focus_down, focus_left, focus_right
 
