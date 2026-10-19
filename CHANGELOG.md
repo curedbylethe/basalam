@@ -201,8 +201,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `sigwait`, reads `term.Size()`, and sends a `ResizeEvent` only when the
   size changed. Windows keeps polling `term.Size()` on each input pass.
 - Match arms use the Salam 0.5 form (`pattern: body end`) instead of the old
-  `pattern => body`. The minimum compiler is now 0.5.5, because the compiler
-  no longer parses the old form.
+  `pattern => body`. 0.5.5 dropped the old form, because the compiler no
+  longer parses it. The minimum compiler is now 0.5.6, which builds basalam's
+  `dyn Widget` code with the LLVM backend; 0.5.5 required the C fallback.
 
 ### Documentation
 
