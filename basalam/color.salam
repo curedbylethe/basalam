@@ -21,8 +21,7 @@
  * its own SGR form. Color models exactly those four as a payload enum, so a
  * value never carries more than its kind needs: Default has no payload,
  * Ansi and Indexed carry one index, Rgb carries three channels. Value
- * equality is native, so a future structured style can compare two colors
- * for dirty-cell detection the way cells are compared today.
+ * equality is native. Detection compares content and style strings today.
  *
  *   present:  the Color enum; the 16 palette constants (Black..White,
  *             BrightBlack..BrightWhite); FgSeq / BgSeq, which turn a color
