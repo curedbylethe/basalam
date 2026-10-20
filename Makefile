@@ -13,16 +13,17 @@ endif
 
 EXAMPLES := $(patsubst examples/%.salam,$(BUILD)/examples/%,$(wildcard examples/*.salam))
 
-.PHONY: help build test test-llvm example examples run format check docs docs-check clean
+.PHONY: help build test test-llvm example examples docs-examples run format check docs docs-check clean
 
 help:
 	@echo "make build     type-check and compile every file in basalam/"
 	@echo "make test      build and run the test suite (tests/run.sh)"
 	@echo "make test-llvm build and run the test suite with --backend=llvm"
 	@echo "make examples  build every program in examples/ into build/examples/"
+	@echo "make docs-examples type-check every complete example in the docs"
 	@echo "make run       build and run the demo example"
 	@echo "make format    format all Salam sources in place"
-	@echo "make check     format check, build, examples, tests (the library checks; CI also runs test-llvm and docs-check)"
+	@echo "make check     format check, build, examples, tests, doc examples (CI also runs test-llvm and docs-check)"
 	@echo "make docs      preview the documentation site (needs: npm i -g mint)"
 	@echo "make docs-check validate the documentation site and its links"
 	@echo "make clean     remove build output"
@@ -44,6 +45,9 @@ test-llvm:
 examples: $(EXAMPLES)
 example: examples
 
+docs-examples:
+	SALAM=$(SALAM) sh tests/doc-examples.sh
+
 $(BUILD)/examples/%: examples/%.salam $(wildcard basalam/*.salam)
 	@mkdir -p $(BUILD)/examples
 	$(SALAM) build $< --output=$@ $(FLAGS)
@@ -57,6 +61,7 @@ format:
 check:
 	$(SALAM) format --check $(SOURCES)
 	$(MAKE) build examples test
+	$(MAKE) docs-examples
 
 docs:
 	mint dev
