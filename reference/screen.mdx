@@ -132,7 +132,7 @@ From the first widget the event [bubbles up](/reference/event#dispatch-and-bubbl
 ```salam
 mut ev := basalam.Event {}
 until screen.next_event(ev):
-    if ev.kind == basalam.MouseEvent and ev.mouse.ok and ev.mouse.pressed:
+    if ev.kind == basalam.MouseEvent and ev.mouse.ok and ev.mouse.pressed and not ev.mouse.motion:
         p := ev.mouse_point()
         _ := screen.focus(screen.hit_test(p.x, p.y)) // click-to-focus
     end

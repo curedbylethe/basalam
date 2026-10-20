@@ -47,7 +47,7 @@ When reading returns `term.KeyEOF` (stdin ended), the input thread reports a sin
 | `col` | `int` | Column of the cursor, **1-based** as the terminal reports it. |
 | `row` | `int` | Row of the cursor, **1-based**. |
 | `button` | `int` | The button number from the report (`0` is the left button). |
-| `pressed` | `bool` | `true` for a press, `false` for a release. |
+| `pressed` | `bool` | `true` for a press, `false` for a release. A movement report counts as a press; also check `motion`. |
 | `motion` | `bool` | `true` when the report is cursor motion rather than a click. Only arrives when `mouse_motion` is set. |
 | `ok` | `bool` | `true` when the report decoded. When `false`, ignore the other fields. |
 
@@ -55,7 +55,7 @@ When reading returns `term.KeyEOF` (stdin ended), the input thread reports a sin
 
 ```salam
 pub func handle_event(event: basalam.Event): bool:
-    if event.kind == basalam.MouseEvent and event.mouse.ok and event.mouse.pressed:
+    if event.kind == basalam.MouseEvent and event.mouse.ok and event.mouse.pressed and not event.mouse.motion:
         p := event.mouse_point() // (0, 0) is the top-left cell
         this.clicked = p
         ret true
