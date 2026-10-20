@@ -1,0 +1,102 @@
+#!/bin/sh
+# Compile every complete example in the documentation.
+#
+# Why: nothing used to compile the fenced examples, so reference/list.mdx
+# shipped code that did not type-check. This harness extracts each example
+# and runs it through the compiler on every `make check`.
+#
+# A block counts as a complete program only when it contains an `include` of
+# the library and a `func main`. A fragment without both assumes an ambient
+# `screen`, `t`, or a widget defined earlier on the page, so it is skipped
+# silently.
+#
+# `salam check` rather than `salam build`: the examples are only type-checked,
+# never run, and check is several times faster.
+#
+# Limitation: a fence whose info string is not plain `salam` (for example
+# ```salam title="counter") is not seen.
+#
+# Usage: tests/doc-examples.sh
+# Env:   SALAM=path/to/salam          (default: salam on PATH)
+
+set -u
+
+SALAM="${SALAM:-salam}"
+ROOT=$(cd "$(dirname "$0")/.." && pwd)
+OUT="$ROOT/build/doc-examples"
+
+# Skipped: this example builds the docs' `MyRoot` placeholder widget, which no
+# page defines. Drop the entry once the docs define a canonical root widget
+# (PR-CUR-454 Q1).
+SKIP="reference/keymap.mdx"
+
+pages=$(cd "$ROOT" && find . -name '*.mdx' \
+    ! -path './.git/*' ! -path './node_modules/*' ! -path './.codegraph/*' \
+    ! -path './.agents/*' ! -path './.claude/*' ! -path './.opencode/*' \
+    ! -path './build/*' | sed 's|^\./||' | sort)
+
+mkdir -p "$OUT"
+
+pass=0
+fail=0
+total=0
+
+for page in $pages; do
+    [ "$page" = "$SKIP" ] && continue
+    base=$(printf '%s' "$page" | sed 's|\.mdx$||; s|/|-|g')
+    # One pass per page: emit only blocks that hold both markers, rewriting the
+    # include for the output's depth, and report each opener's line number.
+    starts=$(awk -v out="$OUT" -v base="$base" '
+        /^[ ]*```salam[ ]*$/ {
+            inblock = 1; start = FNR; n = 0; hasinclude = 0; hasmain = 0
+            next
+        }
+        inblock && /^[ ]*```[ ]*$/ {
+            inblock = 0
+            if (hasinclude && hasmain) {
+                seen++
+                file = out "/" base "-" seen ".salam"
+                for (i = 1; i <= n; i++) print lines[i] > file
+                close(file)
+                print start
+            }
+            next
+        }
+        inblock {
+            line = $0
+            if (line ~ /include[ ]+"[^"]*basalam\/basalam\.salam"/) {
+                hasinclude = 1
+                # include paths resolve relative to the including file.
+                sub(/include[ ]+"[^"]*"/,
+                    "include \"../../basalam/basalam.salam\"", line)
+            }
+            if (line ~ /^[ ]*func[ ]+main/) hasmain = 1
+            lines[++n] = line
+        }
+    ' "$ROOT/$page")
+
+    n=0
+    for start in $starts; do
+        n=$((n + 1))
+        src="$OUT/$base-$n.salam"
+        total=$((total + 1))
+        # `check` writes "no errors" to stdout; keep stderr, which carries the
+        # diagnostics when an example is broken.
+        if "$SALAM" check "$src" > /dev/null; then
+            echo "ok   $page:$start"
+            pass=$((pass + 1))
+        else
+            echo "FAIL $page:$start"
+            fail=$((fail + 1))
+        fi
+    done
+done
+
+# A green run that compiled nothing would hide exactly the defect this checks.
+if [ "$total" -eq 0 ]; then
+    echo "no complete examples found; refusing to report success" >&2
+    exit 1
+fi
+
+echo "$pass passed, $fail failed"
+[ "$fail" -eq 0 ]
