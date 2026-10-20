@@ -52,7 +52,7 @@ Returns `true` when the widget can take keyboard focus. Only focusable widgets t
 func hits(): bool
 ```
 
-Returns `true` when hit-testing may land on this widget. The default is `true`. Override it to return `false` when the widget may paint and still refuse hits. The screen then skips it and keeps scanning the widgets under it. Refusing hits does not remove the widget from paint order or from focus. Hiding does remove it from focus; see [`visible`](#visible).
+Returns `true` when hit-testing may land on this widget. The default is `true`. Override it to return `false` when the widget may paint and still refuse hits. The screen then skips it and keeps scanning the widgets under it. Refusing hits does not remove the widget from paint order or from focus. Hiding does remove it from focus, paint order, and hit testing; see [`visible`](#visible).
 
 ### visible
 
@@ -60,7 +60,7 @@ Returns `true` when hit-testing may land on this widget. The default is `true`. 
 func visible(): bool
 ```
 
-Returns `true` when the widget is on screen. The default is `true`. Override it to return `false` while the widget is hidden: focus navigation then skips the widget and every descendant of it. A widget answers only for itself, so focus eligibility asks every widget on the path to the root.
+Returns `true` when the widget is on screen. The default is `true`. Override it to return `false` while the widget is hidden: focus navigation, painting, and hit testing then skip the widget and every descendant of it. A widget answers only for itself, so every consumer asks every widget on the path to the root.
 
 ### bounds and set_bounds
 
@@ -117,7 +117,7 @@ end
 | `handle_event` | Returns `false`, so every event bubbles on. |
 | `focusable` | Returns `false`. |
 | `hits` | Returns `true`. Override it to paint without accepting hits. |
-| `visible` | Returns `true`. Override it to hide the widget and its subtree from focus navigation. |
+| `visible` | Returns `true`. Override it to hide the widget and its subtree from focus navigation, painting, and hit testing. |
 | `bounds` | Returns `rect`. |
 | `set_bounds` | Stores the rect in `rect`. |
 | `preferred_size` | Returns the negative sentinel, so the layout engine fills the axis. |

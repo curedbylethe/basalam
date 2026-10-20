@@ -172,6 +172,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `Widget.visible()` now hides a widget and its whole subtree from painting and
+  hit testing, not only from focus navigation. A hidden widget and its
+  descendants are no longer drawn and no longer win `Screen.hit_test`.
 - The typed-style widgets and the Modal scrim cache the SGR strings they draw
   with and rebuild one only when the resolved style (or, for Modal's scrim,
   the underlying cell style) changes; `List` and `Input` build their default
@@ -261,6 +264,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   consider only widgets whose whole ancestor chain reports `visible()`, so the
   child of a closed Modal is no longer reachable by `Tab`, `Shift-Tab`, or an
   arrow key.
+- `Screen.hit_test`, `Screen.draw_full`, and `Screen.draw_regions` skip every
+  id under a hidden ancestor, so a hidden widget and its descendants are
+  neither hit-testable nor painted. `Screen.dispatch` revalidates the focus
+  before routing and again after the widget chain returns: a focused id that
+  became hidden moves to the first entry of the focus order, or the focus
+  clears when the order is empty.
 
 ## [0.1.0] - 2026-10-06
 
