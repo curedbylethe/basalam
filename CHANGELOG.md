@@ -268,6 +268,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   cells-still-raw boundary.
 - The layout, screen, widget, focus, and architecture pages describe weights,
   gap, measurement, grid spanning, and overlay order.
+- All MDX pages use the Mintlify formatter's block-list `keywords` style, and
+  the docs job fails when `mint format` would rewrite a page;
+  `make docs-format-check` runs the same gate locally. The Mintlify CLI is
+  pinned to 4.2.988 in both places. (CUR-464)
 
 ### Fixed
 

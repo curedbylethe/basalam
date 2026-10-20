@@ -13,7 +13,7 @@ endif
 
 EXAMPLES := $(patsubst examples/%.salam,$(BUILD)/examples/%,$(wildcard examples/*.salam))
 
-.PHONY: help build test test-llvm example examples docs-examples run format check docs docs-check clean
+.PHONY: help build test test-llvm example examples docs-examples run format check docs docs-check docs-format-check clean
 
 help:
 	@echo "make build     type-check and compile every file in basalam/ with --backend=llvm"
@@ -24,8 +24,9 @@ help:
 	@echo "make run       build and run the demo example"
 	@echo "make format    format all Salam sources in place"
 	@echo "make check     format check, strict build, strict examples, tests, doc examples (the library gate; CI also runs test-llvm and the docs job)"
-	@echo "make docs      preview the documentation site (needs: npm i -g mint)"
+	@echo "make docs      preview the documentation site (needs: npm i -g mint@4.2.988)"
 	@echo "make docs-check validate the documentation site and its links"
+	@echo "make docs-format-check  fail if mint format would rewrite a docs page"
 	@echo "make clean     remove build output"
 
 # `salam obj basalam/basalam.salam` does not load the package's sibling
@@ -69,6 +70,10 @@ docs:
 docs-check:
 	mint validate
 	mint broken-links --check-anchors
+
+docs-format-check:
+	mint format
+	git diff --exit-code -- '*.mdx' 'docs.json'
 
 clean:
 	rm -rf $(BUILD) .salam-build
