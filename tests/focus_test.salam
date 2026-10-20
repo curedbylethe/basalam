@@ -29,6 +29,10 @@ include "../basalam/basalam.salam"
 // tests can assert the exact visiting order.
 mut visits := Vector {} as Vector<str>
 
+// Set by the test that hides every widget, so Vanisher can report itself
+// gone after the screen has already focused it.
+mut vanished := false
+
 // A focusable tile that shows "*" when it has focus and counts the keys it
 // consumes ("k").
 struct Tile:
@@ -81,6 +85,20 @@ struct HiddenTile:
 
     pub func visible(): bool:
         ret false
+    end
+end
+
+// A focusable widget that can disappear after the screen has focused it. The
+// test uses it to hide the last visible widget in the tree.
+struct Vanisher:
+    pub use basalam.BaseWidget
+
+    pub func focusable(): bool:
+        ret true
+    end
+
+    pub func visible(): bool:
+        ret not vanished
     end
 end
 
@@ -377,6 +395,24 @@ func test_dispatch_routes_through_focus_stack():
     testing.AssertEqStr(trail(), "a")
 end
 
+// When the focused widget hides and nothing else is visible, the focus order
+// is empty. Dispatch must clear the focus instead of leaving it on a hidden
+// widget, and the event still has somewhere to go: the root.
+func test_dispatch_clears_focus_when_nothing_is_visible():
+    vanished = false
+    mut s := basalam.NewScreen(basalam.BaseWidget {}, 8, 1)
+    defer s.close()
+    id := s.add(basalam.RootId, Vanisher {})
+    s.widget(id).set_bounds(rect(0, 0, 2, 1))
+    testing.AssertEqInt(s.focused_id(), id)
+    vanished = true
+    testing.AssertFalse(s.can_focus(id))
+    k := basalam.Event { kind = basalam.KeyEvent, key = term.Decode("k") }
+    testing.AssertFalse(s.dispatch(k))
+    testing.AssertEqInt(s.focused_id(), basalam.NoWidget)
+    vanished = false
+end
+
 // Focusables 1..4 in one row; widget 0 is not focusable. A raised layer
 // owns focus navigation until it is unraised.
 func test_focus_topmost_layer():
@@ -585,6 +621,7 @@ func main:
     test_dispatch_goes_to_focused_widget()
     test_dispatch_with_empty_stack_starts_at_root()
     test_dispatch_routes_through_focus_stack()
+    test_dispatch_clears_focus_when_nothing_is_visible()
     test_focus_topmost_layer()
     test_indicator_follows_focus()
     test_hidden_container_hides_its_subtree()
