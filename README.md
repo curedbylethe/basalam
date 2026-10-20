@@ -76,7 +76,8 @@ mint dev
 
 Run `make docs-check` to validate the site and its links the way CI does, and
 `make docs-format-check` to fail when `mint format` would rewrite a page; both
-need the same `mint` install.
+need the same `mint` install. The local gate compares against the index, so
+stage or commit page edits before running it.
 
 ## Contributing
 
