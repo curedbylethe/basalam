@@ -74,9 +74,9 @@ path is a manual check (below).
 
 CI runs Ubuntu and macOS only. On Windows, SIGWINCH does not exist, so the
 input thread polls `term.Size()` every 20 ms instead of waiting for a signal.
-The Windows stubs compile, but no CI job runs them. Before merging a change
-that touches `basalam/screen.salam` or `basalam/signal.salam`, check resize by
-hand on Windows:
+The Windows stubs exist, but no CI job compiles or runs them. Before merging
+a change that touches `basalam/screen.salam` or `basalam/signal.salam`, check
+resize by hand on Windows:
 
 1. Build and run `examples/demo.salam` with Salam 0.5.6 or newer. From Git
    Bash or MSYS2, `make run` is the usual path if the make toolchain is
@@ -113,7 +113,9 @@ A change is not finished until it is documented:
 - Non-obvious algorithms get inline prose comments.
 - User-facing behavior changes update the Mintlify pages (`*.mdx`) and,
   for new pages, `docs.json` navigation. A new or edited page must pass
-  `make docs-check` and `make docs-format-check`, which CI enforces.
+  `make docs-check` and `make docs-format-check`, which CI enforces. The local
+  gate compares against the index, so stage or commit page edits before
+  running it.
 
 ## Commits
 
