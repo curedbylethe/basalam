@@ -1,7 +1,16 @@
 ---
 title: "Border"
 description: "Draw a one-cell box-drawing ring into a buffer with DrawBorder: the single, double, and rounded glyph sets, the title rules, the degenerate rectangles, and the one-foreground color rule."
-keywords: ["border", "frame", "box drawing", "DrawBorder", "BorderStyle", "title", "rounded", "double", "single"]
+keywords:
+  - "border"
+  - "frame"
+  - "box drawing"
+  - "DrawBorder"
+  - "BorderStyle"
+  - "title"
+  - "rounded"
+  - "double"
+  - "single"
 ---
 
 `DrawBorder` paints a one-cell ring around a rectangle of a [`Buffer`](/reference/buffer). It is the shared helper that every frame in basalam uses, including the [`Panel`](/reference/panel) widget, so a custom widget that wants a frame calls it too. It draws only the ring. It does not lay out children, change geometry, or pick a color tier.

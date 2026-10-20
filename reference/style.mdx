@@ -1,7 +1,16 @@
 ---
 title: "Style"
 description: "The terminal style value type: a foreground and a background color, four attributes, border kinds, merge and equality, and the SGR sequences it emits."
-keywords: ["style", "sgr", "bold", "dim", "italic", "underline", "merge", "border", "color"]
+keywords:
+  - "style"
+  - "sgr"
+  - "bold"
+  - "dim"
+  - "italic"
+  - "underline"
+  - "merge"
+  - "border"
+  - "color"
 ---
 
 `Style` is the value type a cell is drawn with: a foreground and a background [`Color`](/reference/color), and the four attributes `bold`, `dim`, `italic`, and `underline`. The field set is closed — no reverse, strikethrough, blink, or hidden — and a field with no effect is its neutral value, so a style never carries "is this set" metadata.

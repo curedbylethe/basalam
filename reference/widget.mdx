@@ -1,7 +1,15 @@
 ---
 title: "Widget and BaseWidget"
 description: "The interface every widget satisfies, and the struct that supplies its defaults."
-keywords: ["widget", "basewidget", "interface", "dyn", "render", "handle_event", "hits", "measure"]
+keywords:
+  - "widget"
+  - "basewidget"
+  - "interface"
+  - "dyn"
+  - "render"
+  - "handle_event"
+  - "hits"
+  - "measure"
 ---
 
 A widget is anything with the nine methods of the `Widget` interface. Salam interfaces are structural: there is no `implements` keyword, so a struct that has the methods is a widget. A list, a button, and a panel are all `Widget`s, and the screen stores them side by side as `dyn basalam.Widget`.
@@ -93,9 +101,11 @@ The natural extent along `axis` at `max_width`. `ok` is false when this widget c
   <Accordion title="Methods are infallible">
     No method returns an error. A widget given a region too small to draw in draws what fits, or nothing. The buffer clips every write, so drawing outside the region is harmless.
   </Accordion>
+
   <Accordion title="Handlers are synchronous">
     `handle_event` runs on the main thread, between frames, and must return promptly. Do long work in your application, driven by tick events, not inside a handler.
   </Accordion>
+
   <Accordion title="Widgets never write to the terminal">
     Draw into the `Buffer` you are given. The screen owns terminal output.
   </Accordion>
@@ -123,7 +133,9 @@ end
 | `preferred_size` | Returns the negative sentinel, so the layout engine fills the axis. |
 | `measure` | Cannot measure: `ok` is false and `extent` is `0`. Row and Column override it. |
 
-<ResponseField name="rect" type="Rect">Storage for `bounds` and `set_bounds`. An embedding widget can read it directly as `this.rect`.</ResponseField>
+<ResponseField name="rect" type="Rect">
+  Storage for `bounds` and `set_bounds`. An embedding widget can read it directly as `this.rect`.
+</ResponseField>
 
 On its own, a `BaseWidget` paints nothing, is unfocusable, reports itself visible, ignores every event, and still accepts hits. That makes it a handy container or placeholder. A click on its rect lands on it unless you override `hits`.
 

@@ -1,7 +1,12 @@
 ---
 title: "Buffer and Cell"
 description: "The grid of cells widgets draw into, with clipping that makes every write safe."
-keywords: ["buffer", "cell", "draw", "clip", "style"]
+keywords:
+  - "buffer"
+  - "cell"
+  - "draw"
+  - "clip"
+  - "style"
 ---
 
 A `Buffer` is a grid of `Cell`s. Widgets draw into it; they never write to the terminal. Every write outside the grid or outside the buffer's clip rect is silently dropped, so drawing can never fail.
@@ -19,8 +24,13 @@ pub struct Cell:
 end
 ```
 
-<ResponseField name="ch" type="str">Exactly one codepoint. A blank cell holds `" "`.</ResponseField>
-<ResponseField name="style" type="str">SGR escape sequences built with `std/term`, for example `term.Sgr(term.StyleBold) + term.Sgr(term.FgRed)`. `""` is the terminal's default style. The [Color](/reference/color) value type exists, but cells do not carry it yet.</ResponseField>
+<ResponseField name="ch" type="str">
+  Exactly one codepoint. A blank cell holds `" "`.
+</ResponseField>
+
+<ResponseField name="style" type="str">
+  SGR escape sequences built with `std/term`, for example `term.Sgr(term.StyleBold) + term.Sgr(term.FgRed)`. `""` is the terminal's default style. The [Color](/reference/color) value type exists, but cells do not carry it yet.
+</ResponseField>
 
 ## Buffer
 
@@ -36,13 +46,33 @@ pub struct Buffer:
 end
 ```
 
-<ResponseField name="width" type="int">Number of columns.</ResponseField>
-<ResponseField name="height" type="int">Number of rows.</ResponseField>
-<ResponseField name="cells" type="Vector<Cell>">The back grid: row-major storage where widgets draw. The cell at `(x, y)` is `cells[y * width + x]`. Write it through `set`, `fill`, `put_str`, or `clear`, which mark the cell. A direct assignment is not marked, and `diff` can skip it. `get` bounds-checks.</ResponseField>
-<ResponseField name="front" type="Vector<Cell>">The front grid: what the terminal currently shows, with the same length and layout as `cells`. Widgets never write it; only `commit()` advances it.</ResponseField>
-<ResponseField name="clip" type="Rect">Writes outside this rect are dropped. `NewBuffer` sets it to the whole grid. While a widget renders, the screen narrows it to that widget's bounds.</ResponseField>
-<ResponseField name="focused" type="bool">`true` while the screen renders the focused widget. Use it to draw a focus indicator.</ResponseField>
-<ResponseField name="force_full" type="bool" default="true">`true` when the next `diff()` must serialize the whole frame instead of only the changed cells. `NewBuffer` and `resize` set it; `commit()` clears it once the front grid has caught up.</ResponseField>
+<ResponseField name="width" type="int">
+  Number of columns.
+</ResponseField>
+
+<ResponseField name="height" type="int">
+  Number of rows.
+</ResponseField>
+
+<ResponseField name="cells" type="Vector<Cell>">
+  The back grid: row-major storage where widgets draw. The cell at `(x, y)` is `cells[y * width + x]`. Write it through `set`, `fill`, `put_str`, or `clear`, which mark the cell. A direct assignment is not marked, and `diff` can skip it. `get` bounds-checks.
+</ResponseField>
+
+<ResponseField name="front" type="Vector<Cell>">
+  The front grid: what the terminal currently shows, with the same length and layout as `cells`. Widgets never write it; only `commit()` advances it.
+</ResponseField>
+
+<ResponseField name="clip" type="Rect">
+  Writes outside this rect are dropped. `NewBuffer` sets it to the whole grid. While a widget renders, the screen narrows it to that widget's bounds.
+</ResponseField>
+
+<ResponseField name="focused" type="bool">
+  `true` while the screen renders the focused widget. Use it to draw a focus indicator.
+</ResponseField>
+
+<ResponseField name="force_full" type="bool" default="true">
+  `true` when the next `diff()` must serialize the whole frame instead of only the changed cells. `NewBuffer` and `resize` set it; `commit()` clears it once the front grid has caught up.
+</ResponseField>
 
 ### Copies share cells
 

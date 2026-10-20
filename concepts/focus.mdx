@@ -1,7 +1,13 @@
 ---
 title: "Focus"
 description: "The focus stack, linear Tab-style order, and spatial arrow-key navigation: the overlap rule and how ties are broken."
-keywords: ["focus", "focus stack", "spatial navigation", "tab order", "focus_next", "focus_left"]
+keywords:
+  - "focus"
+  - "focus stack"
+  - "spatial navigation"
+  - "tab order"
+  - "focus_next"
+  - "focus_left"
 ---
 
 The focused widget receives every event first. If it does not consume the event, the event [bubbles](/reference/event#dispatch-and-bubbling) to its ancestors. While rendering, the focused widget sees `buf.focused == true` and can draw a focus indicator.

@@ -1,7 +1,12 @@
 ---
 title: "Writing a widget"
 description: "Build a custom widget step by step: embed BaseWidget, draw, react to keys, and test it without a terminal."
-keywords: ["widget", "custom widget", "basewidget", "tutorial", "testing"]
+keywords:
+  - "widget"
+  - "custom widget"
+  - "basewidget"
+  - "tutorial"
+  - "testing"
 ---
 
 This guide builds `Counter`, a focusable widget that shows a number and changes it when you press `+` or `-`. By the end you have a widget you can drop into any basalam program, and a test that checks it without a terminal.
@@ -20,9 +25,9 @@ The line is drawn in reverse video while the widget has focus.
 
     ```salam
     import term
-
+    
     include "basalam/basalam.salam"
-
+    
     struct Counter:
         pub use basalam.BaseWidget
         pub label: str = "count"
@@ -86,15 +91,15 @@ The line is drawn in reverse video while the widget has focus.
     func key(ch: str): basalam.Event:
         ret basalam.Event { kind = basalam.KeyEvent, key = term.Decode(ch) }
     end
-
+    
     func main:
         w := Counter { label = "apples" } as dyn basalam.Widget
         w.set_bounds(basalam.Rect { x = 0, y = 0, width = 12, height = 1 })
-
+    
         println w.handle_event(key("+")) // true: consumed
         println w.handle_event(key("+")) // true
         println w.handle_event(key("x")) // false: bubbles on
-
+    
         mut buf := basalam.NewBuffer(12, 1)
         defer buf.free()
         w.render(buf, w.bounds())
@@ -145,18 +150,18 @@ The first counter is focused automatically, because it is the first focusable wi
 <Accordion title="counter.salam">
   ```salam
   import term
-
+  
   include "basalam/basalam.salam"
-
+  
   struct Counter:
       pub use basalam.BaseWidget
       pub label: str = "count"
       pub value: int = 0
-
+  
       pub func focusable(): bool:
           ret true
       end
-
+  
       pub func handle_event(event: basalam.Event): bool:
           if event.kind != basalam.KeyEvent or event.key.code != term.KeyChar:
               ret false
@@ -171,7 +176,7 @@ The first counter is focused automatically, because it is the first focusable wi
           end
           ret false
       end
-
+  
       pub func render(buf: basalam.Buffer, bounds: basalam.Rect):
           mut style := ""
           if buf.focused:
@@ -181,19 +186,19 @@ The first counter is focused automatically, because it is the first focusable wi
           buf.put_str(bounds.x, bounds.y, this.label + ": " + this.value, style)
       end
   end
-
+  
   func key(ch: str): basalam.Event:
       ret basalam.Event { kind = basalam.KeyEvent, key = term.Decode(ch) }
   end
-
+  
   func main:
       w := Counter { label = "apples" } as dyn basalam.Widget
       w.set_bounds(basalam.Rect { x = 0, y = 0, width = 12, height = 1 })
-
+  
       println w.handle_event(key("+")) // true: consumed
       println w.handle_event(key("+")) // true
       println w.handle_event(key("x")) // false: bubbles on
-
+  
       mut buf := basalam.NewBuffer(12, 1)
       defer buf.free()
       w.render(buf, w.bounds())

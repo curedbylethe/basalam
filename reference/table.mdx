@@ -1,7 +1,18 @@
 ---
 title: "Table"
 description: "The Table widget: a non-focusable grid of single-line rows with column widths, an optional bold header and rule, cell and column alignment, and clip or ellipsis overflow."
-keywords: ["table", "grid", "columns", "rows", "header", "rule", "alignment", "overflow", "ellipsis", "width", "layout_size"]
+keywords:
+  - "table"
+  - "grid"
+  - "columns"
+  - "rows"
+  - "header"
+  - "rule"
+  - "alignment"
+  - "overflow"
+  - "ellipsis"
+  - "width"
+  - "layout_size"
 ---
 
 `Table` draws a grid of single-line rows into a [buffer](/reference/buffer). It is the seventh concrete widget, after [Progress](/reference/progress). It holds column definitions and cell text, paints an optional header row and rule, and takes no focus and no clicks. Each column's width comes from a [`LayoutSize`](/reference/layout), so the same width rules the layout engine uses apply to a column.
@@ -32,13 +43,33 @@ pub struct Table:
 end
 ```
 
-<ResponseField name="columns" type="Vector<TableColumn>">The column definitions, left to right. Each `TableColumn` holds a `width` (a `LayoutSize`), `min` and `max` cell bounds, an `align`, and an `overflow`.</ResponseField>
-<ResponseField name="rows" type="Vector<Vector<str>>">The cell text by row, then column. When `header` is on, row `0` is the header. A row shorter than the column count reads as blank in its missing cells.</ResponseField>
-<ResponseField name="header" type="bool">When `true`, row `0` is the header. It is painted in `header_style`, and each of its cells takes its column's alignment. Defaults to `false`.</ResponseField>
-<ResponseField name="rule" type="bool">Draws a line of `─` under the header. Only meaningful when `header` is on. Defaults to `true`.</ResponseField>
-<ResponseField name="pad_x" type="int">Blank cells on each side of every cell's text. A negative value counts as `0`. Defaults to `1`.</ResponseField>
-<ResponseField name="style" type="Style">The style of the data rows. Defaults to `StyleDefault`.</ResponseField>
-<ResponseField name="header_style" type="Style">The style of the header row. It replaces `style` on that row rather than merging with it. Defaults to bold.</ResponseField>
+<ResponseField name="columns" type="Vector<TableColumn>">
+  The column definitions, left to right. Each `TableColumn` holds a `width` (a `LayoutSize`), `min` and `max` cell bounds, an `align`, and an `overflow`.
+</ResponseField>
+
+<ResponseField name="rows" type="Vector<Vector<str>>">
+  The cell text by row, then column. When `header` is on, row `0` is the header. A row shorter than the column count reads as blank in its missing cells.
+</ResponseField>
+
+<ResponseField name="header" type="bool">
+  When `true`, row `0` is the header. It is painted in `header_style`, and each of its cells takes its column's alignment. Defaults to `false`.
+</ResponseField>
+
+<ResponseField name="rule" type="bool">
+  Draws a line of `─` under the header. Only meaningful when `header` is on. Defaults to `true`.
+</ResponseField>
+
+<ResponseField name="pad_x" type="int">
+  Blank cells on each side of every cell's text. A negative value counts as `0`. Defaults to `1`.
+</ResponseField>
+
+<ResponseField name="style" type="Style">
+  The style of the data rows. Defaults to `StyleDefault`.
+</ResponseField>
+
+<ResponseField name="header_style" type="Style">
+  The style of the header row. It replaces `style` on that row rather than merging with it. Defaults to bold.
+</ResponseField>
 
 The alignment overrides are private. Set them with `set_cell_align`.
 

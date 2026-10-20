@@ -1,7 +1,24 @@
 ---
 title: "Screen"
 description: "The terminal session: widget tree, buffer, input thread, and the event loop."
-keywords: ["screen", "event loop", "next_event", "run", "run_with_tick", "start", "close", "dispatch", "hit_test", "mouse", "mouse_motion", "raise", "unraise", "hits", "invalidate", "subtree", "dirty"]
+keywords:
+  - "screen"
+  - "event loop"
+  - "next_event"
+  - "run"
+  - "run_with_tick"
+  - "start"
+  - "close"
+  - "dispatch"
+  - "hit_test"
+  - "mouse"
+  - "mouse_motion"
+  - "raise"
+  - "unraise"
+  - "hits"
+  - "invalidate"
+  - "subtree"
+  - "dirty"
 ---
 
 A `Screen` owns the terminal session. It holds the widget [tree](/reference/tree), the [buffer](/reference/buffer), and the channel the input thread sends [events](/reference/event) on. You create one per program.
@@ -29,18 +46,53 @@ pub func NewTerminalScreen(root: dyn Widget): Screen
 
 ## Fields
 
-<ResponseField name="events" type="Channel<Event>">The channel the input thread sends on. `events.ch` is the underlying `std/chan` channel. See [why the wrapper exists](#the-channel-wrapper).</ResponseField>
-<ResponseField name="root" type="dyn Widget">The root widget (ID `0`). It always covers the whole screen.</ResponseField>
-<ResponseField name="focused" type="dyn Widget">The widget that receives events first.</ResponseField>
-<ResponseField name="buffer" type="Buffer">The one [buffer](/reference/buffer) the screen owns: widgets draw into its back grid, and `present` diffs that against its front grid.</ResponseField>
-<ResponseField name="running" type="bool">`true` from `start()` (or the start of `run`) until `stop()`.</ResponseField>
-<ResponseField name="tree" type="Tree">The widget registry. Prefer `add` and `widget`.</ResponseField>
-<ResponseField name="tick_ms" type="int" default="0">Interval of `TickEvent`s in milliseconds. `0` sends none. Set it before `start()`.</ResponseField>
-<ResponseField name="mouse" type="bool" default="false">When `true`, `start()` enables mouse reporting and clicks arrive as `MouseEvent`s. Set it before `start()`.</ResponseField>
-<ResponseField name="mouse_motion" type="bool" default="false">When `true`, `start()` enables motion reporting, so `MouseEvent`s arrive as the pointer moves. Motion tracking includes presses and releases, so this flag alone is enough and `mouse` is not required. Set it before `start()`. Reports are frequent: the channel holds 256 events, and a consumer slower than the terminal makes the input thread wait.</ResponseField>
-<ResponseField name="keymap" type="Keymap" default="Keymap {}">The opt-in [keymap](/reference/keymap) consulted as a fallback for a `KeyEvent` no widget consumed. Empty by default, so a screen behaves exactly as before until you install or extend it. Bind through this field to extend the map in place, or use `set_keymap` to replace it. Never assign a `Keymap` directly.</ResponseField>
-<ResponseField name="dirty" type="bool">`true` requests a full repaint. Set by a resize, a tick from `run_with_tick`, an added widget, `raise` / `unraise`, a keymap-consumed key, and an `invalidate` call for an unknown id or an empty rect. Set it yourself after changing state outside `dispatch`; a tick you dispatch yourself does not set it. A consumed widget event does not set it. That event queues the widget's own bounds.</ResponseField>
-<ResponseField name="focus_stack" type="Vector<int>">Widget IDs; the last entry is the focused widget. Change it only through the focus methods, which keep `focused` in sync and queue the old and new bounds.</ResponseField>
+<ResponseField name="events" type="Channel<Event>">
+  The channel the input thread sends on. `events.ch` is the underlying `std/chan` channel. See [why the wrapper exists](#the-channel-wrapper).
+</ResponseField>
+
+<ResponseField name="root" type="dyn Widget">
+  The root widget (ID `0`). It always covers the whole screen.
+</ResponseField>
+
+<ResponseField name="focused" type="dyn Widget">
+  The widget that receives events first.
+</ResponseField>
+
+<ResponseField name="buffer" type="Buffer">
+  The one [buffer](/reference/buffer) the screen owns: widgets draw into its back grid, and `present` diffs that against its front grid.
+</ResponseField>
+
+<ResponseField name="running" type="bool">
+  `true` from `start()` (or the start of `run`) until `stop()`.
+</ResponseField>
+
+<ResponseField name="tree" type="Tree">
+  The widget registry. Prefer `add` and `widget`.
+</ResponseField>
+
+<ResponseField name="tick_ms" type="int" default="0">
+  Interval of `TickEvent`s in milliseconds. `0` sends none. Set it before `start()`.
+</ResponseField>
+
+<ResponseField name="mouse" type="bool" default="false">
+  When `true`, `start()` enables mouse reporting and clicks arrive as `MouseEvent`s. Set it before `start()`.
+</ResponseField>
+
+<ResponseField name="mouse_motion" type="bool" default="false">
+  When `true`, `start()` enables motion reporting, so `MouseEvent`s arrive as the pointer moves. Motion tracking includes presses and releases, so this flag alone is enough and `mouse` is not required. Set it before `start()`. Reports are frequent: the channel holds 256 events, and a consumer slower than the terminal makes the input thread wait.
+</ResponseField>
+
+<ResponseField name="keymap" type="Keymap" default="Keymap {}">
+  The opt-in [keymap](/reference/keymap) consulted as a fallback for a `KeyEvent` no widget consumed. Empty by default, so a screen behaves exactly as before until you install or extend it. Bind through this field to extend the map in place, or use `set_keymap` to replace it. Never assign a `Keymap` directly.
+</ResponseField>
+
+<ResponseField name="dirty" type="bool">
+  `true` requests a full repaint. Set by a resize, a tick from `run_with_tick`, an added widget, `raise` / `unraise`, a keymap-consumed key, and an `invalidate` call for an unknown id or an empty rect. Set it yourself after changing state outside `dispatch`; a tick you dispatch yourself does not set it. A consumed widget event does not set it. That event queues the widget's own bounds.
+</ResponseField>
+
+<ResponseField name="focus_stack" type="Vector<int>">
+  Widget IDs; the last entry is the focused widget. Change it only through the focus methods, which keep `focused` in sync and queue the old and new bounds.
+</ResponseField>
 
 ## Building the tree
 
@@ -157,7 +209,7 @@ end
 ```
 
 <Note>
-  Salam's `each` loop only iterates vectors, maps, arrays, and slices, so it cannot consume a live channel. `until screen.next_event(ev):` is the equivalent: Salam's `until` loops *while* its condition is true.
+  Salam's `each` loop only iterates vectors, maps, arrays, and slices, so it cannot consume a live channel. `until screen.next_event(ev):` is the equivalent: Salam's `until` loops _while_ its condition is true.
 </Note>
 
 ### Or let the screen run it
