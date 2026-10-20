@@ -190,6 +190,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   separate work. (CUR-455)
 - `make docs-check` validates the documentation site and its links in CI, so
   a broken page, a bad nav entry, or a dead link fails before merge. (CUR-453)
+- `make docs-examples` type-checks every complete example in the documentation
+  as part of `make check`, so a broken example fails before merge.
 - `Screen.present()` and `Screen.draw()` return when nothing is pending. A widget that
   consumes an event queues its own bounds, and a focus change queues the
   old and new bounds. `dirty` still means a full repaint: resize, ticks
