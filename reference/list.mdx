@@ -1,7 +1,13 @@
 ---
 title: "List"
 description: "The single-selection scrollable list widget: vim navigation, a highlighted row, and minimal scrolling."
-keywords: ["list", "selection", "scroll", "vim", "focus", "highlight"]
+keywords:
+  - "list"
+  - "selection"
+  - "scroll"
+  - "vim"
+  - "focus"
+  - "highlight"
 ---
 
 `List` draws a single-selection, scrollable list of strings into a [buffer](/reference/buffer). It holds items, a selection, and the styles for the rows and the selected row. It is focusable, so the [screen's focus dispatch](/concepts/focus) routes keyboard events to it while it is focused. It is the third concrete widget, after [Text](/reference/text) and [Input](/reference/input).
@@ -34,10 +40,21 @@ pub struct List:
 end
 ```
 
-<ResponseField name="style" type="str">SGR escape sequence(s) for every row. `""` means the terminal's default style.</ResponseField>
-<ResponseField name="selected_style" type="str">SGR escape sequence(s) for the selected row while focused. `""` means reverse video.</ResponseField>
-<ResponseField name="selected_unfocused_style" type="str">SGR escape sequence(s) for the selected row while unfocused. `""` means bright black on a black background.</ResponseField>
-<ResponseField name="on_select" type="func (int)">Called with the selected index when `Enter` is pressed on a non-empty list. The default does nothing.</ResponseField>
+<ResponseField name="style" type="str">
+  SGR escape sequence(s) for every row. `""` means the terminal's default style.
+</ResponseField>
+
+<ResponseField name="selected_style" type="str">
+  SGR escape sequence(s) for the selected row while focused. `""` means reverse video.
+</ResponseField>
+
+<ResponseField name="selected_unfocused_style" type="str">
+  SGR escape sequence(s) for the selected row while unfocused. `""` means bright black on a black background.
+</ResponseField>
+
+<ResponseField name="on_select" type="func (int)">
+  Called with the selected index when `Enter` is pressed on a non-empty list. The default does nothing.
+</ResponseField>
 
 The items and the selected index are private; create the list with `NewList` and read the selection back through the getters below.
 

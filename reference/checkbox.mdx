@@ -1,7 +1,15 @@
 ---
 title: "Checkbox"
 description: "The one-row Checkbox widget: a boolean toggle drawn as [x] or [ ] with a label, toggled by Space or a left click."
-keywords: ["checkbox", "checked", "toggle", "on_toggle", "set_checked", "disabled", "focus", "boolean"]
+keywords:
+  - "checkbox"
+  - "checked"
+  - "toggle"
+  - "on_toggle"
+  - "set_checked"
+  - "disabled"
+  - "focus"
+  - "boolean"
 ---
 
 `Checkbox` draws a one-row boolean toggle, `[x] label` when checked or `[ ] label` when not, into a [buffer](/reference/buffer). It holds a private checked state, a label, two [`Style`](/reference/style) values, a disabled flag, and an `on_toggle` callback. It is focusable, so the [screen's focus dispatch](/concepts/focus) routes keyboard events to it while it is focused. It is the fifth concrete widget, after [Text](/reference/text), [Input](/reference/input), [List](/reference/list) and [Button](/reference/button).
@@ -32,11 +40,25 @@ pub struct Checkbox:
 end
 ```
 
-<ResponseField name="label" type="str">The text drawn after the three-cell mark and a one-cell spacer. `""` draws the mark alone. The default is `""`.</ResponseField>
-<ResponseField name="box_style" type="Style">The `Style` value for the three mark cells: `[`, the state glyph, and `]`. The default is `StyleDefault`.</ResponseField>
-<ResponseField name="label_style" type="Style">The `Style` value for the spacer, the label, and the trailing fill of the row. The default is `StyleDefault`.</ResponseField>
-<ResponseField name="disabled" type="bool">When `true`, the checkbox leaves the focus order, takes no clicks, ignores every event, and draws its row dim. The default is `false`.</ResponseField>
-<ResponseField name="on_toggle" type="func (bool)">Called with the new checked value after every toggle. The default does nothing.</ResponseField>
+<ResponseField name="label" type="str">
+  The text drawn after the three-cell mark and a one-cell spacer. `""` draws the mark alone. The default is `""`.
+</ResponseField>
+
+<ResponseField name="box_style" type="Style">
+  The `Style` value for the three mark cells: `[`, the state glyph, and `]`. The default is `StyleDefault`.
+</ResponseField>
+
+<ResponseField name="label_style" type="Style">
+  The `Style` value for the spacer, the label, and the trailing fill of the row. The default is `StyleDefault`.
+</ResponseField>
+
+<ResponseField name="disabled" type="bool">
+  When `true`, the checkbox leaves the focus order, takes no clicks, ignores every event, and draws its row dim. The default is `false`.
+</ResponseField>
+
+<ResponseField name="on_toggle" type="func (bool)">
+  Called with the new checked value after every toggle. The default does nothing.
+</ResponseField>
 
 The checked state is private. Read it with `checked()` and change it with `set_checked()` or by toggling.
 

@@ -1,7 +1,13 @@
 ---
 title: "Input"
 description: "The single-line text-entry widget: value, caret, placeholder, and a reverse-video cursor cell."
-keywords: ["input", "text entry", "caret", "cursor", "placeholder", "focus"]
+keywords:
+  - "input"
+  - "text entry"
+  - "caret"
+  - "cursor"
+  - "placeholder"
+  - "focus"
 ---
 
 `Input` draws a single-line text field into a [buffer](/reference/buffer). It holds a value, a caret into that value, an optional placeholder, and the styles for the value, the cursor cell, and the placeholder. It is focusable, so the [screen's focus dispatch](/concepts/focus) routes keyboard events to it while it is focused.
@@ -27,10 +33,21 @@ pub struct Input:
 end
 ```
 
-<ResponseField name="placeholder" type="str">Text shown (dim) while the value is empty. `""` means no placeholder.</ResponseField>
-<ResponseField name="style" type="str">SGR escape sequence(s) for the value and the blank background. `""` means the terminal's default style.</ResponseField>
-<ResponseField name="cursor_style" type="str">SGR escape sequence(s) added to `style` for the cursor cell. `""` means reverse video.</ResponseField>
-<ResponseField name="placeholder_style" type="str">SGR escape sequence(s) added to `style` for the placeholder. `""` means bright black.</ResponseField>
+<ResponseField name="placeholder" type="str">
+  Text shown (dim) while the value is empty. `""` means no placeholder.
+</ResponseField>
+
+<ResponseField name="style" type="str">
+  SGR escape sequence(s) for the value and the blank background. `""` means the terminal's default style.
+</ResponseField>
+
+<ResponseField name="cursor_style" type="str">
+  SGR escape sequence(s) added to `style` for the cursor cell. `""` means reverse video.
+</ResponseField>
+
+<ResponseField name="placeholder_style" type="str">
+  SGR escape sequence(s) added to `style` for the placeholder. `""` means bright black.
+</ResponseField>
 
 The value and the caret are counted in codepoints, so a multibyte glyph is one cell and one caret step. The caret is always an index between `0` and the value's length, and it stays after the last glyph.
 

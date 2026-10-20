@@ -1,7 +1,13 @@
 ---
 title: "Tree"
 description: "The widget registry: integer IDs, parent links, and event bubbling."
-keywords: ["tree", "widget id", "parent", "dispatch", "bubbling", "z-order"]
+keywords:
+  - "tree"
+  - "widget id"
+  - "parent"
+  - "dispatch"
+  - "bubbling"
+  - "z-order"
 ---
 
 A `Tree` records which widgets exist and who is whose parent. It lives outside the widgets, so a widget never needs to know where it sits. Parent links are not part of the `Widget` interface. The tree does not store paint order or focus order.

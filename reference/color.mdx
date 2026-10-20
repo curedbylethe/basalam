@@ -1,7 +1,17 @@
 ---
 title: "Color"
 description: "The terminal color value type: the four color kinds, their SGR encodings, capability detection, and the downgrade ladder."
-keywords: ["color", "colour", "sgr", "ansi", "truecolor", "rgb", "256 color", "palette", "tier", "downgrade"]
+keywords:
+  - "color"
+  - "colour"
+  - "sgr"
+  - "ansi"
+  - "truecolor"
+  - "rgb"
+  - "256 color"
+  - "palette"
+  - "tier"
+  - "downgrade"
 ---
 
 `Color` is the terminal color value type. It covers the four kinds a terminal understands — its own default, the 16-color ANSI palette, the 256-color palette, and 24-bit truecolor — and encodes each to the exact escape sequence the terminal reads. It is the value half of the styling work; the [`Style`](/reference/style) type carries it and [`Text`](/reference/text) draws with it.

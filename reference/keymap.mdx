@@ -1,7 +1,12 @@
 ---
 title: "Keymap"
 description: "Opt-in key and key-sequence bindings, consulted as a dispatch fallback for keys no widget consumed."
-keywords: ["keymap", "key binding", "key sequence", "bindings", "defaults"]
+keywords:
+  - "keymap"
+  - "key binding"
+  - "key sequence"
+  - "bindings"
+  - "defaults"
 ---
 
 `Keymap` is an opt-in table that maps keys and key sequences to actions. basalam installs none of its own: a screen carries an empty map until you fill it. When an event bubbles to the root without a widget consuming it, the screen offers it to the keymap — but only [`KeyEvent`s](/reference/event). Tick, resize, and mouse events never reach the keymap.
@@ -107,11 +112,9 @@ The scope walk is O(tree depth) and only runs at nodes that carry scoped binding
 - A node that has both a binding and children defers: its single-key binding fires only when the next key breaks the path. While a longer sequence keeps matching, the longer one wins.
 - A key that does not continue a pending prefix resets it and is reprocessed from the root, so a sequence followed by an unrelated bound key still triggers that key.
 - A pending prefix can time out. The check is lazy — it runs only when the next `KeyEvent` arrives, never on a timer — and `pending_timeout_ms` defaults to `0`, which never expires a prefix. Set it on the map:
-
   ```salam
   screen.keymap.pending_timeout_ms = 700 // abandon a prefix after 700ms
   ```
-
   Nothing fires from the timeout alone: an expired prefix is dropped silently and the arriving key is processed as a fresh start, so it may open a new sequence or trigger a single binding.
 - Non-key events (tick, resize, mouse) never reach the keymap and never evaluate the timeout, so a pending sequence survives them. Elapsed time still counts, though: if only non-key events arrived during the gap, the next `KeyEvent` evaluates the full elapsed time.
 - An invoked action resolves the key: nothing is reprocessed after an action runs, even when the action returns `false`.

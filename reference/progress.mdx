@@ -1,7 +1,14 @@
 ---
 title: "Progress"
 description: "The one-row Progress widget: a bar of # and - cells that fills left to right from a percentage, with an optional percent tail."
-keywords: ["progress", "bar", "percent", "set_progress", "set_max", "fill", "gauge"]
+keywords:
+  - "progress"
+  - "bar"
+  - "percent"
+  - "set_progress"
+  - "set_max"
+  - "fill"
+  - "gauge"
 ---
 
 `Progress` draws a one-row progress bar into a [buffer](/reference/buffer). It is the Buffer-native version of a progress bar. It does not wrap `term.Bar`, because `term.Bar` writes to the terminal and widgets never do. `Progress` computes the fill itself and draws it with `#` and `-` cells. It holds a value, a maximum, and three [`Style`](/reference/style) values. It is not focusable, takes no clicks, and consumes no events. It is the sixth concrete widget, after [Text](/reference/text), [Input](/reference/input), [List](/reference/list), [Button](/reference/button) and [Checkbox](/reference/checkbox).
@@ -30,9 +37,17 @@ pub struct Progress:
 end
 ```
 
-<ResponseField name="fill_style" type="Style">The `Style` value for the filled `#` cells. The default is `StyleDefault`, which uses the terminal's defaults.</ResponseField>
-<ResponseField name="empty_style" type="Style">The `Style` value for the empty `-` cells. The default is `StyleDefault`.</ResponseField>
-<ResponseField name="text_style" type="Style">The `Style` value for the five-cell percent tail. The default is `StyleDefault`.</ResponseField>
+<ResponseField name="fill_style" type="Style">
+  The `Style` value for the filled `#` cells. The default is `StyleDefault`, which uses the terminal's defaults.
+</ResponseField>
+
+<ResponseField name="empty_style" type="Style">
+  The `Style` value for the empty `-` cells. The default is `StyleDefault`.
+</ResponseField>
+
+<ResponseField name="text_style" type="Style">
+  The `Style` value for the five-cell percent tail. The default is `StyleDefault`.
+</ResponseField>
 
 The value and the maximum are private. Set them with `set_progress` and `set_max`, and read the value with `progress()`.
 

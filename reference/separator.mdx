@@ -1,7 +1,17 @@
 ---
 title: "Separator"
 description: "The Separator widget: a one-line horizontal or vertical rule drawn in one rune, with an orientation field, a rune that must be one cell wide, and a style."
-keywords: ["separator", "rule", "line", "divider", "orientation", "horizontal", "vertical", "rune", "set_ch", "style"]
+keywords:
+  - "separator"
+  - "rule"
+  - "line"
+  - "divider"
+  - "orientation"
+  - "horizontal"
+  - "vertical"
+  - "rune"
+  - "set_ch"
+  - "style"
 ---
 
 `Separator` draws a one-line rule into a [buffer](/reference/buffer). It is the ninth widget, after [Modal](/reference/modal). It repeats one rune along the first row of its rect, or down the first column, and it never takes focus, takes no clicks, and consumes no events. Its direction is a field, so the shape of its rect does not decide it.
@@ -27,9 +37,17 @@ pub struct Separator:
 end
 ```
 
-<ResponseField name="orientation" type="Orientation">Which line is drawn: `Orientation.Horizontal` for a rule across the first row, or `Orientation.Vertical` for a rule down the first column. Defaults to `Orientation.Horizontal`.</ResponseField>
-<ResponseField name="ch" type="str">The rune, exactly one cell wide. An empty string means the orientation's default rune. Defaults to `""`. Set it with `set_ch`, which refuses a rune that does not fit.</ResponseField>
-<ResponseField name="style" type="Style">The rule's style. Its foreground colours the rune cells, and a set background fills the whole rect first. Defaults to `StyleDefault`.</ResponseField>
+<ResponseField name="orientation" type="Orientation">
+  Which line is drawn: `Orientation.Horizontal` for a rule across the first row, or `Orientation.Vertical` for a rule down the first column. Defaults to `Orientation.Horizontal`.
+</ResponseField>
+
+<ResponseField name="ch" type="str">
+  The rune, exactly one cell wide. An empty string means the orientation's default rune. Defaults to `""`. Set it with `set_ch`, which refuses a rune that does not fit.
+</ResponseField>
+
+<ResponseField name="style" type="Style">
+  The rule's style. Its foreground colours the rune cells, and a set background fills the whole rect first. Defaults to `StyleDefault`.
+</ResponseField>
 
 The separator has no length field. The layout engine sizes it, as described under [Preferred size](#preferred-size).
 

@@ -1,7 +1,12 @@
 ---
 title: "Rect and Point"
 description: "Integer geometry on the terminal cell grid: containment, intersection, and centering."
-keywords: ["rect", "point", "geometry", "hit testing", "bounds"]
+keywords:
+  - "rect"
+  - "point"
+  - "geometry"
+  - "hit testing"
+  - "bounds"
 ---
 
 `Rect` and `Point` position everything in basalam. Coordinates are terminal cells, so every field is an `int`.
@@ -18,6 +23,7 @@ A `Rect` covers columns `x` through `x + width - 1` and rows `y` through `y + he
   <Card title="Touching is not overlapping" icon="square-split-horizontal">
     `Rect { x = 0, width = 4 }` and `Rect { x = 4, width = 2 }` share an edge but no cell, so `intersects` returns `false`.
   </Card>
+
   <Card title="Empty means empty" icon="square-dashed">
     A rect with `width <= 0` or `height <= 0` contains no point and intersects nothing, not even itself.
   </Card>
@@ -32,8 +38,13 @@ pub struct Point:
 end
 ```
 
-<ResponseField name="x" type="int">Column, counted from 0 at the left edge.</ResponseField>
-<ResponseField name="y" type="int">Row, counted from 0 at the top edge.</ResponseField>
+<ResponseField name="x" type="int">
+  Column, counted from 0 at the left edge.
+</ResponseField>
+
+<ResponseField name="y" type="int">
+  Row, counted from 0 at the top edge.
+</ResponseField>
 
 ## Rect
 
@@ -46,10 +57,21 @@ pub struct Rect:
 end
 ```
 
-<ResponseField name="x" type="int">Column of the left edge.</ResponseField>
-<ResponseField name="y" type="int">Row of the top edge.</ResponseField>
-<ResponseField name="width" type="int">Number of columns. Zero or negative makes the rect empty.</ResponseField>
-<ResponseField name="height" type="int">Number of rows. Zero or negative makes the rect empty.</ResponseField>
+<ResponseField name="x" type="int">
+  Column of the left edge.
+</ResponseField>
+
+<ResponseField name="y" type="int">
+  Row of the top edge.
+</ResponseField>
+
+<ResponseField name="width" type="int">
+  Number of columns. Zero or negative makes the rect empty.
+</ResponseField>
+
+<ResponseField name="height" type="int">
+  Number of rows. Zero or negative makes the rect empty.
+</ResponseField>
 
 ### contains
 

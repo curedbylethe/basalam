@@ -1,7 +1,16 @@
 ---
 title: "The event loop"
 description: "How input moves from the terminal to your widgets: background input and resize threads, one synchronous main loop, and mouse routing."
-keywords: ["event loop", "thread", "channel", "async", "tick", "resize", "mouse", "hit test", "key bindings"]
+keywords:
+  - "event loop"
+  - "thread"
+  - "channel"
+  - "async"
+  - "tick"
+  - "resize"
+  - "mouse"
+  - "hit test"
+  - "key bindings"
 ---
 
 Exactly one part of basalam is asynchronous: input. Everything that touches your widgets runs synchronously on the main thread, one event at a time. That is why `handle_event` can be plain code with no locks and no `async`. On POSIX a second background thread feeds the same channel: the resize watcher described below.

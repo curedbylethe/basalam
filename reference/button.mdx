@@ -1,7 +1,14 @@
 ---
 title: "Button"
 description: "The one-row Button widget: a bracketed label that calls on_click on Enter, Space or a left click, with a focus style and a disabled state."
-keywords: ["button", "on_click", "disabled", "focus", "focus_style", "action", "click"]
+keywords:
+  - "button"
+  - "on_click"
+  - "disabled"
+  - "focus"
+  - "focus_style"
+  - "action"
+  - "click"
 ---
 
 `Button` draws a one-row action button, `[ label ]`, into a [buffer](/reference/buffer). It holds a label, two [`Style`](/reference/style) values for its base and focused looks, a disabled flag, and an `on_click` callback. It is focusable, so the [screen's focus dispatch](/concepts/focus) routes keyboard events to it while it is focused. It is the fourth concrete widget, after [Text](/reference/text), [Input](/reference/input) and [List](/reference/list).
@@ -32,11 +39,25 @@ pub struct Button:
 end
 ```
 
-<ResponseField name="label" type="str">The text drawn between the brackets. The label is clipped to the width and never shortened with an ellipsis. The default is `""`.</ResponseField>
-<ResponseField name="style" type="Style">The base `Style` value of every cell in the button. The default is `StyleDefault`.</ResponseField>
-<ResponseField name="focus_style" type="Style">The `Style` value drawn instead of `style` while the button is focused and enabled. The default, `StyleDefault`, draws bold on every cell instead.</ResponseField>
-<ResponseField name="disabled" type="bool">When `true`, the button draws dim, leaves the focus order, takes no clicks, and ignores every event. The default is `false`.</ResponseField>
-<ResponseField name="on_click" type="func ()">Called when the button is activated. The default does nothing.</ResponseField>
+<ResponseField name="label" type="str">
+  The text drawn between the brackets. The label is clipped to the width and never shortened with an ellipsis. The default is `""`.
+</ResponseField>
+
+<ResponseField name="style" type="Style">
+  The base `Style` value of every cell in the button. The default is `StyleDefault`.
+</ResponseField>
+
+<ResponseField name="focus_style" type="Style">
+  The `Style` value drawn instead of `style` while the button is focused and enabled. The default, `StyleDefault`, draws bold on every cell instead.
+</ResponseField>
+
+<ResponseField name="disabled" type="bool">
+  When `true`, the button draws dim, leaves the focus order, takes no clicks, and ignores every event. The default is `false`.
+</ResponseField>
+
+<ResponseField name="on_click" type="func ()">
+  Called when the button is activated. The default does nothing.
+</ResponseField>
 
 ### Methods
 

@@ -1,7 +1,18 @@
 ---
 title: "Modal"
 description: "The Modal overlay: a titled dialog centred over a dim scrim, with focus isolation, mouse capture, Esc to close, and an app-driven raise and focus protocol."
-keywords: ["modal", "dialog", "overlay", "scrim", "dim", "focus", "esc", "raise_subtree", "push_focus", "on_close", "closable"]
+keywords:
+  - "modal"
+  - "dialog"
+  - "overlay"
+  - "scrim"
+  - "dim"
+  - "focus"
+  - "esc"
+  - "raise_subtree"
+  - "push_focus"
+  - "on_close"
+  - "closable"
 ---
 
 `Modal` is an overlay dialog. It paints a single-line ring with a title, centred in its own bounds over a dim scrim, and it owns one child placed inside the ring. It is the eighth widget, after [Table](/reference/table). While it is open it takes focus, captures clicks on the scrim, and closes on Esc. The app opens and closes it and decides what sits above what. The Modal does not raise itself and does not move focus.
@@ -28,10 +39,21 @@ pub struct Modal:
 end
 ```
 
-<ResponseField name="border_style" type="Style">The ring's colour. Only its foreground is used. Attributes are ignored, as for Panel. Defaults to `StyleDefault`.</ResponseField>
-<ResponseField name="takes_focus" type="bool">When `true`, the Modal is a focus stop while it is open. Its one focus stop keeps Tab inside its layer. Defaults to `true`.</ResponseField>
-<ResponseField name="on_close" type="func ()">Called after Esc closes the Modal. [`close`](#methods) does not call it. Set it before `Screen.add`: the stored copy keeps the callback set at that time. Defaults to an empty function.</ResponseField>
-<ResponseField name="state" type="Vector<_ModalState>">The shared state holder. `NewModal` builds it, and every copy made by `Screen.add` shares it. `NewModal` is the only supported constructor, so build a Modal with it and do not write this field yourself.</ResponseField>
+<ResponseField name="border_style" type="Style">
+  The ring's colour. Only its foreground is used. Attributes are ignored, as for Panel. Defaults to `StyleDefault`.
+</ResponseField>
+
+<ResponseField name="takes_focus" type="bool">
+  When `true`, the Modal is a focus stop while it is open. Its one focus stop keeps Tab inside its layer. Defaults to `true`.
+</ResponseField>
+
+<ResponseField name="on_close" type="func ()">
+  Called after Esc closes the Modal. [`close`](#methods) does not call it. Set it before `Screen.add`: the stored copy keeps the callback set at that time. Defaults to an empty function.
+</ResponseField>
+
+<ResponseField name="state" type="Vector<_ModalState>">
+  The shared state holder. `NewModal` builds it, and every copy made by `Screen.add` shares it. `NewModal` is the only supported constructor, so build a Modal with it and do not write this field yourself.
+</ResponseField>
 
 The title, size, visibility, closable flag and rect are not fields. Set them with `set_title`, `set_size`, `set_closable` and `set_bounds`, and read the rect with `bounds`.
 

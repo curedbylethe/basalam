@@ -1,7 +1,13 @@
 ---
 title: "Architecture"
 description: "How the event loop, dispatch, the widget tree, and the buffer fit together, and why each piece is shaped the way it is."
-keywords: ["architecture", "design", "retained mode", "buffer", "dispatch", "tree"]
+keywords:
+  - "architecture"
+  - "design"
+  - "retained mode"
+  - "buffer"
+  - "dispatch"
+  - "tree"
 ---
 
 basalam is a thin layer over Salam's `std/term`. `term` already reads keys, decodes escape sequences, switches raw mode, and builds every escape sequence basalam writes. basalam adds the structure a full-screen program needs: a tree of long-lived widgets, a single event type, a drawing surface, and a loop that ties them together.
@@ -45,24 +51,31 @@ Each box has one job:
   <Accordion title="Retained mode">
     Widgets are long-lived values that keep their own state. The application builds the tree once, changes widget state, and the screen redraws. The alternative, immediate mode, rebuilds the UI from application state every frame. It suits games, but it makes focus and per-widget state the application's problem.
   </Accordion>
+
   <Accordion title="Only input is asynchronous">
     Two background threads produce events onto one channel: the input thread reads stdin, and, on POSIX, the resize watcher waits for `SIGWINCH` and reads the new size. Neither touches widgets, the tree, or the buffer. The main thread consumes the events and calls widgets synchronously, so widgets never run concurrently with each other or with drawing and need no locks; `handle_event` is plain code. The cost is that a slow handler delays the next frame; keep handlers short and do background work in your application.
   </Accordion>
+
   <Accordion title="Widgets are interfaces, identified by ID">
     Any struct with the nine `Widget` methods is a widget, stored as `dyn Widget`. Salam cannot compare or downcast `dyn` values, so the tree identifies widgets by integer ID: their index in the tree. IDs only grow, so a parent's ID is always smaller than its children's.
   </Accordion>
+
   <Accordion title="Registry order, until you raise">
     With nothing raised, ID order is paint order and focus order: a later widget paints over an earlier one, and linear focus walks the same sequence. [`raise`](/reference/screen#raise) puts one set of widgets in a layer above that, and [`raise_subtree`](/reference/screen#raise) does the same for a widget and all its descendants as one layer, which is how an open [Modal](/reference/modal) stays above its content. Paint order is then ascending `(stamp, id)`. Focus navigation stays inside the topmost layer that has a focusable widget, or walks every focusable widget when that layer has none. Only widgets that pass `can_focus` count, so a hidden container removes its whole subtree from the order. Hit-testing walks paint order in reverse and skips a widget whose `hits()` is false or whose ancestor chain reports `visible()` false. Layout containers do not paint or raise.
   </Accordion>
+
   <Accordion title="Widgets draw into a buffer, never the terminal">
     Every widget renders into a copy of the screen's buffer, clipped to its own bounds. The copies share both the back grid (`cells`, what widgets draw into) and the front grid (`front`, what the terminal shows), so writes land in one grid and only `commit()` advances the front. `present` diffs the two and writes just the changed cells. That makes rendering infallible (out-of-bounds writes are dropped), testable without a terminal, and lets the output strategy change without touching widgets.
   </Accordion>
+
   <Accordion title="Focus is a stack of IDs, and keys are the application's choice">
     The screen keeps a focus stack; the top is the focused widget, so a dialog can take the focus and give it back. Linear (`focus_next`) and spatial (`focus_left` and friends) movement are methods. Both walk the focus order, which is the topmost raised layer when that layer has a focusable widget, and every focusable widget otherwise. Only widgets that pass `can_focus` are in it, so a hidden container's whole subtree is skipped. An open [Modal](/reference/modal) is a focus stop, so its layer always has one. Which keys call them is your application's choice, so the library imposes no bindings and never fights your own keymap or modes.
   </Accordion>
+
   <Accordion title="Layout is not a widget's job">
     Widgets receive their bounds through `set_bounds`. Containers do the layout: [Row, Column, Grid, and Stack](/reference/layout) compute one rect per child and call its `set_bounds`, so one call on the root lays out the whole tree. The core still sizes the root to the screen; a widget you place by hand keeps the bounds you give it.
   </Accordion>
+
   <Accordion title="Keymaps are opt-in, modes belong to applications">
     The library delivers events and reports whether a widget or the keymap consumed them. The keymap is an opt-in extension point: empty by default, it is consulted as a fallback only for `KeyEvent`s no widget consumed, and you install bindings with `set_keymap`. The library ships no modes; what an unhandled key means, including vim-style modes, belongs to your application.
   </Accordion>

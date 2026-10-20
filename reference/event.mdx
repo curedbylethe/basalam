@@ -1,7 +1,13 @@
 ---
 title: "Event"
 description: "The single value type that carries key presses, mouse reports, resizes, and ticks to widgets."
-keywords: ["event", "key", "mouse", "resize", "tick", "kind"]
+keywords:
+  - "event"
+  - "key"
+  - "mouse"
+  - "resize"
+  - "tick"
+  - "kind"
 ---
 
 Everything a widget can react to arrives as an `Event`. One struct with a `kind` tag, rather than one type per kind, keeps every handler signature the same: you write one `handle_event` and branch on `kind`.
@@ -20,11 +26,25 @@ pub struct Event:
 end
 ```
 
-<ResponseField name="kind" type="int">One of the kind constants below.</ResponseField>
-<ResponseField name="key" type="term.Key">The decoded key for `KeyEvent`, exactly as `term.ReadKey` returned it. For `MouseEvent`, `key.raw` keeps the raw escape sequence.</ResponseField>
-<ResponseField name="mouse" type="term.MouseEvent">The decoded report for `MouseEvent`, from `term.DecodeMouse`. See [Mouse events](#mouse-events) for its fields and coordinates.</ResponseField>
-<ResponseField name="width" type="int">The new terminal width in columns, for `ResizeEvent`.</ResponseField>
-<ResponseField name="height" type="int">The new terminal height in rows, for `ResizeEvent`.</ResponseField>
+<ResponseField name="kind" type="int">
+  One of the kind constants below.
+</ResponseField>
+
+<ResponseField name="key" type="term.Key">
+  The decoded key for `KeyEvent`, exactly as `term.ReadKey` returned it. For `MouseEvent`, `key.raw` keeps the raw escape sequence.
+</ResponseField>
+
+<ResponseField name="mouse" type="term.MouseEvent">
+  The decoded report for `MouseEvent`, from `term.DecodeMouse`. See [Mouse events](#mouse-events) for its fields and coordinates.
+</ResponseField>
+
+<ResponseField name="width" type="int">
+  The new terminal width in columns, for `ResizeEvent`.
+</ResponseField>
+
+<ResponseField name="height" type="int">
+  The new terminal height in rows, for `ResizeEvent`.
+</ResponseField>
 
 ## Kinds
 

@@ -1,7 +1,13 @@
 ---
 title: "Text"
 description: "The string-drawing widget, and the pure line rules it wraps and measures with."
-keywords: ["text", "wrap", "alignment", "wraptext", "measuretext", "clip"]
+keywords:
+  - "text"
+  - "wrap"
+  - "alignment"
+  - "wraptext"
+  - "measuretext"
+  - "clip"
 ---
 
 `Text` draws a string into a [buffer](/reference/buffer). It is the first concrete widget: give it content, align it, wrap it to its box, and paint it in one style. A string set once and a string updated every frame are the same widget.
@@ -27,10 +33,21 @@ pub struct Text:
 end
 ```
 
-<ResponseField name="content" type="str">The text to draw. An explicit `"\n"` starts a new line.</ResponseField>
-<ResponseField name="align" type="Alignment">Horizontal placement of each line. Defaults to `Alignment.Left`.</ResponseField>
-<ResponseField name="style" type="Style">How the content is drawn. Defaults to `StyleDefault`, the terminal's default style.</ResponseField>
-<ResponseField name="wrap" type="WrapMode">How the content becomes lines at render time. Defaults to `WrapMode.Word`.</ResponseField>
+<ResponseField name="content" type="str">
+  The text to draw. An explicit `"\n"` starts a new line.
+</ResponseField>
+
+<ResponseField name="align" type="Alignment">
+  Horizontal placement of each line. Defaults to `Alignment.Left`.
+</ResponseField>
+
+<ResponseField name="style" type="Style">
+  How the content is drawn. Defaults to `StyleDefault`, the terminal's default style.
+</ResponseField>
+
+<ResponseField name="wrap" type="WrapMode">
+  How the content becomes lines at render time. Defaults to `WrapMode.Word`.
+</ResponseField>
 
 ## Content
 
