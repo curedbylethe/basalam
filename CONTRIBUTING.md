@@ -19,17 +19,18 @@ commit. By taking part you agree to follow the
 
 ## Common tasks
 
-| Command           | What it does                                                                    |
-| ----------------- | ------------------------------------------------------------------------------- |
-| `make build`      | Type-checks and compiles every file in `basalam/`                               |
-| `make test`       | Builds and runs the test suite                                                  |
-| `make test-llvm`  | Builds and runs the test suite with `--backend=llvm`                            |
-| `make examples`   | Builds every program in `examples/` into `build/examples/`                      |
-| `make run`        | Builds and runs the demo example                                                |
-| `make format`     | Formats all Salam sources in place                                              |
-| `make check`      | Format check, build, examples, tests; CI also runs `test-llvm` and `docs-check` |
-| `make docs`       | Previews the documentation site (`npm i -g mint` first)                         |
-| `make docs-check` | Validates the documentation site and its links                                  |
+| Command              | What it does                                                                          |
+| -------------------- | ------------------------------------------------------------------------------------- |
+| `make build`         | Type-checks and compiles every file in `basalam/`                                     |
+| `make test`          | Builds and runs the test suite                                                        |
+| `make test-llvm`     | Builds and runs the test suite with `--backend=llvm`                                  |
+| `make examples`      | Builds every program in `examples/` into `build/examples/`                            |
+| `make docs-examples` | Type-checks every complete example in the documentation                               |
+| `make run`           | Builds and runs the demo example                                                      |
+| `make format`        | Formats all Salam sources in place                                                    |
+| `make check`         | Format check, build, examples, tests, doc examples; CI runs `test-llvm`, `docs-check` |
+| `make docs`          | Previews the documentation site (`npm i -g mint` first)                               |
+| `make docs-check`    | Validates the documentation site and its links                                        |
 
 Set `SALAM=/path/to/salam` to use a compiler that is not on your `PATH`.
 
