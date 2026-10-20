@@ -127,6 +127,7 @@ func test_new_screen_state():
     testing.AssertEqInt(b.width, 20)
     testing.AssertEqInt(b.height, 8)
     testing.AssertTrue(s.dirty)
+    testing.AssertFalse(s.mouse_motion)
 end
 
 // run() presents once, then stops on a Ctrl+C no widget consumed.
