@@ -145,6 +145,17 @@ struct Block:
     end
 end
 
+// A container that can hide its whole subtree. It is not a Modal: the Screen
+// must consult Widget.visible on the parent chain, never a widget type.
+struct Shutter:
+    pub use basalam.BaseWidget
+    pub shown: bool = true
+
+    pub func visible(): bool:
+        ret this.shown
+    end
+end
+
 // Four widgets, ids 0..3, each covering the whole row. Widget 1 holds focus.
 func zstack(): basalam.Screen:
     mut s := basalam.NewScreen(ZBox { mark = "0" }, 4, 1)
@@ -253,6 +264,42 @@ func test_zero_size_widget_is_skipped():
     s.widget(id).set_bounds(rect(1, 0, 0, 1))
     s.present()
     testing.AssertEqStr(s.buffer.row_text(0), " 0  ")
+end
+
+// A hidden container hides its child from painting, even though the child
+// has bounds of its own: the same layout with the container shown paints it.
+// Visibility is fixed at add time (a value-boxed bool cannot be flipped
+// through the screen), so each state builds its own screen.
+func test_hidden_container_is_not_painted():
+    mut s := basalam.NewScreen(basalam.BaseWidget {}, 20, 3)
+    defer s.close()
+    sh := s.add(basalam.RootId, Shutter { shown = false })
+    kid := s.add(sh, Block { ch = "H" })
+    sib := s.add(basalam.RootId, Block { ch = "S" })
+    s.widget(sh).set_bounds(rect(0, 0, 10, 1))
+    s.widget(kid).set_bounds(rect(0, 0, 10, 1))
+    s.widget(sib).set_bounds(rect(10, 0, 10, 1))
+    s.present()
+    testing.AssertEqStr(s.buffer.row_text(0), "          SSSSSSSSSS")
+    // Region path: the queued rect is cleared, and the hidden child stays
+    // skipped instead of repainting inside it.
+    s.invalidate(kid)
+    s.present()
+    testing.AssertEqStr(s.buffer.row_text(0), "          SSSSSSSSSS")
+
+    mut shown := basalam.NewScreen(basalam.BaseWidget {}, 20, 3)
+    defer shown.close()
+    sh2 := shown.add(basalam.RootId, Shutter {})
+    kid2 := shown.add(sh2, Block { ch = "H" })
+    sib2 := shown.add(basalam.RootId, Block { ch = "S" })
+    shown.widget(sh2).set_bounds(rect(0, 0, 10, 1))
+    shown.widget(kid2).set_bounds(rect(0, 0, 10, 1))
+    shown.widget(sib2).set_bounds(rect(10, 0, 10, 1))
+    shown.present()
+    testing.AssertEqStr(shown.buffer.row_text(0), "HHHHHHHHHHSSSSSSSSSS")
+    shown.invalidate(kid2)
+    shown.present()
+    testing.AssertEqStr(shown.buffer.row_text(0), "HHHHHHHHHHSSSSSSSSSS")
 end
 
 func test_resize_event():
@@ -801,6 +848,7 @@ func main:
     test_draw_order_and_clipping()
     test_widget_clipped_to_own_bounds()
     test_zero_size_widget_is_skipped()
+    test_hidden_container_is_not_painted()
     test_resize_event()
     test_consumed_key_repaints_region_without_dirty()
     test_run_with_tick()

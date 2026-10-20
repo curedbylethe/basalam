@@ -55,8 +55,9 @@
  * topmost raised layer, or every focusable widget in ID order when that
  * layer has none. Neither set contains an id inside a hidden subtree: an id
  * is skipped when any widget on its path to the root reports visible()
- * false. An application binds the methods to keys through the
- * opt-in keymap.
+ * false. Paint and hit test skip that id too, so a hidden subtree is
+ * neither drawn nor clickable. An application binds the methods to keys
+ * through the opt-in keymap.
  *
  * Keymap fallback. A screen carries an opt-in Keymap (see keymap.salam). For
  * an event the widget chain does not consume, dispatch offers KeyEvents to
@@ -70,13 +71,13 @@
  *
  * Mouse routing. A decoded MouseEvent starts at the widget under the
  * cursor instead of the focused one: hit_test walks reverse paint order
- * and takes the first widget whose bounds contain the cell and whose
- * hits() is true, and the event bubbles up from there. If nothing
- * qualifies (a click outside the buffer, or every cover refuses hits) or
- * the report could not be decoded, it starts at the focused widget like
- * any other event. Routing never moves the focus: a click does not focus
- * what it hits, because whether a click should focus is a widget and
- * application decision, and it can call focus() itself.
+ * and takes the first widget whose bounds contain the cell, whose hits()
+ * is true, and whose ancestor chain is visible. The event bubbles up from
+ * there. If nothing qualifies (a click outside the buffer, or every cover
+ * refuses hits) or the report could not be decoded, it starts at the
+ * focused widget like any other event. Routing never moves the focus: a
+ * click does not focus what it hits, because whether a click should focus
+ * is a widget and application decision, and it can call focus() itself.
  *
  * Resizing. On a ResizeEvent the screen resizes its buffer and gives the
  * root widget the full terminal rect (fit_root). A resize reallocates the
@@ -673,7 +674,7 @@ pub struct Screen:
             w := this.tree.get(id)
             b := w.bounds()
             visible := b.intersection(area)
-            if not visible.is_empty():
+            if not visible.is_empty() and this.visible_chain(id):
                 mut view := this.buffer
                 view.clip = visible
                 view.focused = id == focus
@@ -697,7 +698,7 @@ pub struct Screen:
                 if b.intersects(r):
                     mut visible := b.intersection(area)
                     visible = visible.intersection(r)
-                    if not visible.is_empty():
+                    if not visible.is_empty() and this.visible_chain(id):
                         mut view := this.buffer
                         view.clip = visible
                         view.focused = id == focus
