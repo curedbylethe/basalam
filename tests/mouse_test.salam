@@ -354,6 +354,25 @@ func test_motion_report_decodes_and_routes():
     testing.AssertEqStr(trail(), "child>panel>root")
 end
 
+// The option only changes what start() asks the terminal for. Decoding and
+// routing must be identical with it on, and the stdlib's no-button motion
+// decode (35 = 32 motion | 3 no button) is pinned so a change breaks loudly.
+func test_motion_report_with_mouse_motion_option():
+    mut s := build()
+    defer s.close()
+    testing.AssertFalse(s.mouse_motion)
+    s.mouse_motion = true
+    seq := "\x1b[<35;3;2M"
+    mouse := term.DecodeMouse(seq)
+    testing.AssertTrue(mouse.ok)
+    testing.AssertTrue(mouse.motion)
+    testing.AssertTrue(mouse.pressed)
+    testing.AssertEqInt(mouse.button, 3)
+    ev := basalam.Event { kind = basalam.MouseEvent, key = term.Key { raw = seq }, mouse = mouse }
+    testing.AssertFalse(s.dispatch(ev))
+    testing.AssertEqStr(trail(), "child>panel>root")
+end
+
 func main:
     test_mouse_point_is_zero_based()
     test_hit_test_picks_topmost()
@@ -374,6 +393,7 @@ func main:
     test_tick_and_resize_stay_on_focus_path()
     test_release_report_decodes_and_routes()
     test_motion_report_decodes_and_routes()
+    test_motion_report_with_mouse_motion_option()
     visits.free()
     ret testing.Summary()
 end
