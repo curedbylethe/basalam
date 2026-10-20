@@ -130,6 +130,7 @@ Salam lambdas capture by value, so a lambda cannot write back to a local through
 A buffer is plain memory, so you can render and inspect a list without a terminal:
 
 ```salam
+import term
 include "basalam/basalam.salam"
 
 func key(seq: str): basalam.Event:
