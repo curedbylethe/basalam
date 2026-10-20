@@ -63,6 +63,17 @@ struct Recorder:
     end
 end
 
+// A container that can hide its whole subtree. It is not a Modal: the Screen
+// must consult Widget.visible on the parent chain, never a widget type.
+struct Shutter:
+    pub use basalam.BaseWidget
+    pub shown: bool = true
+
+    pub func visible(): bool:
+        ret this.shown
+    end
+end
+
 func rect(x: int, y: int, w: int, h: int): basalam.Rect:
     ret basalam.Rect { x = x, y = y, width = w, height = h }
 end
@@ -140,6 +151,35 @@ func test_hit_test_skips_empty_bounds():
     ghost := s.add(basalam.RootId, Recorder { name = "ghost" })
     s.widget(ghost).set_bounds(rect(12, 5, 0, 3))
     testing.AssertEqInt(s.hit_test(12, 5), basalam.RootId)
+end
+
+// A hidden container hides its whole subtree from hit testing. A point over
+// a hidden container and its child falls through to the visible widget
+// underneath (not to NoWidget), while the same layout with the container
+// shown returns the child.
+func test_hit_test_skips_hidden_subtree():
+    mut s := basalam.NewScreen(Recorder { name = "root" }, 20, 10)
+    defer s.close()
+    top := s.add(basalam.RootId, Recorder { name = "top" })
+    sh := s.add(basalam.RootId, Shutter { shown = false })
+    kid := s.add(sh, Recorder { name = "kid" })
+    below := s.add(basalam.RootId, Recorder { name = "below" })
+    s.widget(top).set_bounds(rect(0, 0, 10, 5))
+    s.widget(sh).set_bounds(rect(0, 0, 10, 5))
+    s.widget(kid).set_bounds(rect(0, 0, 10, 5))
+    s.widget(below).set_bounds(rect(12, 0, 4, 1))
+    testing.AssertEqInt(s.hit_test(1, 1), top)
+    testing.AssertEqInt(s.hit_test(12, 0), below)
+
+    mut shown := basalam.NewScreen(Recorder { name = "root" }, 20, 10)
+    defer shown.close()
+    top2 := shown.add(basalam.RootId, Recorder { name = "top" })
+    sh2 := shown.add(basalam.RootId, Shutter { shown = true })
+    kid2 := shown.add(sh2, Recorder { name = "kid" })
+    shown.widget(top2).set_bounds(rect(0, 0, 10, 5))
+    shown.widget(sh2).set_bounds(rect(0, 0, 10, 5))
+    shown.widget(kid2).set_bounds(rect(0, 0, 10, 5))
+    testing.AssertEqInt(shown.hit_test(1, 1), kid2)
 end
 
 func test_click_on_child_reaches_child_first():
@@ -319,6 +359,7 @@ func main:
     test_hit_test_picks_topmost()
     test_hit_test_outside_screen()
     test_hit_test_skips_empty_bounds()
+    test_hit_test_skips_hidden_subtree()
     test_click_on_child_reaches_child_first()
     test_child_consumes_and_parent_never_sees()
     test_click_never_moves_focus()

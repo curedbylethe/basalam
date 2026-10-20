@@ -534,9 +534,10 @@ pub struct Screen:
     @en "hit_test"
     /// The ID of the widget drawn at cell (x, y), both 0-based, or
     /// NoWidget when no widget covers it. The scan is reverse paint order:
-    /// the first widget whose rect contains the point and whose hits() is
-    /// true wins. A widget may paint and still refuse hits; the scan then
-    /// continues. Widgets with empty bounds never match.
+    /// the first widget whose rect contains the point, whose hits() is true,
+    /// and whose ancestor chain reports visible wins. A widget may paint and
+    /// still refuse hits, and a widget inside a hidden subtree never wins;
+    /// the scan then continues. Widgets with empty bounds never match.
     pub func hit_test(x: int, y: int): int:
         p := Point { x = x, y = y }
         order := this.paint_order()
@@ -545,7 +546,7 @@ pub struct Screen:
         until i >= 0:
             id := order.get(i)
             w := this.tree.get(id)
-            if w.bounds().contains(p) and w.hits():
+            if w.bounds().contains(p) and w.hits() and this.visible_chain(id):
                 ret id
             end
             i = i - 1
