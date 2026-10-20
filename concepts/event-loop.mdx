@@ -110,7 +110,7 @@ Every other event kind (keys, ticks, resizes) still starts at the focused widget
   Routing a click does not move the focus. Whether a click should focus the widget it hits is the widget's or the application's call: call `screen.focus(id)` from your own code when you want it.
 </Note>
 
-Mouse events only arrive when you set `screen.mouse = true` before `start()`.
+Mouse events only arrive when you set `screen.mouse = true` before `start()`; set `screen.mouse_motion = true` instead to also receive movement reports, and it reports presses and releases too.
 
 ## Key bindings
 
