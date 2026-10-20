@@ -13,8 +13,9 @@
 # `salam check` rather than `salam build`: the examples are only type-checked,
 # never run, and check is several times faster.
 #
-# Limitation: a fence whose info string is not plain `salam` (for example
-# ```salam title="counter") is not seen.
+# Limitation: only a fence that opens with `salam`, optionally followed by one
+# token (a file name such as ```salam main.salam), is seen. An info string with
+# two or more extra tokens (for example ```salam title="a b") is skipped.
 #
 # Usage: tests/doc-examples.sh
 # Env:   SALAM=path/to/salam          (default: salam on PATH)
@@ -47,7 +48,7 @@ for page in $pages; do
     # One pass per page: emit only blocks that hold both markers, rewriting the
     # include for the output's depth, and report each opener's line number.
     starts=$(awk -v out="$OUT" -v base="$base" '
-        /^[ ]*```salam[ ]*$/ {
+        /^[ ]*```salam([ ][^ ]+)?[ ]*$/ {
             inblock = 1; start = FNR; n = 0; hasinclude = 0; hasmain = 0
             next
         }
