@@ -706,7 +706,7 @@ func test_default_keymap_only_five_bindings():
     // pattern).
     testing.AssertFalse(s.dispatch(key("q")))
     testing.AssertFalse(s.dispatch(key("z")))
-    // Shift+Tab is not one of the five: 0.4.9 decodes backtab to KeyUnknown,
+    // Shift+Tab is not one of the five: Salam decodes backtab to KeyUnknown,
     // which is why the library cannot bind it without an escape literal.
     testing.AssertEqInt(term.Decode("\x1b[Z").code, term.KeyUnknown)
     testing.AssertFalse(s.dispatch(key("\x1b[Z")))

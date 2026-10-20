@@ -82,7 +82,7 @@
  * bindings: Tab -> focus_next, Up -> focus_up, Down -> focus_down, Left ->
  * focus_left, Right -> focus_right. Nothing installs it: NewScreen and
  * start() touch no bindings, so an app opts in with set_keymap or builds its
- * own map. Shift+Tab is deliberately absent: Salam 0.4.9 decodes the backtab
+ * own map. Shift+Tab is deliberately absent: Salam decodes the backtab
  * sequence to KeyUnknown, and a binding here would need an escape literal; an
  * app may bind term.Decode(its own sequence) if its terminal sends one.
  */
@@ -401,7 +401,7 @@ end
 /// exactly five rows — Tab moves the focus to the next widget, and Up, Down,
 /// Left and Right move it in those directions. Nothing installs this map on
 /// its own; pass it to set_keymap (or bind through a screen's keymap field)
-/// to use it. Shift+Tab is deliberately not bound: Salam 0.4.9 decodes the
+/// to use it. Shift+Tab is deliberately not bound: Salam decodes the
 /// backtab sequence to KeyUnknown.
 pub func NewDefaultKeymap(): Keymap:
     focus_next_action := (screen: Screen*, event: Event): ret screen[0].focus_next() end
