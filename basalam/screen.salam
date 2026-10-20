@@ -199,9 +199,16 @@ pub struct Screen:
     pub tick_ms: int = 0
 
     @en "mouse"
-    /// When true, start() enables mouse reporting and clicks arrive as
-    /// MouseEvents. Set it before start().
+    /// When true, start() enables click reporting: presses and releases
+    /// arrive as MouseEvents. Set it before start().
     pub mouse: bool = false
+
+    @en "mouse_motion"
+    /// When true, start() enables all-motion reporting and every pointer
+    /// movement, press, and release arrives as a MouseEvent. Includes clicks,
+    /// so it does not need `mouse`, and reports are frequent. Set it before
+    /// start().
+    pub mouse_motion: bool = false
 
     @en "keymap"
     /// The opt-in key bindings, consulted as a dispatch fallback for KeyEvents
@@ -769,16 +776,22 @@ pub struct Screen:
 
     @en "start"
     /// Takes over the terminal: raw mode, alternate screen, hidden cursor,
-    /// mouse reporting if `mouse` is set, a buffer sized to the terminal,
-    /// and the input thread. Call `defer screen.close()` right after it.
+    /// all-motion reporting if `mouse_motion` is set, click reporting
+    /// otherwise if `mouse` is set, a buffer sized to the terminal, and the
+    /// input thread. Call `defer screen.close()` right after it.
     pub func start():
         if this.attached or this.closed:
             ret
         end
         this.term_state = term.MakeRaw(term.StdinFd)
         mut setup := term.SeqEnterAltScreen() + term.SeqHideCursor() + term.SeqClearScreen()
-        if this.mouse:
-            setup = setup + term.SeqEnableMouse()
+        if this.mouse_motion:
+            // All-motion tracking is a superset of clicks: emit one, not both.
+            setup = setup + term.SeqEnableMouseMotion()
+        else:
+            if this.mouse:
+                setup = setup + term.SeqEnableMouse()
+            end
         end
         term.Emit(setup)
         this.attached = true
@@ -826,7 +839,7 @@ pub struct Screen:
         this.stop()
         if this.attached:
             mut teardown := term.Reset + term.SeqShowCursor() + term.SeqExitAltScreen()
-            if this.mouse:
+            if this.mouse or this.mouse_motion:
                 teardown = term.SeqDisableMouse() + teardown
             end
             term.Emit(teardown)
