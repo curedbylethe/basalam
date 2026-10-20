@@ -41,7 +41,7 @@ mut rows_a := Vector {} as Vector<str>
 mut rows_b := Vector {} as Vector<str>
 mut input_a := basalam.Input {}
 mut input_b := basalam.Input {}
-mut box := basalam.Checkbox {}
+mut box := basalam.NewCheckbox("flag", false)
 // Screen ids in mutate_one slot order. main fills this.
 mut slots := Vector {} as Vector<int>
 
@@ -154,7 +154,6 @@ func main:
     add_child(root, kids, basalam.NewText(texts.get(2)) as dyn basalam.Widget, 8)
     input_a = basalam.NewInput()
     add_child(root, kids, input_a as dyn basalam.Widget, 1)
-    box = basalam.NewCheckbox("flag", false)
     add_child(root, kids, box as dyn basalam.Widget, 1)
     add_child(root, kids, basalam.NewButton(texts.get(4)) as dyn basalam.Widget, 1)
     input_b = basalam.NewInput()
