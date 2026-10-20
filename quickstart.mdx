@@ -103,4 +103,8 @@ From a clone of the repository:
 make check
 ```
 
-`make check` runs the formatter check, compiles the library, and runs the test suite. CI also runs `make test-llvm`, which builds every test with `--backend=llvm` and fails instead of falling back to C. Run `make help` for the other targets.
+`make check` runs the formatter check, compiles the library and the examples
+with `--backend=llvm`, and runs the test suite. CI also runs `make test-llvm`,
+which builds every test with `--backend=llvm`, and the docs job. With an
+explicit backend the compiler does not fall back to C, so an LLVM codegen
+failure fails the build. Run `make help` for the other targets.

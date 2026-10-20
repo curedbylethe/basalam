@@ -2,7 +2,7 @@
 
 SALAM ?= salam
 BUILD := build
-FLAGS := --log-level=warn
+FLAGS := --log-level=warn --backend=llvm
 SOURCES := basalam tests $(wildcard examples)
 
 # Salam links with the host toolchain on macOS. Pin the deployment target to
@@ -16,14 +16,14 @@ EXAMPLES := $(patsubst examples/%.salam,$(BUILD)/examples/%,$(wildcard examples/
 .PHONY: help build test test-llvm example examples docs-examples run format check docs docs-check clean
 
 help:
-	@echo "make build     type-check and compile every file in basalam/"
+	@echo "make build     type-check and compile every file in basalam/ with --backend=llvm"
 	@echo "make test      build and run the test suite (tests/run.sh)"
 	@echo "make test-llvm build and run the test suite with --backend=llvm"
-	@echo "make examples  build every program in examples/ into build/examples/"
+	@echo "make examples  build every program in examples/ into build/examples/ with --backend=llvm"
 	@echo "make docs-examples type-check every complete example in the docs"
 	@echo "make run       build and run the demo example"
 	@echo "make format    format all Salam sources in place"
-	@echo "make check     format check, build, examples, tests, doc examples (CI also runs test-llvm and docs-check)"
+	@echo "make check     format check, strict build, strict examples, tests, doc examples (the library gate; CI also runs test-llvm and the docs job)"
 	@echo "make docs      preview the documentation site (needs: npm i -g mint)"
 	@echo "make docs-check validate the documentation site and its links"
 	@echo "make clean     remove build output"

@@ -182,6 +182,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `Widget.visible()` now hides a widget and its whole subtree from painting and
   hit testing, not only from focus navigation. A hidden widget and its
   descendants are no longer drawn and no longer win `Screen.hit_test`.
+- `make build` and `make examples` compile with `--backend=llvm`, so an LLVM
+  codegen failure fails the build instead of falling back to the C backend.
+  `make check` is strict for both. (CUR-464)
 - The typed-style widgets and the Modal scrim cache the SGR strings they draw
   with and rebuild one only when the resolved style (or, for Modal's scrim,
   the underlying cell style) changes; `List` and `Input` build their default
