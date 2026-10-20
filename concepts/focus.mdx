@@ -22,6 +22,8 @@ The screen tracks focus as a stack of widget IDs. The top entry is the focused w
 
 `focus` and `push_focus` refuse IDs that are invalid, not focusable, or inside a hidden container, and return `false` without changing anything.
 
+A focused widget that becomes hidden is revalidated by `dispatch`: after the widget chain returns, and again before the next event is routed. Focus moves to the first entry of the focus order, or clears when the order is empty.
+
 Use `push_focus` and `pop_focus` for anything temporary, such as a dialog: push the dialog's widget when it opens, pop when it closes, and the focus goes back where it was. A [Modal](/reference/modal) opens with `push_focus` and then `raise_subtree`, and closes with `unraise_subtree` and then `pop_focus`.
 
 ```salam
