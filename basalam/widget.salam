@@ -93,8 +93,9 @@ pub interface Widget:
 
     @en "visible"
     /// True when the widget is on screen. False hides the whole subtree
-    /// from focus navigation: a widget answers only for itself, so focus
-    /// order asks every widget on the path to the root.
+    /// from focus navigation, painting, and hit testing: a widget answers
+    /// only for itself, so every consumer asks every widget on the path to
+    /// the root.
     func visible(): bool
 
     @en "bounds"
