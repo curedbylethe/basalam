@@ -85,7 +85,8 @@ format check, strict LLVM build and examples, tests, and the documentation's
 own examples. `make test-llvm` builds every test with `--backend=llvm`.
 `make docs-check` validates the documentation site and its links, and
 `make docs-format-check` fails when `mint format` would rewrite a page. CI
-runs all three gates. This project follows the
+runs all three gates. The Windows resize path is a documented manual check;
+CI covers Ubuntu and macOS. This project follows the
 [Contributor Covenant](CODE_OF_CONDUCT.md).
 
 ## License

@@ -249,6 +249,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Windows: the `SIGWINCH` watcher, the coalescing of rapid resizes, and the
   caveat about threads created before `start()` are covered in the
   `screen.salam` module comment and the event-loop concept page.
+- CONTRIBUTING documents the manual Windows resize check. CI covers Ubuntu
+  and macOS, and the Windows input thread uses a 20 ms `term.Size()` poll
+  because SIGWINCH does not exist. (CUR-464)
 - The event-loop, `Event`, and `Screen` pages cover mouse routing, mouse
   coordinates, and how an unconsumed `KeyEvent` reaches the opt-in keymap
   fallback; the `reference/keymap` page documents the keymap itself.
