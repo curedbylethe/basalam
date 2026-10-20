@@ -39,9 +39,9 @@ const Measured := 1000
 mut texts := Vector {} as Vector<str>
 mut rows_a := Vector {} as Vector<str>
 mut rows_b := Vector {} as Vector<str>
-mut input_a := basalam.BaseWidget {} as dyn basalam.Widget
-mut input_b := basalam.BaseWidget {} as dyn basalam.Widget
-mut box := basalam.BaseWidget {} as dyn basalam.Widget
+mut input_a := basalam.Input {}
+mut input_b := basalam.Input {}
+mut box := basalam.Checkbox {}
 // Screen ids in mutate_one slot order. main fills this.
 mut slots := Vector {} as Vector<int>
 
@@ -74,8 +74,8 @@ func mutate_all(n: int):
     end
     put_row(rows_a, n)
     put_row(rows_b, n + 3)
-    type_digit(input_a, n)
-    type_digit(input_b, n + 1)
+    type_digit(input_a as dyn basalam.Widget, n)
+    type_digit(input_b as dyn basalam.Widget, n + 1)
     _ := box.handle_event(key(term.KeySpace, ""))
 end
 // 0-4 heap strings (four Text, then Button), 5-6 lists, 7 input, 8 checkbox, 9 input.
@@ -86,9 +86,9 @@ func mutate_one(n: int):
     if w < 5: poke(texts.get(w), d) ret end
     if w == 5: put_row(rows_a, n) ret end
     if w == 6: put_row(rows_b, n) ret end
-    if w == 7: type_digit(input_a, d) ret end
+    if w == 7: type_digit(input_a as dyn basalam.Widget, d) ret end
     if w == 8: _ := box.handle_event(key(term.KeySpace, "")) ret end
-    type_digit(input_b, d)
+    type_digit(input_b as dyn basalam.Widget, d)
 end
 func frame(screen &: basalam.Screen, n: int, small: bool): int:
     if small:
@@ -152,13 +152,13 @@ func main:
     add_child(root, kids, basalam.NewList(rows_a) as dyn basalam.Widget, 18)
     add_child(root, kids, basalam.NewList(rows_b) as dyn basalam.Widget, 16)
     add_child(root, kids, basalam.NewText(texts.get(2)) as dyn basalam.Widget, 8)
-    input_a = basalam.NewInput() as dyn basalam.Widget
-    add_child(root, kids, input_a, 1)
-    box = basalam.NewCheckbox("flag", false) as dyn basalam.Widget
-    add_child(root, kids, box, 1)
+    input_a = basalam.NewInput()
+    add_child(root, kids, input_a as dyn basalam.Widget, 1)
+    box = basalam.NewCheckbox("flag", false)
+    add_child(root, kids, box as dyn basalam.Widget, 1)
     add_child(root, kids, basalam.NewButton(texts.get(4)) as dyn basalam.Widget, 1)
-    input_b = basalam.NewInput() as dyn basalam.Widget
-    add_child(root, kids, input_b, 1)
+    input_b = basalam.NewInput()
+    add_child(root, kids, input_b as dyn basalam.Widget, 1)
     add_child(root, kids, basalam.NewText(texts.get(3)) as dyn basalam.Widget, 8)
     mut screen := basalam.NewScreen(root as dyn basalam.Widget, 200, 60)
     defer screen.close()
