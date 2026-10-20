@@ -75,7 +75,7 @@ Four rules keep a sequence predictable:
 - A node that has both a binding and children defers: the single-key binding fires only when the next key breaks the path, so while a longer sequence keeps matching, the longer one wins.
 - A key that does not continue the pending prefix resets it and is reprocessed from the root, so a sequence followed by an unrelated bound key still triggers that key.
 - The timeout check is lazy. It runs only when the next `KeyEvent` arrives, never on a timer, and `pending_timeout_ms` defaults to `0`, which never expires a prefix. Nothing fires from the timeout alone: the arriving key is processed as a fresh start.
-- Non-key events never evaluate the timeout, so a pending sequence survives a tick, a resize, or a mouse move. Their elapsed time still counts: if only non-key events arrived during the gap, the next `KeyEvent` evaluates the full elapsed time.
+- Non-key events never evaluate the timeout, so a pending sequence survives a tick, a resize, or a mouse report. Their elapsed time still counts: if only non-key events arrived during the gap, the next `KeyEvent` evaluates the full elapsed time.
 
 An invoked action resolves the key: nothing is reprocessed after it runs, even when the action returns `false`. See [Sequences](/reference/keymap#sequences) for the remaining edge cases.
 

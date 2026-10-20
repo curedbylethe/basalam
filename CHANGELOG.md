@@ -169,6 +169,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `make test-llvm` builds and runs the test suite with `--backend=llvm`, so an
   LLVM codegen failure fails the build instead of falling back to the C
   backend; CI runs it on both platforms. (CUR-458)
+- `Screen.mouse_motion`: when `true` before `start()`, the screen requests
+  all-motion reporting, so a `MouseEvent` arrives as the pointer moves. It
+  includes presses and releases, so it covers `mouse` on its own and the two
+  are not needed together. Default off. `close()` releases every mouse mode,
+  and reports are frequent: the channel holds 256 events, so a consumer slower
+  than the terminal makes the input thread wait. The sequence is all-motion
+  tracking (`?1003`). (CUR-425)
 
 ### Changed
 
