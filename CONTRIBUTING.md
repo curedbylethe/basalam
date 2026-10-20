@@ -67,7 +67,26 @@ headlessly.
 CI also runs `make test-llvm`, which builds every test with
 `--backend=llvm`. The explicit backend now covers `make build` and
 `make examples` as well, so an LLVM codegen failure fails those builds too
-instead of falling back to C.
+instead of falling back to C. CI covers Ubuntu and macOS; the Windows resize
+path is a manual check (below).
+
+### Windows resize check
+
+CI runs Ubuntu and macOS only. On Windows, SIGWINCH does not exist, so the
+input thread polls `term.Size()` every 20 ms instead of waiting for a signal.
+The Windows stubs compile, but no CI job runs them. Before merging a change
+that touches `basalam/screen.salam` or `basalam/signal.salam`, check resize by
+hand on Windows:
+
+1. Build and run `examples/demo.salam` with Salam 0.5.6 or newer. From Git
+   Bash or MSYS2, `make run` is the usual path if the make toolchain is
+   available; otherwise invoke the compiler directly.
+2. Resize the terminal narrower and wider, then maximize and restore it.
+3. Resize while an input is focused, and resize rapidly several times.
+4. Confirm the layout reflows immediately (within a frame or two), with no
+   stale bounds, clipped rows, or missed resize.
+5. Record the result in the pull request: Windows version, terminal, and
+   compiler version. If no Windows machine was available, say so explicitly.
 
 ## Code style
 
