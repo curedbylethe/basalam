@@ -569,7 +569,7 @@ func test_opening_modal_makes_its_child_reachable():
     testing.AssertEqInt(s.focused_id(), cid)
 end
 
-// G6: closed without unraise or pop, the hidden child keeps the stamp and focus, but the next Tab skips it to the visible base order.
+// G6: closed without unraise or pop, the hidden child keeps the stamp, but the next dispatch revalidates focus to the first entry of the visible base order, so the hidden child receives nothing.
 func test_close_without_unraise_keeps_child_out_of_order():
     mut s := basalam.NewScreen(Root {}, 20, 10)
     defer s.close()
@@ -592,8 +592,9 @@ func test_close_without_unraise_keeps_child_out_of_order():
 
     m.close()
     testing.AssertFalse(s.can_focus(cid))
-    testing.AssertEqInt(s.focused_id(), cid)
-    testing.AssertTrue(s.focus_next())
+    events_log = ""
+    _ := s.dispatch(key(120))
+    testing.AssertEqStr(events_log, "a")
     testing.AssertEqInt(s.focused_id(), a)
     testing.AssertTrue(s.focus_next())
     testing.AssertEqInt(s.focused_id(), b)
