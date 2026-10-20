@@ -239,7 +239,8 @@ pub struct Modal:
 
     @en "visible"
     /// True only while open. A hidden Modal also hides its child from focus
-    /// order, because the screen checks every widget on the path to the root.
+    /// order, painting, and hit testing, because the screen checks every
+    /// widget on the path to the root.
     pub func visible(): bool:
         ret this._get().visible
     end
