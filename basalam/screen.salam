@@ -567,6 +567,7 @@ pub struct Screen:
         if event.kind == ResizeEvent:
             this.resize(event.width, event.height)
         end
+        this.revalidate_focus()
         mut from := this.focused_id()
         if event.kind == MouseEvent and event.mouse.ok:
             p := event.mouse_point()
@@ -576,6 +577,7 @@ pub struct Screen:
             end
         end
         id := this.tree.dispatch(from, event)
+        this.revalidate_focus()
         mut consumed := id != NoWidget
         if consumed:
             // The widget's own bounds, not its subtree.
@@ -917,6 +919,24 @@ pub struct Screen:
         end
         this.queue_region(old_bounds)
         this.queue_region(this.focused.bounds())
+    end
+
+    // Nothing notifies the screen when a chain starts reporting hidden, so
+    // dispatch revalidates: focus falls to the first entry of the order, or
+    // clears when that order is empty. focus() replaces the stack top, so
+    // the depth the caller pushed survives.
+    func revalidate_focus():
+        id := this.focused_id()
+        if id == NoWidget or this.visible_chain(id):
+            ret
+        end
+        order := this.focus_order()
+        defer order.free()
+        if order.len() > 0:
+            _ := this.focus(order.get(0))
+        else:
+            this.clear_focus()
+        end
     end
 
     // Highest raise stamp, or 0 when nothing is raised. unraise writes 0
