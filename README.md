@@ -79,11 +79,12 @@ needs the same `mint` install.
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md). `make check` runs the library checks
-and the documentation's own examples, `make test-llvm` builds every test with
-`--backend=llvm` so a codegen failure fails instead of falling back to C, and
-`make docs-check` checks the documentation site; CI runs all three. This
-project follows the [Contributor Covenant](CODE_OF_CONDUCT.md).
+See [CONTRIBUTING.md](CONTRIBUTING.md). `make check` is the library gate:
+format check, strict LLVM build and examples, tests, and the documentation's
+own examples. `make test-llvm` builds every test with `--backend=llvm`.
+`make docs-check` validates the documentation site and its links; CI runs
+all three gates. This project follows the
+[Contributor Covenant](CODE_OF_CONDUCT.md).
 
 ## License
 

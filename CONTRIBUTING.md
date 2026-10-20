@@ -19,18 +19,18 @@ commit. By taking part you agree to follow the
 
 ## Common tasks
 
-| Command              | What it does                                                                          |
-| -------------------- | ------------------------------------------------------------------------------------- |
-| `make build`         | Type-checks and compiles every file in `basalam/`                                     |
-| `make test`          | Builds and runs the test suite                                                        |
-| `make test-llvm`     | Builds and runs the test suite with `--backend=llvm`                                  |
-| `make examples`      | Builds every program in `examples/` into `build/examples/`                            |
-| `make docs-examples` | Type-checks every complete example in the documentation                               |
-| `make run`           | Builds and runs the demo example                                                      |
-| `make format`        | Formats all Salam sources in place                                                    |
-| `make check`         | Format check, build, examples, tests, doc examples; CI runs `test-llvm`, `docs-check` |
-| `make docs`          | Previews the documentation site (`npm i -g mint` first)                               |
-| `make docs-check`    | Validates the documentation site and its links                                        |
+| Command              | What it does                                                                                                    |
+| -------------------- | --------------------------------------------------------------------------------------------------------------- |
+| `make build`         | Type-checks and compiles every file in `basalam/` with `--backend=llvm`                                         |
+| `make test`          | Builds and runs the test suite                                                                                  |
+| `make test-llvm`     | Builds and runs the test suite with `--backend=llvm`                                                            |
+| `make examples`      | Builds every program in `examples/` into `build/examples/` with `--backend=llvm`                                |
+| `make docs-examples` | Type-checks every complete example in the documentation                                                         |
+| `make run`           | Builds and runs the demo example                                                                                |
+| `make format`        | Formats all Salam sources in place                                                                              |
+| `make check`         | Format check, strict build and examples, tests, doc examples; CI adds `test-llvm` and the docs job               |
+| `make docs`          | Previews the documentation site (`npm i -g mint` first)                                                         |
+| `make docs-check`    | Validates the documentation site and its links                                                                  |
 
 Set `SALAM=/path/to/salam` to use a compiler that is not on your `PATH`.
 
@@ -64,8 +64,9 @@ thread, raw mode) is kept thin so the logic around it can be tested
 headlessly.
 
 CI also runs `make test-llvm`, which builds every test with
-`--backend=llvm`. With an explicit backend the compiler does not fall back
-to C, so an LLVM codegen failure fails the build.
+`--backend=llvm`. The explicit backend now covers `make build` and
+`make examples` as well, so an LLVM codegen failure fails those builds too
+instead of falling back to C.
 
 ## Code style
 
