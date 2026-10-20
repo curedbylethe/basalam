@@ -19,18 +19,19 @@ commit. By taking part you agree to follow the
 
 ## Common tasks
 
-| Command              | What it does                                                                                                    |
-| -------------------- | --------------------------------------------------------------------------------------------------------------- |
-| `make build`         | Type-checks and compiles every file in `basalam/` with `--backend=llvm`                                         |
-| `make test`          | Builds and runs the test suite                                                                                  |
-| `make test-llvm`     | Builds and runs the test suite with `--backend=llvm`                                                            |
-| `make examples`      | Builds every program in `examples/` into `build/examples/` with `--backend=llvm`                                |
-| `make docs-examples` | Type-checks every complete example in the documentation                                                         |
-| `make run`           | Builds and runs the demo example                                                                                |
-| `make format`        | Formats all Salam sources in place                                                                              |
-| `make check`         | Format check, strict build and examples, tests, doc examples; CI adds `test-llvm` and the docs job               |
-| `make docs`          | Previews the documentation site (`npm i -g mint` first)                                                         |
-| `make docs-check`    | Validates the documentation site and its links                                                                  |
+| Command                  | What it does                                                                                                    |
+| ------------------------ | --------------------------------------------------------------------------------------------------------------- |
+| `make build`             | Type-checks and compiles every file in `basalam/` with `--backend=llvm`                                         |
+| `make test`              | Builds and runs the test suite                                                                                  |
+| `make test-llvm`         | Builds and runs the test suite with `--backend=llvm`                                                            |
+| `make examples`          | Builds every program in `examples/` into `build/examples/` with `--backend=llvm`                                |
+| `make docs-examples`     | Type-checks every complete example in the documentation                                                         |
+| `make run`               | Builds and runs the demo example                                                                                |
+| `make format`            | Formats all Salam sources in place                                                                              |
+| `make check`             | Format check, strict build and examples, tests, doc examples; CI adds `test-llvm` and the docs job               |
+| `make docs`              | Previews the documentation site (`npm i -g mint@4.2.988` first)                                                 |
+| `make docs-check`        | Validates the documentation site and its links                                                                  |
+| `make docs-format-check` | Fails if `mint format` would rewrite a docs page                                                                |
 
 Set `SALAM=/path/to/salam` to use a compiler that is not on your `PATH`.
 
@@ -93,7 +94,7 @@ A change is not finished until it is documented:
 - Non-obvious algorithms get inline prose comments.
 - User-facing behavior changes update the Mintlify pages (`*.mdx`) and,
   for new pages, `docs.json` navigation. A new or edited page must pass
-  `make docs-check`, which CI enforces.
+  `make docs-check` and `make docs-format-check`, which CI enforces.
 
 ## Commits
 

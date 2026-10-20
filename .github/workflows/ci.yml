@@ -53,6 +53,10 @@ jobs:
       - name: Install the Mintlify CLI
         run: npm i -g mint@4.2.988
 
+      # The formatter must be idempotent on every committed page.
+      - name: Check the docs format
+        run: make docs-format-check
+
       # MDX and frontmatter validation, then the link and anchor check.
       - name: Check the docs
         run: make docs-check

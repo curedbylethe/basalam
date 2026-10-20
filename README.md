@@ -70,20 +70,22 @@ The full documentation (concepts, guides, and API reference) is a
 Start at [`index.mdx`](index.mdx), or preview it locally:
 
 ```sh
-npm i -g mint
+npm i -g mint@4.2.988
 mint dev
 ```
 
-Run `make docs-check` to validate the site and its links the way CI does; it
-needs the same `mint` install.
+Run `make docs-check` to validate the site and its links the way CI does, and
+`make docs-format-check` to fail when `mint format` would rewrite a page; both
+need the same `mint` install.
 
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md). `make check` is the library gate:
 format check, strict LLVM build and examples, tests, and the documentation's
 own examples. `make test-llvm` builds every test with `--backend=llvm`.
-`make docs-check` validates the documentation site and its links; CI runs
-all three gates. This project follows the
+`make docs-check` validates the documentation site and its links, and
+`make docs-format-check` fails when `mint format` would rewrite a page. CI
+runs all three gates. This project follows the
 [Contributor Covenant](CODE_OF_CONDUCT.md).
 
 ## License
