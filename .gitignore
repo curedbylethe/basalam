@@ -9,6 +9,7 @@
 !/tests/*.out
 !/tests/run.sh
 !/tests/doc-examples.sh
+!/tests/release-check.sh
 
 # Compiler temporaries: --keep-temp / --emit-c output, objects, LLVM IR,
 # generated API docs and timing traces.

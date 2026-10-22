@@ -13,7 +13,7 @@ endif
 
 EXAMPLES := $(patsubst examples/%.salam,$(BUILD)/examples/%,$(wildcard examples/*.salam))
 
-.PHONY: help build test test-llvm example examples docs-examples run format check docs docs-check docs-format-check clean
+.PHONY: help build test test-llvm example examples docs-examples run format check release-check docs docs-check docs-format-check clean
 
 help:
 	@echo "make build     type-check and compile every file in basalam/ with --backend=llvm"
@@ -24,6 +24,7 @@ help:
 	@echo "make run       build and run the demo example"
 	@echo "make format    format all Salam sources in place"
 	@echo "make check     format check, strict build, strict examples, tests, doc examples (the library gate; CI also runs test-llvm and the docs job)"
+	@echo "make release-check  check release metadata: Version, changelog headings and links (see RELEASING.md)"
 	@echo "make docs      preview the documentation site (needs: npm i -g mint@4.2.988)"
 	@echo "make docs-check validate the documentation site and its links"
 	@echo "make docs-format-check  fail if mint format would rewrite a docs page"
@@ -63,6 +64,11 @@ check:
 	$(SALAM) format --check $(SOURCES)
 	$(MAKE) build examples test
 	$(MAKE) docs-examples
+
+# The release policy gate: no tag, no network, no build. `make check` stays
+# independent of it so an ordinary pull request never needs a release.
+release-check:
+	sh tests/release-check.sh check
 
 docs:
 	mint dev
