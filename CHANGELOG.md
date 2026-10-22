@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-22
+
 ### Added
 
 - `Widget.visible()`: `true` when the widget is on screen, `false` when it is
@@ -212,7 +214,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   unraise a widget and all of its descendants as one layer, moving and
   restoring focus as `raise` and `unraise` do. A Modal uses them to stay
   above its own children.
-- `Text.style` is now a `basalam.Style` value instead of a raw SGR string
+- **Breaking:** `Text.style` is now a `basalam.Style` value instead of a raw SGR string
   built with `std/term`, and `set_style` takes a `Style`. This is a breaking
   change at every `Text` style-construction site; the escape bytes a given
   palette color composes to are unchanged.
@@ -238,7 +240,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   a handler, blocks the signal, and spawns a resize watcher that parks in
   `sigwait`, reads `term.Size()`, and sends a `ResizeEvent` only when the
   size changed. Windows keeps polling `term.Size()` on each input pass.
-- Match arms use the Salam 0.5 form (`pattern: body end`) instead of the old
+- **Breaking:** Match arms use the Salam 0.5 form (`pattern: body end`) instead of the old
   `pattern => body`. 0.5.5 dropped the old form, because the compiler no
   longer parses it. The minimum compiler is now 0.5.6, which builds basalam's
   `dyn Widget` code with the LLVM backend; 0.5.5 required the C fallback.
@@ -332,5 +334,6 @@ release builds on.
 - Project scaffolding: GPL-3.0 license, `Makefile`, golden-file test runner,
   GitHub Actions CI, and the Mintlify documentation site.
 
-[Unreleased]: https://github.com/curedbylethe/basalam/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/curedbylethe/basalam/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/curedbylethe/basalam/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/curedbylethe/basalam/releases/tag/v0.1.0
