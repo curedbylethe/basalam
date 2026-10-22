@@ -43,6 +43,13 @@ jobs:
           fi
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
 
+      # actions/checkout rewrites a tag pushed event to a lightweight tag at the
+      # commit, so fetch the annotated tag object back before validating it.
+      - name: Restore annotated tag
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: git fetch --force --no-tags origin "+refs/tags/$TAG:refs/tags/$TAG"
+
       # Version, changelog heading, and link definitions as the tag records them.
       - name: Check release metadata
         env:
