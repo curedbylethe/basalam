@@ -29,6 +29,7 @@ commit. By taking part you agree to follow the
 | `make run`               | Builds and runs the demo example                                                                                |
 | `make format`            | Formats all Salam sources in place                                                                              |
 | `make check`             | Format check, strict build and examples, tests, doc examples; CI adds `test-llvm` and the docs job               |
+| `make release-check`     | Checks `basalam.Version`, the changelog headings, and the link definitions against [RELEASING.md](RELEASING.md)  |
 | `make docs`              | Previews the documentation site (`npm i -g mint@4.2.988` first)                                                 |
 | `make docs-check`        | Validates the documentation site and its links                                                                  |
 | `make docs-format-check` | Fails if `mint format` would rewrite a docs page                                                                |

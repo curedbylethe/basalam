@@ -17,6 +17,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Version, changelog headings, and link definitions must agree. One leg
+      # only: the check is read-only and needs no compiler.
+      - name: Check release metadata
+        if: runner.os == 'Linux'
+        run: make release-check
+
       # The official action from the Salam repository. The version is pinned
       # so a new compiler release cannot break CI without a code change here;
       # bump it deliberately.

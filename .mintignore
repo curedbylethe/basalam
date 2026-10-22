@@ -8,6 +8,7 @@ drafts/
 
 # Repository files that are not documentation pages
 CODE_OF_CONDUCT.md
+RELEASING.md
 basalam/
 examples/
 tests/
