@@ -20,17 +20,32 @@ A screen's `keymap` field starts as `Keymap {}`, and neither `NewScreen` nor `st
 
 ## Install the defaults
 
-`NewDefaultKeymap` builds the library's only stock map: `Tab` moves to the next widget and the four arrows move spatially. Install it before the loop:
+`NewDefaultKeymap` builds one of the library's two stock maps: `Tab` moves to the next widget and the four arrows move spatially. Install it before the loop:
 
 ```salam
 screen.set_keymap(basalam.NewDefaultKeymap())
 ```
 
-Nothing else is bound: `q` and every other key stay free for your loop. See [Default bindings](/reference/keymap#default-bindings) for the five rows.
+The default map binds nothing else: `q` and every other key stay free for your loop. See [Default bindings](/reference/keymap#default-bindings) for the five rows, or [The vim preset](/reference/keymap#the-vim-preset) for the wider map.
 
 <Warning>
   Never copy a `Keymap` value. Salam has no move semantics and the fields hold raw `Vector` and `HashMap` pointers, so a copy gives two owners the same buffers and a double-free. Build one with `NewKeymap`, install it with `set_keymap`, and let the screen free it.
 </Warning>
+
+## Use the vim preset
+
+If you want `hjkl` navigation without writing the rows, install `NewVimKeymap`. It is a superset of the default map: Tab and the arrows keep working, `h`/`j`/`k`/`l` repeat the four spatial moves, `gg` and `G` go to the top and bottom of the current column, `Esc` pops one focus level, and `/` runs an action you supply. It is still opt-in — a screen with no map installed stays inert.
+
+```salam
+func on_search(screen: basalam.Screen*, event: basalam.Event): bool:
+    screen[0].set_keymap(search_map()) // your search mode owns the keys from here
+    ret true
+end
+
+screen.set_keymap(basalam.NewVimKeymap(on_search))
+```
+
+Enter and Space are not bound by the preset: the focused widget gets every key first, so a `Button`, `Checkbox`, `List` or `Modal` keeps its own handling. `Esc` is consumed only while a pushed focus remains, so at the root it still reaches your loop for quit or cancel. A focused `Input` takes printable keys before the keymap, so `/` reaches `on_search` only when the widget declines it. [The vim preset](/reference/keymap#the-vim-preset) has the full row table.
 
 ## Bind a key
 
@@ -48,7 +63,13 @@ screen.keymap.bind(term.Decode("n"), (screen: basalam.Screen*, event: basalam.Ev
 screen.keymap.unbind(term.Decode("n"))
 ```
 
-`unbind` leaves scoped bindings alone; replace one with the matching `bind_for`. The snippets assume a screen and `import term`.
+`unbind` leaves scoped bindings alone. Replace one with the matching `bind_for`, or drop it with `unbind_for`, which removes only that widget's row:
+
+```salam
+screen.keymap.unbind_for(panel, term.Decode("x")) // the panel no longer answers x
+```
+
+The global binding for the same key and every other widget's override survive; pass `NoWidget` to remove the global row, which is what `unbind` does. Neither call deletes a node, so rebinding later is cheap. The snippets assume a screen and `import term`.
 
 ## Scope a binding
 
@@ -87,7 +108,7 @@ An invoked action resolves the key: nothing is reprocessed after it runs, even w
 
 ## Swap maps for modes
 
-Modes are application territory: the library ships no presets. Build one map per mode and install the next one from an action. `set_keymap` frees the current map, gives the screen ownership of the new one, and clears any pending sequence.
+Modes are application territory: the library ships two stock maps and no mode system. Build one map per mode and install the next one from an action. `set_keymap` frees the current map, gives the screen ownership of the new one, and clears any pending sequence.
 
 ```salam
 func insert_map(): basalam.Keymap:
