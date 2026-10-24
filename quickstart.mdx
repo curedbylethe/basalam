@@ -11,7 +11,7 @@ keywords:
 ## Prerequisites
 
 - macOS or Linux. basalam uses Salam's POSIX terminal support.
-- The Salam compiler, version 0.5.6 or later. Check with `salam version`.
+- The Salam compiler, version 0.5.9 or later. Check with `salam version`.
 
 <Steps>
   <Step title="Install Salam">
@@ -27,9 +27,9 @@ keywords:
 
     ```bash
     git submodule add https://github.com/curedbylethe/basalam vendor/basalam
-    git -C vendor/basalam checkout v0.2.0
+    git -C vendor/basalam checkout v0.3.0
     git add vendor/basalam .gitmodules
-    git commit -m "chore: vendor basalam v0.2.0"
+    git commit -m "chore: vendor basalam v0.3.0"
     ```
 
     The checkout records the tag's commit in your repository's gitlink, and that commit is what makes the pin reproducible: a fresh clone plus `git submodule update --init --recursive` reproduces exactly that commit. The submodule reports `## HEAD (no branch)`; that is expected for a pinned submodule.
@@ -41,9 +41,9 @@ keywords:
 
       ```bash
       git -C vendor/basalam fetch --tags origin
-      git -C vendor/basalam checkout v0.2.0
+      git -C vendor/basalam checkout v0.3.0
       git add vendor/basalam
-      git commit -m "chore: bump basalam to v0.2.0"
+      git commit -m "chore: bump basalam to v0.3.0"
       ```
     </Note>
   </Step>
@@ -99,7 +99,7 @@ keywords:
 - `NewTerminalScreen` makes `Hello` the root widget, sized to the terminal.
 - `start()` switches the terminal to raw mode and the alternate screen and starts the input thread. `defer screen.close()` undoes all of it on every exit path.
 - The `until` loop takes one event at a time. `dispatch` offers it to the widgets; `q` is not consumed by any widget, so the loop stops the screen.
-- `basalam.Version` is the library version (`0.2.0`); the [demo](/guides/examples) prints it in its title bar.
+- `basalam.Version` is the library version (`0.3.0`); the [demo](/guides/examples) prints it in its title bar.
 
 Read [The event loop](/concepts/event-loop) for the details, or [Writing a widget](/guides/writing-a-widget) to build an interactive one.
 

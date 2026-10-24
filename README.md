@@ -8,12 +8,12 @@ build full-screen terminal interfaces. It sits on top of Salam's standard
 `term` package and adds geometry, widgets, events, focus, and a screen that
 draws frames.
 
-> **Status: 0.2.0, early development.** See the
+> **Status: 0.3.0, early development.** See the
 > [CHANGELOG](CHANGELOG.md) for what this release contains.
 
 ## Install
 
-You need the Salam compiler, version 0.5.6 or later:
+You need the Salam compiler, version 0.5.9 or later:
 
 ```sh
 { curl -fsSL https://raw.githubusercontent.com/SalamLang/Salam/refs/heads/main/install.sh || wget -qO- https://raw.githubusercontent.com/SalamLang/Salam/refs/heads/main/install.sh; } | sh
@@ -24,9 +24,9 @@ project and pin it to a release tag:
 
 ```sh
 git submodule add https://github.com/curedbylethe/basalam vendor/basalam
-git -C vendor/basalam checkout v0.2.0
+git -C vendor/basalam checkout v0.3.0
 git add vendor/basalam .gitmodules
-git commit -m "chore: vendor basalam v0.2.0"
+git commit -m "chore: vendor basalam v0.3.0"
 ```
 
 The checkout records the tag's commit in the parent repository's gitlink, and
@@ -40,9 +40,9 @@ gitlink:
 
 ```sh
 git -C vendor/basalam fetch --tags origin
-git -C vendor/basalam checkout v0.2.0
+git -C vendor/basalam checkout v0.3.0
 git add vendor/basalam
-git commit -m "chore: bump basalam to v0.2.0"
+git commit -m "chore: bump basalam to v0.3.0"
 ```
 
 ## Quick start
