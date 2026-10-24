@@ -198,17 +198,9 @@ pub struct Keymap:
     @en "unbind"
     /// Removes the global binding for one key. A no-op when there is none.
     /// Scoped bindings are not touched (use bind_for to replace one, or
-    /// unbind_for to drop one).
+    /// unbind_for to drop one). unbind_for(NoWidget, key) does the same work.
     pub func unbind(key: term.Key):
-        this.pending = -1
-        if this.nodes.len() == 0:
-            ret
-        end
-        child := this.nodes.ref(0)[0].children.get_or(key_id(key), -1)
-        if child < 0:
-            ret
-        end
-        drop_override(this.nodes.ref(child), NoWidget)
+        this.unbind_for(NoWidget, key)
     end
 
     @en "unbind_for"
@@ -506,6 +498,7 @@ pub func NewVimKeymap(on_search: func (Screen*, Event) bool): Keymap:
     focus_down_action := (screen: Screen*, event: Event): ret screen[0].focus_down() end
     focus_left_action := (screen: Screen*, event: Event): ret screen[0].focus_left() end
     focus_right_action := (screen: Screen*, event: Event): ret screen[0].focus_right() end
+    // Salam has no first-class function values; each named action needs a wrapper.
     vim_home_action := (screen: Screen*, event: Event): ret vim_home(screen, event) end
     vim_end_action := (screen: Screen*, event: Event): ret vim_end(screen, event) end
     vim_back_action := (screen: Screen*, event: Event): ret vim_back(screen, event) end
