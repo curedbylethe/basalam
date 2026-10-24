@@ -6,7 +6,7 @@ commit. By taking part you agree to follow the
 
 ## Set up
 
-1. Install the Salam compiler, version 0.5.6 or later (`salam version` to
+1. Install the Salam compiler, version 0.5.9 or later (`salam version` to
    check). See the [Salam repository](https://github.com/SalamLang/Salam)
    for the installer.
 2. Clone the repository and run the full check:
@@ -79,7 +79,7 @@ The Windows stubs exist, but no CI job compiles or runs them. Before merging
 a change that touches `basalam/screen.salam` or `basalam/signal.salam`, check
 resize by hand on Windows:
 
-1. Build and run `examples/demo.salam` with Salam 0.5.6 or newer. From Git
+1. Build and run `examples/demo.salam` with Salam 0.5.9 or newer. From Git
    Bash or MSYS2, `make run` is the usual path if the make toolchain is
    available; otherwise invoke the compiler directly.
 2. Resize the terminal narrower and wider, then maximize and restore it.
