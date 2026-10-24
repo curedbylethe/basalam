@@ -185,7 +185,8 @@ pub struct Keymap:
 
     @en "unbind"
     /// Removes the global binding for one key. A no-op when there is none.
-    /// Scoped bindings are not touched (use bind_for to replace one).
+    /// Scoped bindings are not touched (use bind_for to replace one, or
+    /// unbind_for to drop one).
     pub func unbind(key: term.Key):
         this.pending = -1
         if this.nodes.len() == 0:
@@ -196,6 +197,25 @@ pub struct Keymap:
             ret
         end
         drop_override(this.nodes.ref(child), NoWidget)
+    end
+
+    @en "unbind_for"
+    /// Removes the binding for one widget on one key: bind_for's inverse.
+    /// Only that widget's override is removed, so the global binding and every
+    /// other widget's override on the same key still apply, and no trie node
+    /// is deleted. A no-op when the map is empty, the key was never bound, or
+    /// the widget never bound it. NoWidget removes the global binding, so
+    /// unbind_for(NoWidget, key) is unbind(key). Resets a pending sequence.
+    pub func unbind_for(widget_id: int, key: term.Key):
+        this.pending = -1
+        if this.nodes.len() == 0:
+            ret
+        end
+        child := this.nodes.ref(0)[0].children.get_or(key_id(key), -1)
+        if child < 0:
+            ret
+        end
+        drop_override(this.nodes.ref(child), widget_id)
     end
 
     @en "handle"
