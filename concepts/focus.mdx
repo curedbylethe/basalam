@@ -57,6 +57,8 @@ screen.keymap.bind(term.Decode("n"), (screen: basalam.Screen*, event: basalam.Ev
 
 Every method returns `true` when the focus moved. Each focus change queues the old bounds and the new bounds, so the next `present()` redraws those two indicators and leaves the rest of the screen.
 
+If you would rather not write the rows, install `NewVimKeymap(on_search)` instead: it keeps Tab and the arrows and adds `h`/`j`/`k`/`l`, `gg` and `G` to the ends of the current column, all calling the same methods. [The vim preset](/reference/keymap#the-vim-preset) lists every row.
+
 ### Linear: focus_next and focus_prev
 
 Linear navigation walks the focus order and wraps inside it. That order is the focusable widgets in the topmost raised layer, ascending ID, or every focusable widget in ID order when nothing is raised or that layer has no focusable widget. Only widgets that pass `can_focus` are candidates, so a hidden container removes its whole subtree from the order: the child of a closed [Modal](/reference/modal) is never a Tab stop. It matches paint order only while nothing is raised. Unfocusable widgets are skipped. With nothing focused, `focus_next` focuses the first widget in that order and `focus_prev` the last. A focus that sits outside the order jumps to the first on `focus_next` and the last on `focus_prev`. A raised subtree, such as an open Modal, is such a layer.

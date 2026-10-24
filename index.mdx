@@ -22,7 +22,7 @@ It sits on top of Salam's standard `term` package. `term` already handles raw mo
 - **Only input is asynchronous.** One background thread reads the terminal and produces events. Your widgets handle them synchronously on the main thread, so they need no locks.
 - **Widgets are interfaces.** Anything with the nine `Widget` methods is a widget. Embed `BaseWidget` and override only what you need.
 - **Widgets draw into a buffer, never the terminal.** That keeps rendering testable without a terminal.
-- **Two focus models.** Tab-style linear order and arrow-key spatial navigation, as methods your application calls. The opt-in keymap (`NewDefaultKeymap`) wires up `Tab` and the four arrows for you, with no imposed bindings and no modes of its own.
+- **Two focus models.** Tab-style linear order and arrow-key spatial navigation, as methods your application calls. The opt-in keymap wires them up for you: `NewDefaultKeymap` binds `Tab` and the four arrows, and the opt-in `NewVimKeymap` adds `hjkl`, `gg`/`G`, a guarded `Esc` and an application-supplied `/`. Still no imposed bindings and no modes of its own.
 - **Geometry on the cell grid.** Every position is an integer cell coordinate, 0-based, with half-open rectangles.
 
 ## Status
@@ -45,7 +45,7 @@ It sits on top of Salam's standard `term` package. `term` already handles raw mo
 | Widget tree with integer IDs | Available |
 | `Screen`: event loop, input thread, resize, ticks | Available |
 | Focus: stack, linear, and spatial navigation | Available |
-| Keymap: opt-in key bindings with scopes and sequences | Available; install with `set_keymap`, defaults via `NewDefaultKeymap` |
+| Keymap: opt-in key bindings with scopes and sequences | Available; install with `set_keymap`, defaults via `NewDefaultKeymap`, opt-in vim preset via `NewVimKeymap` |
 | `Buffer` (double-buffered) | Available; a consumed event repaints the widget that consumed it, and flush writes the touched cells that differ |
 
 <Columns cols={2}>

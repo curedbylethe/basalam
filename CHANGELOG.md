@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `Keymap.unbind_for(widget_id, key)` removes a single widget's scoped binding,
+  leaving the global row and other widgets' overrides in place, and resets a
+  pending key sequence. (CUR-217)
+- `NewVimKeymap(on_search)` — an opt-in preset that extends the default focus
+  bindings with `hjkl` spatial navigation, `gg`/`G` to the ends of the current
+  column, `Esc` to pop one focus level, and `/` handed to the application.
+  `Enter` and `Space` stay with the widgets that already handle them. (CUR-217)
+
 ## [0.3.0] - 2026-10-24
 
 ### Changed

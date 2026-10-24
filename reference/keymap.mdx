@@ -34,12 +34,14 @@ Build one with `NewKeymap`, fill it with `bind` and its variants, feed events to
 ```salam
 pub func NewKeymap(): Keymap
 pub func NewDefaultKeymap(): Keymap
+pub func NewVimKeymap(on_search: func (Screen*, Event) bool): Keymap
 ```
 
 | Constructor | Description |
 | --- | --- |
 | `NewKeymap(): Keymap` | Creates an empty keymap. The root node is created on the first bind, so a zero-valued `Keymap {}` (a `Screen` field default) is usable directly. |
 | `NewDefaultKeymap(): Keymap` | Creates a map with the [five default focus bindings](#default-bindings). |
+| `NewVimKeymap(on_search): Keymap` | Creates the default focus bindings plus `hjkl` spatial navigation, `gg`/`G` to the ends of the current column, `Esc` back, and `/` handed to `on_search`. See [The vim preset](#the-vim-preset). |
 
 Each call returns an independent map: rebinding one does not touch another.
 
@@ -70,7 +72,8 @@ An action is a `func (screen: basalam.Screen*, event: basalam.Event): bool`. Onl
 | `bind_for(widget_id: int, key: term.Key, action: func (Screen*, Event) bool)` | Binds one key for the widget with this ID: the action runs when that widget, or one of its descendants, has the focus. `NoWidget` binds globally. |
 | `bind_seq(seq: str, action: func (Screen*, Event) bool)` | Binds a key sequence in the global scope. |
 | `bind_for_seq(widget_id: int, seq: str, action: func (Screen*, Event) bool)` | Binds a key sequence for the widget with this ID. `NoWidget` binds globally. |
-| `unbind(key: term.Key)` | Removes the global binding for one key. A no-op when there is none. Scoped bindings are not touched; use `bind_for` to replace one. |
+| `unbind(key: term.Key)` | Removes the global binding for one key. A no-op when there is none. Scoped bindings are not touched; use `bind_for` to replace one, or `unbind_for` to drop one. |
+| `unbind_for(widget_id: int, key: term.Key)` | Removes one widget's binding for one key: `bind_for`'s inverse. Only that widget's override goes, so the global row and every other widget's override on the same key still apply, and no node is deleted. A no-op when the map is empty, the key was never bound, or that widget never bound it. `unbind_for(NoWidget, key)` equals `unbind(key)`, and a pending sequence is reset. |
 | `handle(screen: Screen*, event: Event): bool` | Offers one event to the map. Only `KeyEvent`s are handled; any other kind returns `false` and leaves a pending sequence untouched. Returns whether the matched action reported the key consumed. |
 | `free()` | Releases every node's children map and binding vector, then the node storage. Call once. |
 
@@ -90,11 +93,45 @@ A key's identity includes its code, the `Ctrl`/`Alt`/`Shift` modifiers, and — 
 | `Left` | `focus_left()` |
 | `Right` | `focus_right()` |
 
-`q` and every other key stay unbound, so they bubble to your loop for the quit pattern.
+In the default map, `q` and every other key stay unbound, so they bubble to your loop for the quit pattern.
 
 <Note>
-  Shift+Tab is deliberately not bound. Salam decodes the backtab sequence (`ESC [ Z`) to `KeyUnknown`, so binding it would need an escape literal. If your terminal sends a Shift+Tab sequence you can decode, bind it yourself with `term.Decode`.
+  Shift+Tab is deliberately not bound. Salam decodes the backtab sequence (`ESC [ Z`) to `KeyUnknown`, so binding it would need an escape literal. If your terminal sends a Shift+Tab sequence you can decode, bind it yourself with `term.Decode`. The vim preset omits it for the same reason: a decoded backtab stays `KeyUnknown` with its raw sequence, so you bind that sequence with `bind` like any other key.
 </Note>
+
+## The vim preset
+
+`NewVimKeymap(on_search)` is a convenience map, not a mode system: modes stay in your application. It starts from `NewDefaultKeymap` and adds vim-style rows, so Tab and the four arrows keep working. Install it with `set_keymap`:
+
+```salam
+screen.set_keymap(basalam.NewVimKeymap(on_search))
+```
+
+| Key | Action | Source |
+| --- | --- | --- |
+| `Tab` | `focus_next()` | default map |
+| `Up` | `focus_up()` | default map |
+| `Down` | `focus_down()` | default map |
+| `Left` | `focus_left()` | default map |
+| `Right` | `focus_right()` | default map |
+| `h` | `focus_left()` | preset |
+| `j` | `focus_down()` | preset |
+| `k` | `focus_up()` | preset |
+| `l` | `focus_right()` | preset |
+| `gg` | Repeated `focus_up()` to the top of the current column | preset |
+| `G` | Repeated `focus_down()` to the bottom of the current column | preset |
+| `Esc` | `pop_focus()`, only while a pushed focus remains | preset |
+| `/` | `on_search(screen, event)`, the application's action | preset |
+
+`gg` and `G` move spatially until the direction is exhausted, so they keep the focused widget's column rather than jumping by ordinal position.
+
+**Enter and Space are the widget's job.** The preset binds neither. [`dispatch`](/reference/screen#the-event-loop) offers every key to the focused widget first, where [`Button`](/reference/button), `Checkbox`, `List` and `Modal` already act on them, so a binding would only fire for a widget that declined the key. There is no generic "activate the focused widget" to bind; see [Key bindings](/concepts/event-loop#key-bindings).
+
+**`Esc` is guarded.** It pops one focus level only when the focus stack is deeper than one. At the root the key is left unconsumed, so your loop can still use it to quit or cancel. An open `Modal` keeps its own Esc handling and consumes the key before the keymap sees it.
+
+**`/` is yours.** The preset runs `on_search` and returns its boolean as the dispatch result, so pass an action returning `false` if you want `/` inert. A focused [`Input`](/reference/input) consumes printable keys before the keymap, so `/` reaches the preset only when the widget declines it.
+
+The map is plain data: install it with `set_keymap`, never copy it, and see [Installing and extending](#installing-and-extending) for replacement and extension.
 
 ## Resolution
 
@@ -167,4 +204,4 @@ end
 
 ## Modes
 
-basalam ships no modes and no presets: modes are application territory. Your app can wrap the library in its own state and an action can call `set_keymap` to swap the whole map — for example a normal map that binds `i` to an insert map, and an insert map that binds `Esc` back. The swapped-in map starts with no pending sequence. A consumed Esc, such as an open Modal's, never reaches the keymap fallback, so a mode's Esc binding fires only while no widget takes the key. See [Focus](/concepts/focus) for the navigation methods your actions call.
+basalam ships no modes and two stock maps: `NewDefaultKeymap` and `NewVimKeymap` are plain data your app installs, swaps or replaces, so modes stay application territory. Your app can wrap the library in its own state and an action can call `set_keymap` to swap the whole map — for example a normal map that binds `i` to an insert map, and an insert map that binds `Esc` back. The swapped-in map starts with no pending sequence. A consumed Esc, such as an open Modal's, never reaches the keymap fallback, so a mode's Esc binding fires only while no widget takes the key. See [Focus](/concepts/focus) for the navigation methods your actions call.
