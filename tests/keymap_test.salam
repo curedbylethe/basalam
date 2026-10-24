@@ -32,6 +32,10 @@ include "../basalam/basalam.salam"
 // a global is the observable shared by those tests.
 mut seq_hits := 0
 
+// Number of Enter and Space events the Activate fixture consumed. The fixture
+// counts through a global because dyn Widget cannot be compared or downcast.
+mut activate_hits := 0
+
 // The screen root: an unfocusable placeholder so each test controls which
 // widget holds the focus.
 struct Root:
@@ -65,6 +69,25 @@ struct TabGrab:
 
     pub func handle_event(event: basalam.Event): bool:
         ret event.is_key(term.KeyTab)
+    end
+end
+
+// Activate stands in for a Button without its construction setup: it is
+// focusable and consumes Enter and Space, so a test can prove the focused
+// widget still answers those keys with the vim preset installed.
+struct Activate:
+    pub use basalam.BaseWidget
+
+    pub func focusable(): bool:
+        ret true
+    end
+
+    pub func handle_event(event: basalam.Event): bool:
+        if event.is_key(term.KeyEnter) or event.is_key(term.KeySpace):
+            activate_hits += 1
+            ret true
+        end
+        ret false
     end
 end
 
@@ -141,6 +164,18 @@ end
 // so a test can assert how many times a binding fired.
 func count_action(): func (basalam.Screen*, basalam.Event) bool:
     ret (screen: basalam.Screen*, event: basalam.Event): ret bump_seq(screen, event) end
+end
+
+// vim_search_count is the vim preset's on_search hook: it counts one run and
+// consumes the key, so a test can prove "/" reached the application.
+func vim_search_count(): func (basalam.Screen*, basalam.Event) bool:
+    ret (screen: basalam.Screen*, event: basalam.Event): ret bump_seq(screen, event) end
+end
+
+// vim_search_decline is an on_search hook that declines the key, so a test
+// can see that the hook's boolean is the dispatch result.
+func vim_search_decline(): func (basalam.Screen*, basalam.Event) bool:
+    ret (screen: basalam.Screen*, event: basalam.Event): ret false end
 end
 
 // new_focus_map returns a fresh keymap that binds b to moving the focus to id;
@@ -858,6 +893,151 @@ func test_default_keymap_extend_rebind():
     testing.AssertEqInt(s.focused_id(), 4)
 end
 
+// The vim preset tests. Each installs NewVimKeymap on a real Screen and
+// dispatches through it, so both the widget-first order and the keymap
+// fallback run.
+
+func test_vim_preset_hjkl_moves_spatially():
+    mut s := grid()
+    defer s.close()
+    s.set_keymap(basalam.NewVimKeymap(vim_search_count()))
+
+    testing.AssertEqInt(s.focused_id(), 1)
+    testing.AssertTrue(s.dispatch(key("j"))) // Down: a(1) -> c(3)
+    testing.AssertEqInt(s.focused_id(), 3)
+    testing.AssertTrue(s.dispatch(key("k"))) // Up: c(3) -> a(1)
+    testing.AssertEqInt(s.focused_id(), 1)
+    testing.AssertTrue(s.dispatch(key("l"))) // Right: a(1) -> b(2)
+    testing.AssertEqInt(s.focused_id(), 2)
+    testing.AssertTrue(s.dispatch(key("h"))) // Left: b(2) -> a(1)
+    testing.AssertEqInt(s.focused_id(), 1)
+end
+
+func test_vim_preset_keeps_tab_and_arrows():
+    mut s := grid()
+    defer s.close()
+    s.set_keymap(basalam.NewVimKeymap(vim_search_count()))
+
+    // The preset is a superset: the default rows are still there.
+    testing.AssertTrue(s.dispatch(key("\t"))) // Tab: a(1) -> b(2)
+    testing.AssertEqInt(s.focused_id(), 2)
+    testing.AssertTrue(s.dispatch(key("\x1b[B"))) // Down: b(2) -> d(4)
+    testing.AssertEqInt(s.focused_id(), 4)
+    testing.AssertTrue(s.dispatch(key("\x1b[A"))) // Up: d(4) -> b(2)
+    testing.AssertEqInt(s.focused_id(), 2)
+end
+
+func test_vim_preset_gg_moves_to_the_top_of_the_column():
+    mut s := grid()
+    defer s.close()
+    s.set_keymap(basalam.NewVimKeymap(vim_search_count()))
+    testing.AssertTrue(s.focus(4))
+
+    // One g is only a prefix: nothing moves and the key is unconsumed.
+    testing.AssertFalse(s.dispatch(key("g")))
+    testing.AssertEqInt(s.focused_id(), 4)
+    // The pair walks up its own column: d(4) -> b(2), not to a(1).
+    testing.AssertTrue(s.dispatch(key("g")))
+    testing.AssertEqInt(s.focused_id(), 2)
+    // A further g starts a new prefix and moves nothing.
+    testing.AssertFalse(s.dispatch(key("g")))
+    testing.AssertEqInt(s.focused_id(), 2)
+end
+
+func test_vim_preset_gg_needs_both_keys():
+    mut s := grid()
+    defer s.close()
+    s.set_keymap(basalam.NewVimKeymap(vim_search_count()))
+
+    testing.AssertFalse(s.dispatch(key("g")))
+    testing.AssertEqInt(s.focused_id(), 1)
+    // The parked prefix is not itself a binding: a mismatch clears it.
+    testing.AssertFalse(s.dispatch(key("z")))
+    testing.AssertEqInt(s.focused_id(), 1)
+end
+
+func test_vim_preset_G_moves_to_the_bottom_of_the_column():
+    mut s := grid()
+    defer s.close()
+    s.set_keymap(basalam.NewVimKeymap(vim_search_count()))
+    testing.AssertTrue(s.focus(2))
+
+    // b(2) -> d(4): the column is kept and the move stops at the last row.
+    testing.AssertTrue(s.dispatch(key("G")))
+    testing.AssertEqInt(s.focused_id(), 4)
+    testing.AssertFalse(s.dispatch(key("G")))
+    testing.AssertEqInt(s.focused_id(), 4)
+end
+
+func test_vim_preset_esc_pops_one_level():
+    mut s := grid()
+    defer s.close()
+    s.set_keymap(basalam.NewVimKeymap(vim_search_count()))
+    testing.AssertTrue(s.push_focus(2))
+    testing.AssertEqInt(s.focused_id(), 2)
+    testing.AssertEqInt(s.focus_stack.len(), 2)
+
+    testing.AssertTrue(s.dispatch(key("\x1b")))
+    testing.AssertEqInt(s.focused_id(), 1)
+    testing.AssertEqInt(s.focus_stack.len(), 1)
+end
+
+func test_vim_preset_esc_at_root_is_unconsumed():
+    mut s := grid()
+    defer s.close()
+    s.set_keymap(basalam.NewVimKeymap(vim_search_count()))
+    testing.AssertEqInt(s.focus_stack.len(), 1)
+
+    // At depth one the guard declines, so the app keeps Esc and the screen
+    // still has a focused widget.
+    testing.AssertFalse(s.dispatch(key("\x1b")))
+    testing.AssertEqInt(s.focused_id(), 1)
+    testing.AssertEqInt(s.focus_stack.len(), 1)
+end
+
+func test_vim_preset_slash_runs_the_app_action():
+    mut s := grid()
+    defer s.close()
+    s.set_keymap(basalam.NewVimKeymap(vim_search_count()))
+    seq_hits = 0
+
+    testing.AssertTrue(s.dispatch(key("/")))
+    testing.AssertEqInt(seq_hits, 1)
+    // A declining hook makes "/" an unconsumed key.
+    s.set_keymap(basalam.NewVimKeymap(vim_search_decline()))
+    testing.AssertFalse(s.dispatch(key("/")))
+end
+
+func test_vim_preset_is_opt_in():
+    mut s := grid()
+    defer s.close()
+
+    // Nothing installed: the vim rows are inert.
+    testing.AssertFalse(s.dispatch(key("j")))
+    testing.AssertEqInt(s.focused_id(), 1)
+    // A blank map is still blank: it does not inherit the preset.
+    s.set_keymap(basalam.NewKeymap())
+    testing.AssertFalse(s.dispatch(key("j")))
+    testing.AssertFalse(s.dispatch(key("\t")))
+    testing.AssertEqInt(s.focused_id(), 1)
+end
+
+func test_vim_preset_widget_still_takes_enter_and_space():
+    mut s := basalam.NewScreen(Root {}, 20, 5)
+    defer s.close()
+    w := s.add(basalam.RootId, Activate {})
+    _ := s.add(basalam.RootId, Field {})
+    s.set_keymap(basalam.NewVimKeymap(vim_search_count()))
+    activate_hits = 0
+
+    // The widget answers Enter and Space before the keymap is consulted, and
+    // the preset deliberately has no row for either.
+    testing.AssertTrue(s.dispatch(key("\r")))
+    testing.AssertTrue(s.dispatch(key(" ")))
+    testing.AssertEqInt(activate_hits, 2)
+    testing.AssertEqInt(s.focused_id(), w)
+end
+
 func test_sequence_timeout_blocks_completion():
     mut r := Rig {}
     defer r.release()
@@ -982,6 +1162,16 @@ func main:
     test_default_keymap_fresh_per_call()
     test_default_keymap_set_keymap_and_replace()
     test_default_keymap_extend_rebind()
+    test_vim_preset_hjkl_moves_spatially()
+    test_vim_preset_keeps_tab_and_arrows()
+    test_vim_preset_gg_moves_to_the_top_of_the_column()
+    test_vim_preset_gg_needs_both_keys()
+    test_vim_preset_G_moves_to_the_bottom_of_the_column()
+    test_vim_preset_esc_pops_one_level()
+    test_vim_preset_esc_at_root_is_unconsumed()
+    test_vim_preset_slash_runs_the_app_action()
+    test_vim_preset_is_opt_in()
+    test_vim_preset_widget_still_takes_enter_and_space()
     test_sequence_timeout_blocks_completion()
     test_sequence_timeout_fresh_start_fires_single()
     test_sequence_timeout_zero_never_expires()
