@@ -8,7 +8,7 @@ build full-screen terminal interfaces. It sits on top of Salam's standard
 `term` package and adds geometry, widgets, events, focus, and a screen that
 draws frames.
 
-> **Status: 0.3.0, early development.** See the
+> **Status: 0.3.1, early development.** See the
 > [CHANGELOG](CHANGELOG.md) for what this release contains.
 
 ## Install
@@ -19,38 +19,30 @@ You need the Salam compiler, version 0.5.9 or later:
 { curl -fsSL https://raw.githubusercontent.com/SalamLang/Salam/refs/heads/main/install.sh || wget -qO- https://raw.githubusercontent.com/SalamLang/Salam/refs/heads/main/install.sh; } | sh
 ```
 
-Salam has no third-party package registry yet, so vendor basalam into your
-project and pin it to a release tag:
+Add basalam with Salam's package manager. If the project has no `salam.toml`
+yet, run `salam init` first, then pin a release tag:
 
 ```sh
-git submodule add https://github.com/curedbylethe/basalam vendor/basalam
-git -C vendor/basalam checkout v0.3.0
-git add vendor/basalam .gitmodules
-git commit -m "chore: vendor basalam v0.3.0"
+salam add github.com/curedbylethe/basalam@v0.3.1
 ```
 
-The checkout records the tag's commit in the parent repository's gitlink, and
-that commit is what makes the pin reproducible: a fresh `git clone` followed
-by `git submodule update --init --recursive` reproduces exactly that commit.
-The submodule reports `## HEAD (no branch)`; that is expected for a pinned
-submodule.
+`salam add` writes the dependency to `salam.toml` and pins its commit and
+sha256 in `salam.lock`. Commit both files. The lock is what makes the pin
+reproducible, and a fresh clone restores the download with `salam deps`.
 
-To move the pin to another release, check out its tag and commit the new
-gitlink:
+To move to another release, run the same command with that release's tag;
+`salam add` replaces the pin.
 
-```sh
-git -C vendor/basalam fetch --tags origin
-git -C vendor/basalam checkout v0.3.0
-git add vendor/basalam
-git commit -m "chore: bump basalam to v0.3.0"
-```
+Name the tag rather than running a bare `salam update`. That command moves
+within the same major version, and until 1.0 the same major covers every `0.y`
+minor, which this project treats as breaking.
 
 ## Quick start
 
 ```salam
 import term
 
-include "vendor/basalam/basalam/basalam.salam"
+import "github.com/curedbylethe/basalam/basalam"
 
 struct Hello:
     pub use basalam.BaseWidget

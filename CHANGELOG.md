@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-10-24
+
+### Changed
+
+- Install instructions use Salam's package manager: `salam add
+  github.com/curedbylethe/basalam` replaces the git-submodule vendoring, and a
+  program imports the package with `import "github.com/curedbylethe/basalam/basalam"`
+  instead of an `include` path.
+- The documentation example checker accepts the import line, so the quickstart
+  sample still compiles in CI.
+
 ## [0.3.0] - 2026-10-24
 
 ### Changed
@@ -342,7 +353,8 @@ release builds on.
 - Project scaffolding: GPL-3.0 license, `Makefile`, golden-file test runner,
   GitHub Actions CI, and the Mintlify documentation site.
 
-[Unreleased]: https://github.com/curedbylethe/basalam/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/curedbylethe/basalam/compare/v0.3.1...HEAD
+[0.3.1]: https://github.com/curedbylethe/basalam/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/curedbylethe/basalam/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/curedbylethe/basalam/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/curedbylethe/basalam/releases/tag/v0.1.0
