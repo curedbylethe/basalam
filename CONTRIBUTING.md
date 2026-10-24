@@ -29,7 +29,7 @@ commit. By taking part you agree to follow the
 | `make run`               | Builds and runs the demo example                                                                                |
 | `make format`            | Formats all Salam sources in place                                                                              |
 | `make check`             | Format check, strict build and examples, tests, doc examples; CI adds `test-llvm` and the docs job               |
-| `make release-check`     | Checks `basalam.Version`, the changelog headings, and the link definitions against [RELEASING.md](RELEASING.md)  |
+| `make release-check`     | Checks `Version`, `salam.toml`, changelog headings, and links against [RELEASING.md](RELEASING.md)              |
 | `make docs`              | Previews the documentation site (`npm i -g mint@4.2.988` first)                                                 |
 | `make docs-check`        | Validates the documentation site and its links                                                                  |
 | `make docs-format-check` | Fails if `mint format` would rewrite a docs page                                                                |
@@ -43,6 +43,10 @@ Set `SALAM=/path/to/salam` to use a compiler that is not on your `PATH`.
   scratch files here.
 - `tests/` holds the test programs and their golden output.
 - `examples/` holds runnable programs for newcomers.
+- `salam.toml` is the package manifest: the package name, version, and the
+  minimum Salam compiler.
+- `salam.lock` is consumer-side only: `salam add` writes it in a project that
+  depends on basalam, and it is not committed here.
 - The `.mdx` files and `docs.json` at the root are the Mintlify
   documentation site.
 

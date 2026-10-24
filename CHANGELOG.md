@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `salam.toml` declares the package name, version, and minimum Salam
+  (`>=0.5.9`), and `make release-check` keeps its version in step with
+  `basalam.Version`.
+
 ## [0.3.1] - 2026-10-24
 
 ### Changed
