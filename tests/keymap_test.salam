@@ -893,6 +893,73 @@ func test_default_keymap_extend_rebind():
     testing.AssertEqInt(s.focused_id(), 4)
 end
 
+func test_backtab_decodes_to_an_unknown_key():
+    k := term.Decode("\x1b[Z")
+
+    // Shift+Tab has no key of its own in the pinned std/term: Z is absent from
+    // the letter map, so the sequence stays an anonymous KeyUnknown with no
+    // modifiers and its bytes kept in raw.
+    testing.AssertEqInt(k.code, term.KeyUnknown)
+    testing.AssertFalse(k.shift)
+    testing.AssertTrue(k.ch == "")
+    testing.AssertTrue(k.raw == "\x1b[Z")
+end
+
+func test_backtab_binding_fires_through_dispatch():
+    mut s := basalam.NewScreen(Root {}, 20, 5)
+    defer s.close()
+    w1 := s.add(basalam.RootId, Field {})
+    w2 := s.add(basalam.RootId, Field {})
+    mut km := basalam.NewKeymap()
+    km.bind(term.Decode("\x1b[Z"), action_focus(w2))
+    s.set_keymap(km)
+
+    // An unnamed key is still a key: the normal binding API accepts it and a
+    // real dispatch routes it to the action.
+    testing.AssertEqInt(s.focused_id(), w1)
+    testing.AssertTrue(s.dispatch(key("\x1b[Z")))
+    testing.AssertEqInt(s.focused_id(), w2)
+end
+
+func test_backtab_variants_are_distinct_keys():
+    mut s := basalam.NewScreen(Root {}, 20, 5)
+    defer s.close()
+    w1 := s.add(basalam.RootId, Field {})
+    w3 := s.add(basalam.RootId, Field {})
+    w4 := s.add(basalam.RootId, Field {})
+    mut km := basalam.NewKeymap()
+    km.bind(term.Decode("\x1b[Z"), action_focus(w3))
+    km.bind(term.Decode("\x1b[1;2Z"), action_focus(w4))
+    s.set_keymap(km)
+
+    // Terminals disagree about the Shift+Tab sequence. The modified form parses
+    // 1;2 and sets shift, so key_id's raw term keeps the two apart and each one
+    // fires only its own binding.
+    testing.AssertFalse(term.Decode("\x1b[Z").shift)
+    testing.AssertTrue(term.Decode("\x1b[1;2Z").shift)
+    testing.AssertTrue(term.Decode("\x1b[1;2Z").raw != term.Decode("\x1b[Z").raw)
+
+    testing.AssertEqInt(s.focused_id(), w1)
+    testing.AssertTrue(s.dispatch(key("\x1b[Z")))
+    testing.AssertEqInt(s.focused_id(), w3)
+    testing.AssertTrue(s.focus(w1))
+    testing.AssertTrue(s.dispatch(key("\x1b[1;2Z")))
+    testing.AssertEqInt(s.focused_id(), w4)
+end
+
+func test_default_map_leaves_backtab_unbound():
+    mut s := basalam.NewScreen(Root {}, 20, 5)
+    defer s.close()
+    w1 := s.add(basalam.RootId, Field {})
+    _ := s.add(basalam.RootId, Field {})
+    s.set_keymap(basalam.NewDefaultKeymap())
+
+    // The default map learns no raw sequence behind the missing constant, so a
+    // backtab the terminal does send falls through to the application.
+    testing.AssertFalse(s.dispatch(key("\x1b[Z")))
+    testing.AssertEqInt(s.focused_id(), w1)
+end
+
 // The vim preset tests. Each installs NewVimKeymap on a real Screen and
 // dispatches through it, so both the widget-first order and the keymap
 // fallback run.
@@ -1162,6 +1229,10 @@ func main:
     test_default_keymap_fresh_per_call()
     test_default_keymap_set_keymap_and_replace()
     test_default_keymap_extend_rebind()
+    test_backtab_decodes_to_an_unknown_key()
+    test_backtab_binding_fires_through_dispatch()
+    test_backtab_variants_are_distinct_keys()
+    test_default_map_leaves_backtab_unbound()
     test_vim_preset_hjkl_moves_spatially()
     test_vim_preset_keeps_tab_and_arrows()
     test_vim_preset_gg_moves_to_the_top_of_the_column()
