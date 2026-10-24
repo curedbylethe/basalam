@@ -5,10 +5,11 @@
 # shipped code that did not type-check. This harness extracts each example
 # and runs it through the compiler on every `make check`.
 #
-# A block counts as a complete program only when it contains an `include` of
-# the library and a `func main`. A fragment without both assumes an ambient
-# `screen`, `t`, or a widget defined earlier on the page, so it is skipped
-# silently.
+# A block counts as a complete program only when it loads the library — an
+# `include` path ending in `basalam/basalam.salam`, or the package import
+# `import "github.com/curedbylethe/basalam/basalam"` — and a `func main`. A
+# fragment without both assumes an ambient `screen`, `t`, or a widget defined
+# earlier on the page, so it is skipped silently.
 #
 # `salam check` rather than `salam build`: the examples are only type-checked,
 # never run, and check is several times faster.
@@ -65,6 +66,13 @@ for page in $pages; do
         }
         inblock {
             line = $0
+            if (line ~ /^[ ]*import[ ]+"[^"]*basalam\/basalam[^"]*"/) {
+                hasinclude = 1
+                # An import needs a project salam.toml; the extracted example
+                # has none, so load the package by path instead.
+                sub(/^[ ]*import[ ]+"[^"]*"/,
+                    "include \"../../basalam/basalam.salam\"", line)
+            }
             if (line ~ /include[ ]+"[^"]*basalam\/basalam\.salam"/) {
                 hasinclude = 1
                 # include paths resolve relative to the including file.

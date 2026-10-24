@@ -4,7 +4,7 @@ description: "Install Salam, add basalam to your project, and build a program th
 keywords:
   - "install"
   - "quickstart"
-  - "include"
+  - "salam add"
   - "build"
 ---
 
@@ -23,37 +23,27 @@ keywords:
     ```
   </Step>
   <Step title="Add basalam to your project">
-    Salam has no package registry for third-party libraries yet, so you vendor the source. Pin it to a release tag so your builds stay reproducible:
+    basalam is a package on GitHub, so Salam's package manager installs it. Run `salam init` once if the project has no `salam.toml`, then pin a release tag so your builds stay reproducible:
 
     ```bash
-    git submodule add https://github.com/curedbylethe/basalam vendor/basalam
-    git -C vendor/basalam checkout v0.3.0
-    git add vendor/basalam .gitmodules
-    git commit -m "chore: vendor basalam v0.3.0"
+    salam add github.com/curedbylethe/basalam@v0.3.1
     ```
 
-    The checkout records the tag's commit in your repository's gitlink, and that commit is what makes the pin reproducible: a fresh clone plus `git submodule update --init --recursive` reproduces exactly that commit. The submodule reports `## HEAD (no branch)`; that is expected for a pinned submodule.
-
-    The library itself is the `basalam/` directory inside the repository.
+    `salam add` writes the dependency to `salam.toml` and pins its commit and sha256 in `salam.lock`. Commit both files. The lock is what makes the pin reproducible, and a fresh clone restores the download with `salam deps`.
 
     <Note>
-      To move the pin to another release, check out its tag and commit the new gitlink:
+      To move to another release, run the same command with that release's tag; `salam add` replaces the pin.
 
-      ```bash
-      git -C vendor/basalam fetch --tags origin
-      git -C vendor/basalam checkout v0.3.0
-      git add vendor/basalam
-      git commit -m "chore: bump basalam to v0.3.0"
-      ```
+      Name the tag rather than running a bare `salam update`. That command moves within the same major version, and until 1.0 the same major covers every `0.y` minor, which this project treats as breaking.
     </Note>
   </Step>
   <Step title="Write a program">
-    One `include` line pulls in the whole library. The path is relative to the file that contains it.
+    One `import` line pulls in the whole library. The path names the repository, then the package directory inside it.
 
     ```salam main.salam
     import term
     
-    include "vendor/basalam/basalam/basalam.salam"
+    import "github.com/curedbylethe/basalam/basalam"
     
     struct Hello:
         pub use basalam.BaseWidget
@@ -81,7 +71,7 @@ keywords:
     end
     ```
 
-    Salam loads every `.salam` file in `basalam/` as one package because the directory name matches the entry file `basalam.salam`.
+    The import path ends at `basalam/`, the package directory. Salam loads every `.salam` file in it as one package because its name matches the entry file `basalam.salam`.
   </Step>
   <Step title="Build and run">
     ```bash
@@ -99,7 +89,7 @@ keywords:
 - `NewTerminalScreen` makes `Hello` the root widget, sized to the terminal.
 - `start()` switches the terminal to raw mode and the alternate screen and starts the input thread. `defer screen.close()` undoes all of it on every exit path.
 - The `until` loop takes one event at a time. `dispatch` offers it to the widgets; `q` is not consumed by any widget, so the loop stops the screen.
-- `basalam.Version` is the library version (`0.3.0`); the [demo](/guides/examples) prints it in its title bar.
+- `basalam.Version` is the library version (`0.3.1`); the [demo](/guides/examples) prints it in its title bar.
 
 Read [The event loop](/concepts/event-loop) for the details, or [Writing a widget](/guides/writing-a-widget) to build an interactive one.
 
