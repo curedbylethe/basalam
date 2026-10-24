@@ -45,6 +45,9 @@ Set `SALAM=/path/to/salam` to use a compiler that is not on your `PATH`.
 - `examples/` holds runnable programs for newcomers.
 - `salam.toml` is the package manifest: the package name, version, and the
   minimum Salam compiler.
+- The documented import is `import "github.com/curedbylethe/basalam/basalam"`;
+  the doc harness rejects the short form because the repository has no root
+  entry file.
 - `salam.lock` is consumer-side only: `salam add` writes it in a project that
   depends on basalam, and it is not committed here.
 - The `.mdx` files and `docs.json` at the root are the Mintlify
