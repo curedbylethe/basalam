@@ -85,6 +85,17 @@
  * own map. Shift+Tab is deliberately absent: Salam decodes the backtab
  * sequence to KeyUnknown, and a binding here would need an escape literal; an
  * app may bind term.Decode(its own sequence) if its terminal sends one.
+ *
+ * Vim preset. NewVimKeymap is opt-in in the same way and is a superset of
+ * the default five: it adds h/j/k/l for the same four directions, "gg" and
+ * "G" for the ends of the focused widget's column (repeated focus_up and
+ * focus_down, so the column is preserved), Esc for pop_focus while a pushed
+ * focus remains, and "/" for the application's own on_search action. Enter
+ * and Space are deliberately absent: dispatch offers every key to the focused
+ * widget first, where Button, Checkbox, List and Modal already act on them,
+ * so a row here would fire only for widgets that declined the key. There is
+ * no generic activation to bind either: Widget has no activate method and a
+ * dyn Widget cannot be downcast.
  */
 
 package basalam
@@ -114,9 +125,10 @@ struct KeyNode:
 end
 
 @en "Keymap"
-/// A table of key and key-sequence bindings. Build it with NewKeymap (or
-/// empty with `Keymap {}`), fill it with bind and its variants, feed events
-/// to handle, and release it with free. Never copy a Keymap value.
+/// A table of key and key-sequence bindings. Build it with NewKeymap,
+/// NewDefaultKeymap or NewVimKeymap (or empty with `Keymap {}`), fill it with
+/// bind and its variants, feed events to handle, and release it with free.
+/// Never copy a Keymap value.
 pub struct Keymap:
     // nodes[0] is the root; every child index is >= 1 and points into nodes.
     // The root is created by ensure_root on the first bind.
@@ -409,6 +421,42 @@ func drop_override(node: KeyNode*, widget: int):
     end
 end
 
+// vim_home moves the focus to the top of the focused widget's column and
+// reports whether it moved: one focus_up per row, stopping when the direction
+// is exhausted. Repeated moves rather than an ordinal jump preserve the
+// column, and the extra changes coalesce into one repaint because `dirty` is
+// a flag.
+func vim_home(screen: Screen*, _event: Event): bool:
+    mut moved := false
+    // `until` is the language's while loop, so the condition performs one
+    // move per iteration and the body only records that it happened.
+    until screen[0].focus_up():
+        moved = true
+    end
+    ret moved
+end
+
+// vim_end is vim_home downward: it moves the focus to the bottom of the
+// focused widget's column and reports whether it moved.
+func vim_end(screen: Screen*, _event: Event): bool:
+    mut moved := false
+    until screen[0].focus_down():
+        moved = true
+    end
+    ret moved
+end
+
+// vim_back pops one pushed focus and reports the key consumed. At depth one
+// (or with nothing focused) it returns false before touching the stack, so
+// Esc falls through to the application instead of leaving the screen with no
+// focused widget.
+func vim_back(screen: Screen*, _event: Event): bool:
+    if screen[0].focus_stack.len() <= 1:
+        ret false
+    end
+    ret screen[0].pop_focus()
+end
+
 @en "NewKeymap"
 /// Creates an empty keymap. Feed it keys with bind and the bind_* variants
 /// and release it with free. The root node is created on the first bind.
@@ -436,5 +484,40 @@ pub func NewDefaultKeymap(): Keymap:
     km.bind(term.Key { code = term.KeyDown }, focus_down_action)
     km.bind(term.Key { code = term.KeyLeft }, focus_left_action)
     km.bind(term.Key { code = term.KeyRight }, focus_right_action)
+    ret km
+end
+
+@en "NewVimKeymap"
+/// Creates an opt-in vim-style preset. It is a superset of NewDefaultKeymap,
+/// so Tab and the four arrows keep working, and it adds h, j, k and l for
+/// the same four directions; "gg" and "G" move to the top and the bottom of
+/// the focused widget's column, by repeated directional moves, so the column
+/// is kept; Esc pops the focus stack, but only while a pushed focus remains,
+/// and is reported unconsumed at the root so the application still sees it;
+/// and "/" runs on_search, the application's own action, whose boolean is the
+/// dispatch result. Enter and Space are deliberately not bound: dispatch
+/// offers every key to the focused widget first, where Button, Checkbox, List
+/// and Modal already act on them, and Widget has no generic activation to
+/// bind. A focused Input consumes "/" before the keymap sees it. Install the
+/// map with set_keymap, which takes ownership: never copy or free it
+/// afterward.
+pub func NewVimKeymap(on_search: func (Screen*, Event) bool): Keymap:
+    focus_up_action := (screen: Screen*, event: Event): ret screen[0].focus_up() end
+    focus_down_action := (screen: Screen*, event: Event): ret screen[0].focus_down() end
+    focus_left_action := (screen: Screen*, event: Event): ret screen[0].focus_left() end
+    focus_right_action := (screen: Screen*, event: Event): ret screen[0].focus_right() end
+    vim_home_action := (screen: Screen*, event: Event): ret vim_home(screen, event) end
+    vim_end_action := (screen: Screen*, event: Event): ret vim_end(screen, event) end
+    vim_back_action := (screen: Screen*, event: Event): ret vim_back(screen, event) end
+
+    mut km := NewDefaultKeymap()
+    km.bind(term.Decode("h"), focus_left_action)
+    km.bind(term.Decode("j"), focus_down_action)
+    km.bind(term.Decode("k"), focus_up_action)
+    km.bind(term.Decode("l"), focus_right_action)
+    km.bind_seq("gg", vim_home_action)
+    km.bind(term.Decode("G"), vim_end_action)
+    km.bind(term.Key { code = term.KeyEscape }, vim_back_action)
+    km.bind(term.Decode("/"), on_search)
     ret km
 end
