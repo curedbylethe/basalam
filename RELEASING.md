@@ -11,8 +11,9 @@ CI runs it on every pull request.
 ## Version numbers
 
 basalam follows [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html).
-`basalam.Version` in `basalam/basalam.salam` is the only machine-readable
-version; the newest dated changelog heading and the tag must equal it.
+`basalam.Version` in `basalam/basalam.salam`, and its copy in `salam.toml`, are
+the only machine-readable versions; the newest dated changelog heading and the
+tag must equal them.
 
 **Before 1.0 — versions are `0.y.z`.** The library is still finding its API, so:
 
@@ -95,8 +96,8 @@ workflow extracts the section verbatim — it never rewrites or synthesizes text
 3. Add a fresh, empty `## [Unreleased]` section at the top.
 4. Update the link definitions: add `[X.Y.Z]`, and point `[Unreleased]` at
    `compare/vX.Y.Z...HEAD`.
-5. Bump `Version` in `basalam/basalam.salam`, and the version shown in
-   `README.md`, `index.mdx`, and `quickstart.mdx`.
+5. Bump `Version` in `basalam/basalam.salam`, the `version` in `salam.toml`,
+   and the version shown in `README.md`, `index.mdx`, and `quickstart.mdx`.
 6. Run `make check`, `make test-llvm`, `make docs-check`,
    `make docs-format-check`, and `make release-check`. All five must pass.
 7. Open the release pull request, review it, and merge it to `main`.
@@ -134,6 +135,8 @@ tree with `tests/release-check.sh tag vX.Y.Z` and prints the notes with
 tree. It fails when:
 
 - `Version` is missing, duplicated, or not plain `X.Y.Z`;
+- `salam.toml` is missing from the working tree, or its `version` is not
+  `Version`;
 - there is not exactly one `## [Unreleased]` heading;
 - the newest dated heading is not `Version`, or a version is dated twice;
 - a dated version has no link definition, or one pointing somewhere other than
@@ -143,5 +146,7 @@ tree. It fails when:
 
 The release workflow runs the same script in `tag vX.Y.Z` mode, which reads the
 tagged tree with `git show` rather than the working tree, requires an annotated
-tag, and requires the tag to equal `v` + `Version`. `notes vX.Y.Z` prints the
-section verbatim for the release body.
+tag, and requires the tag to equal `v` + `Version`. A tag whose tree predates
+`salam.toml` — `v0.1.0` through `v0.3.1` — skips the manifest comparison and
+still validates. `notes vX.Y.Z` prints the section verbatim for the release
+body.

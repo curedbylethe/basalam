@@ -17,6 +17,10 @@
 # commit predates this policy). `notes` prints the section verbatim for GitHub
 # Release notes: the changelog is hand-written, never generated.
 #
+# `salam.toml` joins the version surfaces: its `[package].version` must equal
+# `Version`. Tags from v0.1.0 through v0.3.1 predate the manifest, so in `tag`
+# mode the comparison is skipped when the manifest is absent from that tree.
+#
 # Read-only: no network, no writes.
 
 set -u
@@ -26,6 +30,7 @@ export LC_ALL
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 SALAM_PATH=basalam/basalam.salam
 CHANGELOG_PATH=CHANGELOG.md
+MANIFEST_PATH=salam.toml
 REPO_URL=https://github.com/curedbylethe/basalam
 
 die() {
@@ -68,11 +73,12 @@ trim_blanks() {
     '
 }
 
-# check_metadata <salam text> <changelog text> [tag]
+# check_metadata <salam text> <changelog text> <manifest text or empty> [tag]
 check_metadata() {
     salam=$1
     changelog=$2
-    tag=${3:-}
+    manifest=${3:-}
+    tag=${4:-}
 
     version=$(printf '%s\n' "$salam" | sed -n \
         's/^[[:space:]]*pub const Version[[:space:]]*:=[[:space:]]*"\([0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*\)"[[:space:]]*$/\1/p')
@@ -82,6 +88,15 @@ check_metadata() {
 
     if [ -n "$tag" ] && [ "$tag" != "v$version" ]; then
         die "tag $tag does not match Version $version"
+    fi
+
+    if [ -n "$manifest" ]; then
+        manifest_version=$(printf '%s\n' "$manifest" | sed -n \
+            's/^version[[:space:]]*=[[:space:]]*"\([0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*\)"[[:space:]]*$/\1/p')
+        [ -n "$manifest_version" ] ||
+            die "$MANIFEST_PATH needs a \`version = \"X.Y.Z\"\` line in [package]"
+        [ "$manifest_version" = "$version" ] ||
+            die "$MANIFEST_PATH version $manifest_version does not match Version $version in $SALAM_PATH"
     fi
 
     unreleased_count=$(printf '%s\n' "$changelog" | grep -c -x -F '## [Unreleased]')
@@ -141,7 +156,9 @@ check)
     [ "$#" -eq 0 ] || usage
     [ -f "$ROOT/$SALAM_PATH" ] || die "missing $SALAM_PATH"
     [ -f "$ROOT/$CHANGELOG_PATH" ] || die "missing $CHANGELOG_PATH"
-    check_metadata "$(cat "$ROOT/$SALAM_PATH")" "$(cat "$ROOT/$CHANGELOG_PATH")"
+    [ -f "$ROOT/$MANIFEST_PATH" ] || die "missing $MANIFEST_PATH"
+    check_metadata "$(cat "$ROOT/$SALAM_PATH")" "$(cat "$ROOT/$CHANGELOG_PATH")" \
+        "$(cat "$ROOT/$MANIFEST_PATH")"
     ;;
 tag | notes)
     [ "$#" -eq 1 ] || usage
@@ -155,12 +172,13 @@ tag | notes)
         die "cannot read $SALAM_PATH at $tag"
     changelog=$(git -C "$ROOT" show "$commit:$CHANGELOG_PATH") ||
         die "cannot read $CHANGELOG_PATH at $tag"
+    manifest=$(git -C "$ROOT" show "$commit:$MANIFEST_PATH" 2>/dev/null) || manifest=
 
     if [ "$mode" = tag ]; then
         object_type=$(git -C "$ROOT" cat-file -t "refs/tags/$tag")
         [ "$object_type" = tag ] ||
             die "$tag is a lightweight tag; releases use annotated tags (git tag -a)"
-        check_metadata "$salam" "$changelog" "$tag"
+        check_metadata "$salam" "$changelog" "$manifest" "$tag"
     else
         body=$(trim_blanks "$(section_body "${tag#v}" "$changelog")")
         [ -n "$body" ] || die "changelog has no section for ${tag#v} at $tag"
