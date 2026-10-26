@@ -73,16 +73,16 @@ The line is drawn in reverse video while the widget has focus.
 
     ```salam
     pub func render(buf: basalam.Buffer, bounds: basalam.Rect):
-        mut style := ""
+        mut style := basalam.StyleDefault
         if buf.focused:
-            style = term.Sgr(term.StyleReverse)
+            style = basalam.Style { reverse = true }
         end
         buf.fill(bounds, " ", style)
         buf.put_str(bounds.x, bounds.y, this.label + ": " + this.value, style)
     end
     ```
 
-    Build styles with `std/term` (`term.Sgr`, `term.SeqFg256`, and friends). Never write escape sequences by hand.
+    Build a `Style` value (`basalam.Style { bold = true }`, `basalam.Style { fg = basalam.Cyan }`) and let the buffer turn it into bytes. Never write escape sequences by hand.
   </Step>
   <Step title="Test it without a terminal">
     Convert the widget to `dyn basalam.Widget`, give it bounds, feed it events, and render it into a buffer you can inspect. `term.Decode` builds the same `term.Key` a real key press would produce.

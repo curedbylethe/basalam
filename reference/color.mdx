@@ -14,11 +14,7 @@ keywords:
   - "downgrade"
 ---
 
-`Color` is the terminal color value type. It covers the four kinds a terminal understands — its own default, the 16-color ANSI palette, the 256-color palette, and 24-bit truecolor — and encodes each to the exact escape sequence the terminal reads. It is the value half of the styling work; the [`Style`](/reference/style) type carries it and [`Text`](/reference/text) draws with it.
-
-<Note>
-  The [`Style`](/reference/style) type now carries colors and `Text` draws with it. Cells are still different: `Cell.style` is a raw SGR string built with `std/term`, and the other widgets (`Input`, `List`) still pass strings, while `Panel`, `Button`, `Checkbox`, `Progress`, `Table`, `Modal`, and `Separator` take `Style` values. Migrating cells to `Style` is a follow-up.
-</Note>
+`Color` is the terminal color value type. It covers the four kinds a terminal understands — its own default, the 16-color ANSI palette, the 256-color palette, and 24-bit truecolor — and encodes each to the exact escape sequence the terminal reads. [`Style`](/reference/style) carries it and every widget draws with a `Style`.
 
 ## Color
 
@@ -153,7 +149,7 @@ pub func Lower(c: Color, tier: ColorTier): Color
 - Different kinds are never equal, even when they render alike: `Color.Indexed(196) != Color.Rgb(255, 0, 0)`.
 - `Color.Default` is not white and not any palette entry: `Color.Default != Color.Ansi(7)`.
 
-Cell diffs compare the content string and the style string. This `Color` equality is what that comparison will use once cells carry colors.
+A buffer compares whole `Cell` values: the character and the typed `Style`, field by field, so `Color` equality decides every colour. It compares values, not bytes: two styles that differ only in a colour the tier lowers away (`ColorTier.Off` drops every colour) are unequal, so the diff repaints a cell whose emitted bytes would not change. That is the safe direction: it never skips a cell that would.
 
 ## Encoding at a tier
 

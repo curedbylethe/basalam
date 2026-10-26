@@ -13,7 +13,7 @@ keywords:
 A `Buffer` is a grid of `Cell`s. Widgets draw into it; they never write to the terminal. Every write outside the grid or outside the buffer's clip rect is silently dropped, so drawing can never fail.
 
 <Warning>
-  A `Buffer` holds two grids: a back grid widgets draw into and a front grid of what the terminal currently shows. `flush()` writes the touched cells that differ from the front grid and skips clean rows. Mark cells with `set`, `fill`, `put_str`, or `clear`. A direct write to `cells` is not marked, so `diff` can skip it. What is still absent: structured styles (styles are raw SGR strings today; the [Style](/reference/style) type exists and `Text`, `Panel`, `Button`, `Checkbox`, `Progress`, `Table`, `Modal`, and `Separator` carry it, but cells still hold strings — the buffer migration is a follow-up), and wide-character support (each cell holds one codepoint and is assumed to be one column wide, epic 2).
+  A `Buffer` holds two grids: a back grid widgets draw into and a front grid of what the terminal currently shows. `flush()` writes the touched cells that differ from the front grid and skips clean rows. Mark cells with `set`, `fill`, `put_str`, or `clear`. A direct write to `cells` is not marked, so `diff` can skip it. What is still absent: wide-character support (each cell holds one codepoint and is assumed to be one column wide, epic 2) and cursor placement for text input.
 </Warning>
 
 ## Cell
@@ -21,7 +21,7 @@ A `Buffer` is a grid of `Cell`s. Widgets draw into it; they never write to the t
 ```salam
 pub struct Cell:
     pub ch: str = " "
-    pub style: str = ""
+    pub style: Style = StyleDefault
 end
 ```
 
@@ -29,8 +29,8 @@ end
   Exactly one codepoint. A blank cell holds `" "`.
 </ResponseField>
 
-<ResponseField name="style" type="str">
-  SGR escape sequences built with `std/term`, for example `term.Sgr(term.StyleBold) + term.Sgr(term.FgRed)`. `""` is the terminal's default style. The [Color](/reference/color) value type exists, but cells do not carry it yet.
+<ResponseField name="style" type="Style" default="StyleDefault">
+  The resolved [`Style`](/reference/style) this cell is drawn with. `StyleDefault` asks for the terminal's default style. The buffer turns the value into bytes when it emits the frame, so a cell never holds escape sequences.
 </ResponseField>
 
 ## Buffer
@@ -99,8 +99,8 @@ Creates a blank grid with `clip` covering all of it. A negative size is treated 
 | `area(): Rect` | The rect covering the whole grid, `(0, 0, width, height)`. |
 | `set(x: int, y: int, cell: Cell)` | Writes one cell. Ignored outside the grid or the clip. |
 | `get(x: int, y: int): Cell` | Reads one cell. Returns a blank `Cell` outside the grid. Ignores the clip. |
-| `put_str(x: int, y: int, text: str, style: str)` | Writes text left to right, one codepoint per cell. Cut off at the clip; never wraps. |
-| `fill(r: Rect, ch: str, style: str)` | Sets every cell of `r`, clipped, to `ch` in `style`. |
+| `put_str(x: int, y: int, text: str, style: Style)` | Writes text left to right, one codepoint per cell, all in `style`. Cut off at the clip; never wraps. |
+| `fill(r: Rect, ch: str, style: Style)` | Sets every cell of `r`, clipped, to `ch` in `style`. |
 | `clear()` | Resets every cell to blank, ignoring the clip. |
 | `row_text(y: int): str` | The characters of row `y` of the back grid, without styles. `""` outside the grid. Meant for tests and debugging. |
 | `resize(width: int, height: int)` | Replaces both grids with blank ones and resets the clip, forcing a full repaint on the next `diff()`. Keeps `tier`: a resize is not a new terminal. Only the original buffer may call it. |
@@ -109,6 +109,12 @@ Creates a blank grid with `clip` covering all of it. A negative size is treated 
 | `commit()` | Copies marked cells on marked rows into the front grid (every cell while `force_full`), then clears the marks and `force_full`. |
 | `flush()` | Writes the changed cells (see `diff`) to the terminal, then commits. Writes nothing when the diff is empty. |
 | `free()` | Releases both grids. Call once, on the original. |
+
+## Style transitions
+
+A frame starts from the terminal's default style: its first cell is drawn on the assumption that nothing is set. From there, `ansi()` and `diff()` compare each cell's style with the style the terminal is in and, where they differ, emit `StyleSgrOff(previous, tier)` followed by `StyleSgr(next, tier)`. The frame ends by emitting `StyleSgrOff(last, tier)` for the last style it wrote; that is `""` when the last style is `StyleDefault`, so the close needs no condition. `diff()` carries the current style across runs, so a row that continues in the same style emits no sequence at all.
+
+Neither function emits a terminal reset. A reset would discard state instead of describing it, so the frame contract is made of SGR attribute and colour codes only. `Screen.start()` and `Screen.close()` reset the terminal, because they set it up and tear it down rather than draw a frame.
 
 ## Testing what a widget draws
 

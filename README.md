@@ -40,15 +40,13 @@ minor, which this project treats as breaking.
 ## Quick start
 
 ```salam
-import term
-
 import "github.com/curedbylethe/basalam/basalam"
 
 struct Hello:
     pub use basalam.BaseWidget
 
     pub func render(buf: basalam.Buffer, bounds: basalam.Rect):
-        buf.put_str(bounds.x + 2, bounds.y + 1, "Hello from basalam! Press q to quit.", term.Sgr(term.StyleBold))
+        buf.put_str(bounds.x + 2, bounds.y + 1, "Hello from basalam! Press q to quit.", basalam.Style { bold = true })
     end
 end
 

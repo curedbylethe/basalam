@@ -33,23 +33,23 @@ While focused, `j` and `k` move the selection and `Enter` calls `on_select` with
 pub struct List:
     pub use BaseWidget
 
-    pub style: str = ""
-    pub selected_style: str = ""
-    pub selected_unfocused_style: str = ""
+    pub style: Style = StyleDefault
+    pub selected_style: Style = Style { reverse = true }
+    pub selected_unfocused_style: Style = Style { bg = BrightBlack }
     pub on_select: func (int) = (i: int): end
 end
 ```
 
-<ResponseField name="style" type="str">
-  SGR escape sequence(s) for every row. `""` means the terminal's default style.
+<ResponseField name="style" type="Style" default="StyleDefault">
+  The [`Style`](/reference/style) of every unselected row. `StyleDefault` draws with the terminal's default style.
 </ResponseField>
 
-<ResponseField name="selected_style" type="str">
-  SGR escape sequence(s) for the selected row while focused. `""` means reverse video.
+<ResponseField name="selected_style" type="Style" default="Style { reverse = true }">
+  The style of the selected row while focused. It replaces `style` on that row, so reverse video by default.
 </ResponseField>
 
-<ResponseField name="selected_unfocused_style" type="str">
-  SGR escape sequence(s) for the selected row while unfocused. `""` means bright black on a black background.
+<ResponseField name="selected_unfocused_style" type="Style" default="Style { bg = BrightBlack }">
+  The style of the selected row while unfocused. It replaces `style` on that row, so a bright-black background by default.
 </ResponseField>
 
 <ResponseField name="on_select" type="func (int)">
@@ -87,19 +87,21 @@ Only the lowercase `j` and `k` are handled; `K`, the arrow keys, and `g`/`G` are
 
 ## Rows
 
-One item occupies one row, left-aligned at the box's left edge. Each row is filled full width with the row `style` and then the item is written over it, clipped to the width with a character substr — so a row never wraps and never carries an ellipsis. Rows past the last item are blank. A box with a non-positive width or height draws nothing and never panics.
+One item occupies one row, left-aligned at the box's left edge. Each row is filled full width and then the item is written over it, clipped to the width with a character substr — so a row never wraps and never carries an ellipsis. The fill uses `style` on unselected rows and the selection style on the selected one. Rows past the last item are blank. A box with a non-positive width or height draws nothing and never panics.
 
 ## Selection
 
 Exactly one row is highlighted whenever the list is non-empty. The highlight covers the full row width (the item text plus the blank cells after it), and the row keeps the same geometry whether focused or not:
 
-- Focused: reverse video, `term.Sgr(term.StyleReverse)` (`ESC[7m`).
-- Unfocused: bright black on a black background, `term.Sgr(term.BgBlack + term.FgBright)`.
+- Focused: `Style { reverse = true }` — reverse video, `ESC[7m`.
+- Unfocused: `Style { bg = BrightBlack }` — a bright-black background with no foreground override, `ESC[100m`.
 
-Set `selected_style` and `selected_unfocused_style` to replace them:
+The selection style **replaces** the row `style` rather than merging into it: the selected row is drawn in exactly `selected_style` or `selected_unfocused_style`, so it does not inherit the base foreground. `style` covers unselected rows only. Assignment is what makes a plain selection expressible — set a selection style to `StyleDefault` to draw the row with no styling at all.
+
+Set `selected_style` and `selected_unfocused_style` to override the defaults:
 
 ```salam
-li.selected_style = term.Sgr(term.FgBlack) + term.Sgr(term.BgCyan)
+li.selected_style = basalam.Style { fg = basalam.Black, bg = basalam.Cyan }
 ```
 
 ## Focus
