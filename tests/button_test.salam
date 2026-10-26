@@ -24,6 +24,7 @@
 
 import testing
 import term
+import str
 
 include "../basalam/basalam.salam"
 
@@ -231,6 +232,27 @@ func test_render_disabled_beats_focus():
     check_row(b, 10, true, "[   OK   ]", dim)
 end
 
+// BT12: disabled drops a bold the caller set, and keeps dim; the same bold
+// survives while the enabled button is focused.
+func test_render_disabled_drops_caller_bold():
+    mut b := basalam.NewButton("OK")
+    b.style = basalam.Style { bold = true }
+    bold := basalam.StyleSgr(basalam.Style { bold = true }, basalam.ColorTier.TrueColor)
+    dim := basalam.StyleSgr(basalam.Style { dim = true }, basalam.ColorTier.TrueColor)
+    b.disabled = true
+    mut buf := paint(b, 10, 1, false)
+    testing.AssertEqStr(buf.ansi(), row_bytes(dim, "[   OK   ]"))
+    testing.AssertTrue(str.Contains(buf.ansi(), term.Sgr(term.StyleDim)))
+    testing.AssertFalse(str.Contains(buf.ansi(), term.Sgr(term.StyleBold)))
+    buf.free()
+    b.disabled = false
+    buf = paint(b, 10, 1, true)
+    testing.AssertEqStr(buf.ansi(), row_bytes(bold, "[   OK   ]"))
+    testing.AssertTrue(str.Contains(buf.ansi(), term.Sgr(term.StyleBold)))
+    testing.AssertFalse(str.Contains(buf.ansi(), term.Sgr(term.StyleDim)))
+    buf.free()
+end
+
 // G14: a focus_style replaces the base style while focused and enabled, and
 // leaves the base style alone otherwise; disabled still ignores it.
 func test_focus_style():
@@ -381,6 +403,7 @@ func main:
     test_render_zero_width()
     test_render_keeps_colours()
     test_render_disabled_beats_focus()
+    test_render_disabled_drops_caller_bold()
     test_focus_style()
     test_sgr_memo_probe()
     test_render_one_row_only()

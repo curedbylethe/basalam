@@ -128,7 +128,7 @@ The row has two styles:
 - `box_style` applies to the three mark cells, `[`, the state glyph, and `]`.
 - `label_style` applies to the spacer, the label, and the trailing fill of the row.
 
-While the checkbox is focused and enabled, bold is added to both styles. While it is disabled, dim is added to both. The overlay only adds attributes, so a bold or dim that you set in a style stays on.
+While the checkbox is focused and enabled, bold is added to both styles. While it is disabled, dim is added to both and bold is dropped: a bold set in `box_style` or `label_style` is removed, and the colours, italic, and underline are kept.
 
 A narrow row clips each cell to the width. The label is clipped first, and then the mark cells are clipped from the right. A checkbox with a width of zero draws nothing.
 
