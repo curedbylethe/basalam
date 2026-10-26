@@ -23,11 +23,12 @@ jobs:
         if: runner.os == 'Linux'
         run: make release-check
 
-      # The official action from the Salam repository. The version is pinned
-      # so a new compiler release cannot break CI without a code change here;
-      # bump it deliberately.
+      # The official action from the Salam repository. Both the action's code
+      # (commit SHA) and the compiler (version) are pinned so neither can move
+      # under CI without a code change here; the SHA is the v0.5.9 tag commit,
+      # so bump them together and deliberately.
       - name: Setup Salam
-        uses: SalamLang/Salam/.github/actions/setup-salam@main
+        uses: SalamLang/Salam/.github/actions/setup-salam@d5e0c093c7e0d978bc5eae404fdeed4755d581d9
         with:
           version: '0.5.9'
 
