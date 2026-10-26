@@ -27,9 +27,9 @@ pub struct Input:
     pub use BaseWidget
 
     pub placeholder: str = ""
-    pub style: str = ""
-    pub cursor_style: str = ""
-    pub placeholder_style: str = ""
+    pub style: Style = StyleDefault
+    pub cursor_style: Style = Style { reverse = true }
+    pub placeholder_style: Style = Style { fg = BrightBlack }
 end
 ```
 
@@ -37,17 +37,19 @@ end
   Text shown (dim) while the value is empty. `""` means no placeholder.
 </ResponseField>
 
-<ResponseField name="style" type="str">
-  SGR escape sequence(s) for the value and the blank background. `""` means the terminal's default style.
+<ResponseField name="style" type="Style" default="StyleDefault">
+  The base [`Style`](/reference/style) of the value and the blank background. `StyleDefault` leaves both colours at the terminal's default.
 </ResponseField>
 
-<ResponseField name="cursor_style" type="str">
-  SGR escape sequence(s) added to `style` for the cursor cell. `""` means reverse video.
+<ResponseField name="cursor_style" type="Style" default="Style { reverse = true }">
+  Merged over `style` for the cursor cell, so reverse video by default.
 </ResponseField>
 
-<ResponseField name="placeholder_style" type="str">
-  SGR escape sequence(s) added to `style` for the placeholder. `""` means bright black.
+<ResponseField name="placeholder_style" type="Style" default="Style { fg = BrightBlack }">
+  Merged over `style` for the placeholder, so bright black by default.
 </ResponseField>
+
+All three are complete style values. `StyleDefault` on `style` asks for the terminal's default; on `cursor_style` or `placeholder_style` it adds nothing, which is how you ask for a plain cursor or placeholder. There is no `""` sentinel: an empty string used to mean "use the built-in default", and a zero style now means "add no styling".
 
 The value and the caret are counted in codepoints, so a multibyte glyph is one cell and one caret step. The caret is always an index between `0` and the value's length, and it stays after the last glyph.
 
@@ -85,19 +87,21 @@ A character typed with `Ctrl` or `Alt` held is not a plain character, so it is n
 
 ## Cursor
 
-While the buffer reports focus, `Input` marks the caret with one reverse-video cell (`ESC[7m`). The cell covers whatever the row already has at that column — the blank after the last glyph, or the first placeholder character when the value is empty. Its style is `style` plus `cursor_style`; the placeholder's grey is dropped from that one cell, so the cursor stays a solid reverse-video block over it.
+While the buffer reports focus, `Input` marks the caret with one reverse-video cell (`ESC[7m`). The cell covers whatever the row already has at that column — the blank after the last glyph, or the first placeholder character when the value is empty. Its style is `StyleMerge(style, cursor_style)`; the placeholder's grey is dropped from that one cell, so the cursor stays a solid reverse-video block over it.
 
-This is a cell style, not the terminal's own cursor. The screen keeps the real cursor hidden, so the field draws its own. Set `cursor_style` to replace the default `term.Sgr(term.StyleReverse)`:
+This is a cell style, not the terminal's own cursor. The screen keeps the real cursor hidden, so the field draws its own. Set `cursor_style` to replace the default reverse:
 
 ```salam
-in.cursor_style = term.Sgr(term.FgBlack) + term.Sgr(term.BgWhite)
+in.cursor_style = basalam.Style { fg = basalam.Black, bg = basalam.White }
 ```
+
+The merge keeps the attributes you set on `style`; the colours you put on `cursor_style` win over the base ones. Assign `basalam.StyleDefault` for a cursor that adds nothing to the base style.
 
 An unfocused input draws no cursor cell.
 
 ## Placeholder
 
-The placeholder is shown whenever the value is empty, focused or not. It is styled bright black by default (`ESC[90m`, that is `term.Sgr(term.FgBlack + term.FgBright)`) and hard-clipped at the field width: characters past `width` are not drawn.
+The placeholder is shown whenever the value is empty, focused or not. It is styled bright black by default — `Style { fg = BrightBlack }`, which emits `ESC[90m` — through `StyleMerge(style, placeholder_style)`, and it is hard-clipped at the field width: characters past `width` are not drawn.
 
 - The placeholder never becomes part of the value, so `value()` stays `""` while only the placeholder is visible.
 - Backspacing the last character brings the placeholder back.

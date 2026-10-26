@@ -93,7 +93,7 @@ Each box has one job:
 ## Current limits
 
 <Warning>
-  `present` repaints the rectangles a change touches. More than four regions, or regions covering more than half the screen, repaint every widget. `flush` writes the touched cells that differ and skips clean rows. `Widget.render`'s contract did not change: you still draw your whole bounds, and the screen decides which widgets run. Styles are raw SGR strings in the buffer — the [Style](/reference/style) type exists and `Text`, `Panel`, `Button`, `Checkbox`, `Progress`, `Table`, `Modal`, and `Separator` draw with it, but cells, `Input`, and `List` still pass strings. Each cell holds one codepoint assumed to be one column wide, so wide characters are not supported (epic 2), nor is cursor placement for text input. That `render` contract stays when styles and wide characters land.
+  `present` repaints the rectangles a change touches. More than four regions, or regions covering more than half the screen, repaint every widget. `flush` writes the touched cells that differ and skips clean rows. `Widget.render`'s contract did not change: you still draw your whole bounds, and the screen decides which widgets run. Styles are values: a widget resolves a [`Style`](/reference/style) and hands it to the buffer, which stores it on the cell and turns it into SGR bytes when it emits the frame. Each cell holds one codepoint assumed to be one column wide, so wide characters are not supported (epic 2), nor is cursor placement for text input. That `render` contract stays when wide characters land.
 </Warning>
 
 - The tree cannot remove or reparent widgets.

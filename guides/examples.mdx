@@ -101,12 +101,12 @@ struct App:
     pub use basalam.BaseWidget
 
     pub func render(buf: basalam.Buffer, bounds: basalam.Rect):
-        bar := term.Sgr(term.StyleReverse)
+        bar := basalam.Style { reverse = true }
         top := basalam.Rect { x = bounds.x, y = bounds.y, width = bounds.width, height = 1 }
         buf.fill(top, " ", bar)
         buf.put_str(bounds.x + 1, bounds.y, "basalam " + basalam.Version + " demo", bar)
         status := "key: " + last_key + " | " + bounds.width + "x" + bounds.height + " | " + seconds + "s | Tab/arrows focus, Enter press, q quit"
-        buf.put_str(bounds.x + 1, bounds.bottom() - 1, status, term.Sgr(term.StyleDim))
+        buf.put_str(bounds.x + 1, bounds.bottom() - 1, status, basalam.Style { dim = true })
     end
 end
 ```

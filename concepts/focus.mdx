@@ -120,9 +120,9 @@ Check `buf.focused` in `render`:
 
 ```salam
 pub func render(buf: basalam.Buffer, bounds: basalam.Rect):
-    mut style := ""
+    mut style := basalam.StyleDefault
     if buf.focused:
-        style = term.Sgr(term.StyleReverse)
+        style = basalam.Style { reverse = true }
     end
     buf.put_str(bounds.x, bounds.y, this.label, style)
 end

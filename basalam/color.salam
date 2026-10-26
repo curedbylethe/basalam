@@ -14,7 +14,7 @@
  */
 
 /*
- * Color: the value type a style will carry, and its raw SGR encoding.
+ * Color: the value type a style carries, and its raw SGR encoding.
  *
  * The terminal distinguishes four color kinds — its own default, the 16
  * ANSI palette, the 256-color palette, and 24-bit truecolor — and each has

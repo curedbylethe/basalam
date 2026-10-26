@@ -12,6 +12,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `Keymap.unbind_for_seq(widget_id, seq)` removes a single widget's scoped
   sequence binding, leaving the global sequence and other widgets' overrides in
   place, and resets a pending key sequence.
+- `Style.reverse`, the seventh style attribute. `Style { reverse = true }` emits
+  `ESC[7m` and its off sequence `ESC[27m`. It is a stored field rather than a
+  rule applied at emission, so `StyleEq` sees a reverse-only change and the
+  buffer repaints the cell.
+- `Buffer.tier`, the color capability a buffer emits at, and detection on
+  `Screen.start()`: the screen calls `DetectTier()` once and assigns the result
+  to the buffer, so every widget copy inherits it. `resize` preserves the tier,
+  and a buffer built by hand stays `ColorTier.TrueColor`.
+
+### Changed
+
+- **Breaking:** `Cell.style` is a `Style` value instead of a raw SGR string. Use
+  a literal such as `Style { fg = Cyan, bold = true }`, and `StyleDefault` for
+  the terminal's default style.
+- **Breaking:** `Buffer.put_str` and `Buffer.fill` take a `Style` instead of an
+  SGR string. Pass `StyleDefault` where you passed `""`.
+- **Breaking:** `Input.style`, `Input.cursor_style`, and
+  `Input.placeholder_style` are `Style` values, and the `""` sentinel is gone.
+  `StyleDefault` now adds nothing instead of restoring a built-in default; the
+  cursor and placeholder still compose with `StyleMerge`.
+- **Breaking:** `List.style`, `List.selected_style`, and
+  `List.selected_unfocused_style` are `Style` values. The selection style still
+  replaces the base style for that row, and `style` covers unselected rows.
+- **Breaking:** a disabled `Button` or `Checkbox` now drops a caller-set bold. It
+  draws dim and keeps the colors, italic, underline, and reverse you set.
 
 ## [0.3.2] - 2026-10-24
 
