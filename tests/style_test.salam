@@ -13,11 +13,11 @@
  *
  */
 
-// Unit tests for the Style value type: its six fields and their defaults, the
-// sibling BorderStyle enum and BorderInset, StyleMerge's sentinel-patch table
-// (including its two documented limitations), StyleEq's truth table and its
-// sound-but-incomplete contract with emission, and the SGR bytes StyleSgr /
-// StyleSgrOff produce (order, tier lowering, the shared 22, and no reset).
+// Unit tests for the Style value type: its seven fields and their defaults,
+// the sibling BorderStyle enum and BorderInset, StyleMerge's sentinel-patch
+// table (including its two documented limitations), StyleEq's truth table and
+// its sound-but-incomplete contract with emission, and the SGR bytes StyleSgr
+// / StyleSgrOff produce (order, tier lowering, the shared 22, and no reset).
 // Expected strings are built with term's own sequence builders, so no escape
 // appears by hand.
 
@@ -35,6 +35,7 @@ func test_default_fields():
     testing.AssertFalse(s.dim)
     testing.AssertFalse(s.italic)
     testing.AssertFalse(s.underline)
+    testing.AssertFalse(s.reverse)
     testing.AssertTrue(basalam.StyleEq(s, basalam.StyleDefault))
 end
 
@@ -107,6 +108,14 @@ func test_merge_m9_not_commutative():
     testing.AssertTrue(basalam.StyleEq(basalam.StyleMerge(child, parent), basalam.Style { fg = basalam.Color.Ansi(1) }))
 end
 
+func test_merge_reverse():
+    // Reverse is ORed like the other attributes and inherits no color.
+    got := basalam.StyleMerge(basalam.StyleDefault, basalam.Style { reverse = true })
+    testing.AssertTrue(basalam.StyleEq(got, basalam.Style { reverse = true }))
+    mixed := basalam.StyleMerge(basalam.Style { reverse = true }, basalam.Style { bold = true })
+    testing.AssertTrue(basalam.StyleEq(mixed, basalam.Style { bold = true, reverse = true }))
+end
+
 func test_merge_identity():
     s := basalam.Style { fg = basalam.Color.Ansi(2), bg = basalam.Color.Indexed(237), bold = true }
     testing.AssertTrue(basalam.StyleEq(basalam.StyleMerge(basalam.StyleDefault, s), s))
@@ -136,6 +145,28 @@ func test_sgr_bold():
     testing.AssertEqStr(basalam.StyleSgrOff(s, basalam.ColorTier.TrueColor), term.Sgr(22))
 end
 
+func test_sgr_reverse_alone():
+    s := basalam.Style { reverse = true }
+    testing.AssertEqStr(basalam.StyleSgr(s, basalam.ColorTier.Off), term.Sgr(term.StyleReverse))
+    testing.AssertEqStr(basalam.StyleSgr(s, basalam.ColorTier.Ansi16), term.Sgr(term.StyleReverse))
+    testing.AssertEqStr(basalam.StyleSgr(s, basalam.ColorTier.Indexed256), term.Sgr(term.StyleReverse))
+    testing.AssertEqStr(basalam.StyleSgr(s, basalam.ColorTier.TrueColor), term.Sgr(term.StyleReverse))
+end
+
+func test_sgr_off_reverse_alone():
+    s := basalam.Style { reverse = true }
+    testing.AssertEqStr(basalam.StyleSgrOff(s, basalam.ColorTier.Off), term.Sgr(27))
+    testing.AssertEqStr(basalam.StyleSgrOff(s, basalam.ColorTier.Ansi16), term.Sgr(27))
+    testing.AssertEqStr(basalam.StyleSgrOff(s, basalam.ColorTier.Indexed256), term.Sgr(27))
+    testing.AssertEqStr(basalam.StyleSgrOff(s, basalam.ColorTier.TrueColor), term.Sgr(27))
+end
+
+func test_sgr_bold_then_reverse():
+    s := basalam.Style { bold = true, reverse = true }
+    testing.AssertEqStr(basalam.StyleSgr(s, basalam.ColorTier.TrueColor), term.Sgr(term.StyleBold) + term.Sgr(term.StyleReverse))
+    testing.AssertEqStr(basalam.StyleSgrOff(s, basalam.ColorTier.TrueColor), term.Sgr(22) + term.Sgr(27))
+end
+
 func test_sgr_fg_bold_truecolor():
     s := basalam.Style { fg = basalam.Color.Ansi(2), bold = true }
     testing.AssertEqStr(basalam.StyleSgr(s, basalam.ColorTier.TrueColor), term.Sgr(term.StyleBold) + term.Sgr(term.FgGreen))
@@ -143,11 +174,11 @@ func test_sgr_fg_bold_truecolor():
 end
 
 func test_sgr_all_attrs():
-    s := basalam.Style { bold = true, dim = true, italic = true, underline = true }
-    attrs := term.Sgr(term.StyleBold) + term.Sgr(term.StyleDim) + term.Sgr(term.StyleItalic) + term.Sgr(term.StyleUnderline)
+    s := basalam.Style { bold = true, dim = true, italic = true, underline = true, reverse = true }
+    attrs := term.Sgr(term.StyleBold) + term.Sgr(term.StyleDim) + term.Sgr(term.StyleItalic) + term.Sgr(term.StyleUnderline) + term.Sgr(term.StyleReverse)
     testing.AssertEqStr(basalam.StyleSgr(s, basalam.ColorTier.Off), attrs)
     testing.AssertEqStr(basalam.StyleSgr(s, basalam.ColorTier.TrueColor), attrs)
-    testing.AssertEqStr(basalam.StyleSgrOff(s, basalam.ColorTier.TrueColor), term.Sgr(22) + term.Sgr(23) + term.Sgr(24))
+    testing.AssertEqStr(basalam.StyleSgrOff(s, basalam.ColorTier.TrueColor), term.Sgr(22) + term.Sgr(23) + term.Sgr(24) + term.Sgr(27))
 end
 
 func test_sgr_colors_truecolor():
@@ -190,8 +221,8 @@ func test_sgr_off_bold_dim_single_22():
 end
 
 func test_sgr_off_order():
-    s := basalam.Style { bold = true, italic = true, underline = true, fg = basalam.Color.Ansi(1), bg = basalam.Color.Ansi(4) }
-    want := term.Sgr(22) + term.Sgr(23) + term.Sgr(24) + term.Sgr(term.FgDefault) + term.Sgr(term.BgDefault)
+    s := basalam.Style { bold = true, italic = true, underline = true, reverse = true, fg = basalam.Color.Ansi(1), bg = basalam.Color.Ansi(4) }
+    want := term.Sgr(22) + term.Sgr(23) + term.Sgr(24) + term.Sgr(27) + term.Sgr(term.FgDefault) + term.Sgr(term.BgDefault)
     testing.AssertEqStr(basalam.StyleSgrOff(s, basalam.ColorTier.TrueColor), want)
 end
 
@@ -208,6 +239,8 @@ func test_eq_false():
     testing.AssertFalse(basalam.StyleEq(basalam.Style { fg = basalam.Color.Ansi(1) }, basalam.Style { fg = basalam.Color.Indexed(1) }))
     testing.AssertFalse(basalam.StyleEq(basalam.Style { fg = basalam.Color.Rgb(255, 0, 0) }, basalam.Style { fg = basalam.Color.Indexed(196) }))
     testing.AssertFalse(basalam.StyleEq(basalam.Style { fg = basalam.Color.Ansi(1) }, basalam.Style {}))
+    testing.AssertFalse(basalam.StyleEq(basalam.Style { reverse = true }, basalam.StyleDefault))
+    testing.AssertFalse(basalam.StyleEq(basalam.Style { bold = true, reverse = true }, basalam.Style { bold = true }))
 end
 
 func test_eq_merge_results():
@@ -235,7 +268,7 @@ func test_eq_incomplete_at_off():
 end
 
 func test_no_reset_in_output():
-    s := basalam.Style { fg = basalam.Color.Ansi(1), bg = basalam.Color.Rgb(1, 2, 3), bold = true, dim = true, italic = true, underline = true }
+    s := basalam.Style { fg = basalam.Color.Ansi(1), bg = basalam.Color.Rgb(1, 2, 3), bold = true, dim = true, italic = true, underline = true, reverse = true }
     testing.AssertFalse(str.Contains(basalam.StyleSgr(s, basalam.ColorTier.TrueColor), term.Reset))
     testing.AssertFalse(str.Contains(basalam.StyleSgr(s, basalam.ColorTier.Indexed256), term.Reset))
     testing.AssertFalse(str.Contains(basalam.StyleSgr(s, basalam.ColorTier.Ansi16), term.Reset))
@@ -259,10 +292,14 @@ func main:
     test_merge_m7()
     test_merge_m8()
     test_merge_m9_not_commutative()
+    test_merge_reverse()
     test_merge_identity()
     test_merge_m7_emits_bold_then_dim()
     test_default_emits_nothing_at_every_tier()
     test_sgr_bold()
+    test_sgr_reverse_alone()
+    test_sgr_off_reverse_alone()
+    test_sgr_bold_then_reverse()
     test_sgr_fg_bold_truecolor()
     test_sgr_all_attrs()
     test_sgr_colors_truecolor()

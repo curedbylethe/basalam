@@ -14,20 +14,29 @@
  */
 
 /*
- * Style: the value type a cell is drawn with — six stored fields, no more.
+ * Style: the value type a cell is drawn with — seven stored fields.
  *
  * A Style says how a cell looks: a foreground and a background color, and
- * four attributes (bold, dim, italic, underline). A field with no effect is
- * its neutral value — Color.Default for a color, false for an attribute — so
- * a Style never carries "is this set" metadata, and zero-initialised fields
- * already spell the default style (StyleDefault).
+ * five attributes (bold, dim, italic, underline, reverse). A field with no
+ * effect is its neutral value — Color.Default for a color, false for an
+ * attribute — so a Style never carries "is this set" metadata, and
+ * zero-initialised fields already spell the default style (StyleDefault).
+ *
+ * Reverse is the one attribute the set was extended for, because a cell has
+ * to be able to carry it: Input's cursor and List's focused selection are
+ * reverse video, and faking it by swapping fg and bg cannot reproduce it over
+ * terminal-default colors. It is a stored field rather than a rule applied at
+ * emission so StyleEq sees it — an inversion invisible to equality would make
+ * a cell whose only difference is reverse compare equal to its neighbour and
+ * skip the repaint. Nothing else was added: strikethrough, blink and hidden
+ * have no consumer, so the set stays closed at seven.
  *
  *   present:  the Style struct; BorderStyle, the sibling enum for a
  *             container's border kind, and BorderInset, the cells a border
  *             costs on each side (0 for None, 1 otherwise); StyleDefault,
  *             the constant of a cell that asks for nothing; StyleMerge, the
  *             sentinel-patch inheritance that resolves a child style over
- *             its parent; StyleEq, value equality over the six stored
+ *             its parent; StyleEq, value equality over the seven stored
  *             fields; and StyleSgr / StyleSgrOff, which turn a style into
  *             the SGR bytes that enter and leave it, built from std/term's
  *             sequence builders and color.salam's tier-aware encoders.
@@ -65,7 +74,7 @@ import term
 
 @en "StyleDefault"
 /// The style of a cell that asks for nothing: both colors the terminal's
-/// default and all four attributes off. It is the zero value of Style and
+/// default and all five attributes off. It is the zero value of Style and
 /// the identity of StyleMerge.
 pub const StyleDefault := Style {}
 
@@ -120,10 +129,12 @@ pub enum BorderStyle:
 end
 
 @en "Style"
-/// How a cell is drawn: a foreground and a background color and four
+/// How a cell is drawn: a foreground and a background color and five
 /// attributes. Colors are Color, not Option<Color> — Default already means
-/// "no color chosen" — and a false attribute is one that is off. The field
-/// set is closed: no reverse, strikethrough, blink or hidden.
+/// "no color chosen" — and a false attribute is one that is off. Reverse is
+/// stored rather than composed at emission so StyleEq sees it and a
+/// reverse-only change reaches the buffer diff. The set stays closed at
+/// these seven: no strikethrough, blink or hidden.
 pub struct Style:
     @en "fg"
     /// Glyph foreground; Color.Default leaves the terminal's own foreground.
@@ -148,6 +159,10 @@ pub struct Style:
     @en "underline"
     /// A single underline.
     pub underline: bool = false
+
+    @en "reverse"
+    /// Swaps the foreground and background the terminal draws with.
+    pub reverse: bool = false
 end
 
 // Whether a color survives lowering to the tier: a color that lowers to
@@ -183,12 +198,12 @@ pub func StyleMerge(parent: Style, child: Style): Style:
     ret Style {
         fg = child.fg == Color.Default ? parent.fg : child.fg, bg = child.bg == Color.Default ? parent.bg : child.bg,
         bold = parent.bold or child.bold, dim = parent.dim or child.dim, italic = parent.italic or child.italic,
-        underline = parent.underline or child.underline,
+        underline = parent.underline or child.underline, reverse = parent.reverse or child.reverse,
     }
 end
 
 @en "StyleEq"
-/// True when two styles are equal field by field, over the six stored
+/// True when two styles are equal field by field, over the seven stored
 /// fields — colors by kind and payload, attributes directly. It needs no
 /// tier. The contract with emission: equal styles emit identical bytes for
 /// every tier (sound), but unequal styles can emit the same bytes at tier
@@ -196,15 +211,15 @@ end
 /// toward "different", so a cell is never wrongly skipped; a tier change
 /// invalidates every cell, since equality ignores the tier.
 pub func StyleEq(a: Style, b: Style): bool:
-    ret a.fg == b.fg and a.bg == b.bg and a.bold == b.bold and a.dim == b.dim and a.italic == b.italic and a.underline == b.underline
+    ret a.fg == b.fg and a.bg == b.bg and a.bold == b.bold and a.dim == b.dim and a.italic == b.italic and a.underline == b.underline and a.reverse == b.reverse
 end
 
 @en "StyleSgr"
 /// The SGR sequence that takes a terminal from its default state to `style`
 /// at `tier`: attributes first in the fixed order bold, dim, italic,
-/// underline, then the foreground, then the background. Attributes ignore
-/// the tier (NO_COLOR asks for no color, not for no bold); each color is
-/// lowered to the tier first, and one that is Default after lowering is
+/// underline, reverse, then the foreground, then the background. Attributes
+/// ignore the tier (NO_COLOR asks for no color, not for no bold); each color
+/// is lowered to the tier first, and one that is Default after lowering is
 /// skipped. Returns "" when nothing is set, and never emits a reset — every
 /// sequence is built from term's builders and color.salam's encoders, none
 /// is written by hand.
@@ -222,6 +237,9 @@ pub func StyleSgr(style: Style, tier: ColorTier): str:
     if style.underline:
         out = out + term.Sgr(term.StyleUnderline)
     end
+    if style.reverse:
+        out = out + term.Sgr(term.StyleReverse)
+    end
     if _color_shown(style.fg, tier):
         out = out + FgSeqAt(style.fg, tier)
     end
@@ -235,9 +253,9 @@ end
 /// The mirror of StyleSgr: the SGR sequence that takes a terminal from
 /// `style` back to its default state at `tier`, in the fixed order a single
 /// 22 if bold or dim is set (22 clears both together), then 23 if italic,
-/// then 24 if underline, then 39 if the foreground is non-default after
-/// lowering, then 49 if the background is. Returns "" when nothing is set
-/// and never emits a reset; the codes are built with term.Sgr.
+/// then 24 if underline, then 27 if reverse, then 39 if the foreground is
+/// non-default after lowering, then 49 if the background is. Returns "" when
+/// nothing is set and never emits a reset; the codes are built with term.Sgr.
 pub func StyleSgrOff(style: Style, tier: ColorTier): str:
     mut out := ""
     if style.bold or style.dim:
@@ -248,6 +266,9 @@ pub func StyleSgrOff(style: Style, tier: ColorTier): str:
     end
     if style.underline:
         out = out + term.Sgr(24)
+    end
+    if style.reverse:
+        out = out + term.Sgr(27)
     end
     if _color_shown(style.fg, tier):
         out = out + term.Sgr(term.FgDefault)
