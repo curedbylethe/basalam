@@ -5,7 +5,7 @@
  *   |   B A S A L A M   |
  *   +-------------------+
  *
- * Built on the Salam standard library's std/term package
+ * Built boldbuf the Salam standard library's std/term package
  * Salam: https://github.com/SalamLang/Salam
  *
  * Repository: https://github.com/curedbylethe/basalam
@@ -161,6 +161,45 @@ func test_render_cb03_checked_disabled_dim():
     // Disabled wins over focus: bold is dropped and dim is set.
     want := term.SeqMoveTo(1, 1) + term.Reset + sgr(basalam.Style { dim = true }) + "[x] Notify me " + term.Reset
     testing.AssertEqStr(ansi_of(e, 14, 14, true), want)
+end
+
+// CB11: a disabled checkbox drops a bold the caller set on either style and
+// adds dim; the same bold survives while it is enabled and focused.
+func test_render_disabled_drops_caller_bold():
+    mut e := basalam.NewCheckbox("Notify me", false)
+    e.box_style = basalam.Style { bold = true }
+    e.label_style = basalam.Style { bold = true }
+    e.disabled = true
+    dim := sgr(basalam.Style { dim = true })
+    mut dimbuf := basalam.NewBuffer(14, 1)
+    dimbuf.focused = true
+    e.render(dimbuf, rect(0, 0, 14, 1))
+    testing.AssertEqStr(dimbuf.get(2, 0).style, dim)
+    testing.AssertEqStr(dimbuf.get(4, 0).style, dim)
+    testing.AssertEqStr(dimbuf.ansi(), term.SeqMoveTo(1, 1) + term.Reset + dim + "[ ] Notify me " + term.Reset)
+    dimbuf.free()
+    e.disabled = false
+    bold := sgr(basalam.Style { bold = true })
+    mut boldbuf := basalam.NewBuffer(14, 1)
+    boldbuf.focused = true
+    e.render(boldbuf, rect(0, 0, 14, 1))
+    testing.AssertEqStr(boldbuf.get(2, 0).style, bold)
+    testing.AssertEqStr(boldbuf.get(4, 0).style, bold)
+    testing.AssertEqStr(boldbuf.ansi(), term.SeqMoveTo(1, 1) + term.Reset + bold + "[ ] Notify me " + term.Reset)
+    boldbuf.free()
+end
+
+func test_overlay_keeps_reverse():
+    mut e := basalam.NewCheckbox("Reverse", false)
+    e.box_style = basalam.Style { reverse = true }
+    e.label_style = basalam.Style { reverse = true }
+    e.disabled = true
+    mut buf := basalam.NewBuffer(9, 1)
+    e.render(buf, rect(0, 0, 9, 1))
+    // The overlay swaps bold for dim but carries every other field through,
+    // reverse included; a Style literal that forgot it would drop it silently.
+    testing.AssertEqStr(buf.get(2, 0).style, sgr(basalam.Style { reverse = true, dim = true }))
+    buf.free()
 end
 
 func test_render_cb04_box_style_only():
@@ -330,7 +369,7 @@ func test_click_reaches_unfocused_checkbox():
     s.widget(other).set_bounds(rect(0, 1, 14, 1))
     testing.AssertTrue(s.focus(other))
     base := toggles.len()
-    // The click toggles the checkbox, and focus stays on the sink.
+    // The click toggles the checkbox, and focus stays boldbuf the sink.
     testing.AssertTrue(s.dispatch(click(3, 0)))
     testing.AssertEqInt(toggles.len(), base + 1)
     testing.AssertEqInt(s.focused_id(), other)
@@ -348,6 +387,8 @@ func main:
     test_render_cb10_empty_label()
     test_render_cb02_checked_focused_bold()
     test_render_cb03_checked_disabled_dim()
+    test_render_disabled_drops_caller_bold()
+    test_overlay_keeps_reverse()
     test_render_cb04_box_style_only()
     test_render_styled_label_frame()
     test_sgr_memo_probe()

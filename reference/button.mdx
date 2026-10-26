@@ -114,7 +114,9 @@ Set `disabled` to `true` to turn the button off. A disabled button:
 - leaves the focus order, so keyboard focus never reaches it.
 - takes no clicks. A click falls through to whatever is painted beneath it.
 - consumes no events, so `handle_event` returns `false` for every event.
-- draws `style` with dim added on every cell. It ignores `focus_style`, even when it has focus.
+- draws `style` with dim added and bold removed on every cell. It ignores `focus_style`, even when it has focus.
+
+A disabled button keeps the colours, italic, and underline you set, and loses any bold you set.
 
 Disabled wins over focus. Set `disabled` back to `false` to restore the button.
 

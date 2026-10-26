@@ -26,7 +26,9 @@
  *
  * Focus is read from the buffer at render time, never stored: a focused,
  * enabled button draws bold, or draws focus_style when the caller set one. A
- * disabled button draws dim and ignores focus. Button writes exactly one row,
+ * disabled button draws dim, ignores focus, and loses bold: its foreground,
+ * background, italic, and underline stay, and any bold the caller set is
+ * dropped. Button writes exactly one row,
  * the first row of its bounds, and centres the label between the brackets.
  *
  * This file deliberately has no border, no pressed or hover state, no
@@ -124,9 +126,9 @@ pub struct Button:
     /// Draws the button into the first row of bounds: the row is filled with
     /// the effective style, "[" goes in the first column and "]" in the last
     /// (when the width allows), and the label is centred between them,
-    /// clipped to fit. The effective style is style; dim when disabled; a
-    /// focused, enabled button uses focus_style, or bold when focus_style is
-    /// StyleDefault. A width of zero or less draws nothing.
+    /// clipped to fit. The effective style is style; dim and not bold when
+    /// disabled; a focused, enabled button uses focus_style, or bold when
+    /// focus_style is StyleDefault. A width of zero or less draws nothing.
     pub func render(buf: Buffer, bounds: Rect):
         w := bounds.width
         if w <= 0:
@@ -135,6 +137,7 @@ pub struct Button:
         mut st := this.style
         if this.disabled:
             st.dim = true
+            st.bold = false
         end
         if buf.focused and not this.disabled:
             if StyleEq(this.focus_style, StyleDefault):
