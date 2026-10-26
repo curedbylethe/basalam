@@ -17,8 +17,9 @@
 // the grid or the clip rect are dropped, never errors), multi-byte text,
 // the shared-storage behavior that lets widgets draw through a copy, and
 // resize (new dimensions, blank grid, whole-grid clip, negatives to zero).
-// Also the ansi() serialization (a cursor move per row, styles emitted only
-// where they change, trailing reset), the styles put_str writes, off-grid
+// Also the ansi() serialization (a cursor move per row, an off-then-on style
+// pair only where the style changes, and the closing off sequence), the styles
+// put_str writes, off-grid
 // and edge starts, the clip-vs-grid split (set and fill obey clip; get,
 // clear and row_text do not), and the per-copy focused flag. Finally the
 // front-buffer machinery: diff() is a whole frame while force_full and then
@@ -27,6 +28,7 @@
 // buffer's colour tier.
 // Touched-cell tracking marks each write so diff() emits only those cells.
 
+import str
 import testing
 import term
 
@@ -43,7 +45,7 @@ func test_new_is_blank():
     testing.AssertEqStr(b.row_text(1), "   ")
     testing.AssertEqInt(b.clip.width, 3)
     testing.AssertEqInt(b.clip.height, 2)
-    testing.AssertEqStr(b.get(0, 0).style, "")
+    testing.AssertTrue(basalam.StyleEq(b.get(0, 0).style, basalam.StyleDefault))
     b.free()
     neg := basalam.NewBuffer(-4, 2)
     testing.AssertEqInt(neg.width, 0)
@@ -52,10 +54,10 @@ end
 
 func test_set_get():
     mut b := basalam.NewBuffer(3, 2)
-    bold := term.Sgr(term.StyleBold)
+    bold := basalam.Style { bold = true }
     b.set(2, 1, basalam.Cell { ch = "x", style = bold })
     testing.AssertEqStr(b.get(2, 1).ch, "x")
-    testing.AssertEqStr(b.get(2, 1).style, bold)
+    testing.AssertTrue(basalam.StyleEq(b.get(2, 1).style, bold))
     testing.AssertEqStr(b.row_text(1), "  x")
     b.free()
 end
@@ -77,7 +79,7 @@ func test_clip():
     mut b := basalam.NewBuffer(6, 1)
     mut view := b
     view.clip = rect(1, 0, 3, 1)
-    view.put_str(0, 0, "abcdef", "")
+    view.put_str(0, 0, "abcdef", basalam.StyleDefault)
     // The view shares the cells, so the original sees what fit in the clip.
     testing.AssertEqStr(b.row_text(0), " bcd  ")
     // The original's own clip is untouched.
@@ -87,18 +89,18 @@ end
 
 func test_put_str_codepoints():
     mut b := basalam.NewBuffer(6, 1)
-    b.put_str(1, 0, "سلام", "")
+    b.put_str(1, 0, "سلام", basalam.StyleDefault)
     testing.AssertEqStr(b.get(1, 0).ch, "س")
     testing.AssertEqStr(b.get(4, 0).ch, "م")
     testing.AssertEqStr(b.get(5, 0).ch, " ")
-    b.put_str(4, 0, "xyz", "")
+    b.put_str(4, 0, "xyz", basalam.StyleDefault)
     testing.AssertEqStr(b.get(5, 0).ch, "y")
     b.free()
 end
 
 func test_fill_and_clear():
     mut b := basalam.NewBuffer(4, 3)
-    b.fill(rect(1, 1, 5, 5), "#", "")
+    b.fill(rect(1, 1, 5, 5), "#", basalam.StyleDefault)
     testing.AssertEqStr(b.row_text(0), "    ")
     testing.AssertEqStr(b.row_text(1), " ###")
     testing.AssertEqStr(b.row_text(2), " ###")
@@ -109,7 +111,7 @@ end
 
 func test_resize():
     mut b := basalam.NewBuffer(2, 2)
-    b.set(0, 0, basalam.Cell { ch = "x", style = term.Sgr(term.StyleBold) })
+    b.set(0, 0, basalam.Cell { ch = "x", style = basalam.Style { bold = true } })
     b.resize(4, 3)
     testing.AssertEqInt(b.width, 4)
     testing.AssertEqInt(b.height, 3)
@@ -118,7 +120,7 @@ func test_resize():
     testing.AssertEqStr(b.row_text(2), "    ")
     testing.AssertEqStr(b.row_text(3), "")
     testing.AssertEqStr(b.get(0, 0).ch, " ")
-    testing.AssertEqStr(b.get(0, 0).style, "")
+    testing.AssertTrue(basalam.StyleEq(b.get(0, 0).style, basalam.StyleDefault))
     // Storage is width * height: the last cell is addressable, one past is not.
     b.set(3, 2, basalam.Cell { ch = "z" })
     testing.AssertEqStr(b.row_text(2), "   z")
@@ -156,24 +158,29 @@ end
 
 func test_ansi_serialization():
     mut b := basalam.NewBuffer(2, 2)
-    bold := term.Sgr(term.StyleBold)
+    bold := basalam.Style { bold = true }
     b.set(0, 0, basalam.Cell { ch = "a" })
     b.set(1, 0, basalam.Cell { ch = "b", style = bold })
     b.set(0, 1, basalam.Cell { ch = "c", style = bold })
     b.set(1, 1, basalam.Cell { ch = "d" })
     // The whole grid, never a diff: a cursor move prefixes each row, cells in
-    // order, Reset + style only where the style starts, and a trailing Reset.
-    want := term.SeqMoveTo(1, 1) + "a" + term.Reset + bold + "b" + term.SeqMoveTo(2, 1) + "c" + term.Reset + "d" + term.Reset
+    // order, an off-then-on pair only where the style changes, and the last
+    // style turned off at the end (nothing, because it is the default).
+    seq_on := basalam.StyleSgr(bold, basalam.ColorTier.TrueColor)
+    seq_off := basalam.StyleSgrOff(bold, basalam.ColorTier.TrueColor)
+    want := term.SeqMoveTo(1, 1) + "a" + seq_on + "b" + term.SeqMoveTo(2, 1) + "c" + seq_off + "d"
     testing.AssertEqStr(b.ansi(), want)
+    // The frame is exactly the builders concatenated: no reset anywhere.
+    testing.AssertFalse(str.Contains(b.ansi(), term.Reset))
     b.free()
 end
 
 func test_put_str_style():
     mut b := basalam.NewBuffer(3, 1)
-    bold := term.Sgr(term.StyleBold)
+    bold := basalam.Style { bold = true }
     b.put_str(0, 0, "abc", bold)
-    testing.AssertEqStr(b.get(0, 0).style, bold)
-    testing.AssertEqStr(b.get(2, 0).style, bold)
+    testing.AssertTrue(basalam.StyleEq(b.get(0, 0).style, bold))
+    testing.AssertTrue(basalam.StyleEq(b.get(2, 0).style, bold))
     // row_text exposes the characters only, never the styles.
     testing.AssertEqStr(b.row_text(0), "abc")
     b.free()
@@ -182,15 +189,15 @@ end
 func test_off_grid_starts():
     mut b := basalam.NewBuffer(3, 2)
     // Negative x: clipping is per codepoint, so the in-grid tail still lands.
-    b.put_str(-1, 0, "ab", "")
+    b.put_str(-1, 0, "ab", basalam.StyleDefault)
     testing.AssertEqStr(b.row_text(0), "b  ")
     // Negative y: the whole row start is off-grid, nothing lands.
     b.clear()
-    b.put_str(0, -1, "xy", "")
+    b.put_str(0, -1, "xy", basalam.StyleDefault)
     testing.AssertEqStr(b.row_text(0), "   ")
     // Starts on the right and bottom edges: the first cell is already outside.
-    b.put_str(3, 0, "z", "")
-    b.put_str(0, 2, "z", "")
+    b.put_str(3, 0, "z", basalam.StyleDefault)
+    b.put_str(0, 2, "z", basalam.StyleDefault)
     testing.AssertEqStr(b.row_text(0), "   ")
     testing.AssertEqStr(b.row_text(1), "   ")
     b.free()
@@ -199,12 +206,12 @@ end
 func test_fill_edges():
     mut b := basalam.NewBuffer(2, 2)
     // Rect partly outside the grid: only the in-grid cells are set.
-    b.fill(rect(-1, -1, 3, 3), "#", "")
+    b.fill(rect(-1, -1, 3, 3), "#", basalam.StyleDefault)
     testing.AssertEqStr(b.row_text(0), "##")
     testing.AssertEqStr(b.row_text(1), "##")
     // A rect starting on the right edge is wholly outside, so it writes nothing.
     b.clear()
-    b.fill(rect(2, 0, 1, 1), "#", "")
+    b.fill(rect(2, 0, 1, 1), "#", basalam.StyleDefault)
     testing.AssertEqStr(b.row_text(0), "  ")
     b.free()
 
@@ -212,7 +219,7 @@ func test_fill_edges():
     mut view := c
     view.clip = rect(1, 1, 1, 1)
     // fill is clipped: only the single cell the clip exposes is written.
-    view.fill(rect(0, 0, 3, 3), "#", "")
+    view.fill(rect(0, 0, 3, 3), "#", basalam.StyleDefault)
     testing.AssertEqStr(c.row_text(0), "   ")
     testing.AssertEqStr(c.row_text(1), " # ")
     testing.AssertEqStr(c.row_text(2), "   ")
@@ -252,7 +259,7 @@ end
 
 func test_diff_full_on_new():
     mut b := basalam.NewBuffer(2, 2)
-    bold := term.Sgr(term.StyleBold)
+    bold := basalam.Style { bold = true }
     b.set(0, 0, basalam.Cell { ch = "a" })
     b.set(1, 0, basalam.Cell { ch = "b", style = bold })
     b.set(0, 1, basalam.Cell { ch = "c", style = bold })
@@ -277,8 +284,9 @@ func test_diff_single_cell():
     mut b := basalam.NewBuffer(3, 1)
     b.commit()
     b.set(1, 0, basalam.Cell { ch = "x" })
-    // One run: a cursor move, the character, and the closing reset.
-    want := term.SeqMoveTo(1, 2) + "x" + term.Reset
+    // One run: a cursor move and the character. The default style needs no
+    // on sequence, and the closing off sequence is empty too.
+    want := term.SeqMoveTo(1, 2) + "x"
     testing.AssertEqStr(b.diff(), want)
     b.free()
 end
@@ -289,7 +297,7 @@ func test_diff_adjacent_run():
     b.set(1, 0, basalam.Cell { ch = "a" })
     b.set(2, 0, basalam.Cell { ch = "b" })
     // Adjacent changed cells share one cursor move and one run.
-    want := term.SeqMoveTo(1, 2) + "ab" + term.Reset
+    want := term.SeqMoveTo(1, 2) + "ab"
     testing.AssertEqStr(b.diff(), want)
     b.free()
 end
@@ -300,30 +308,30 @@ func test_diff_two_runs():
     b.set(0, 0, basalam.Cell { ch = "a" })
     b.set(3, 0, basalam.Cell { ch = "b" })
     // A gap between changed cells splits the row into two runs.
-    want := term.SeqMoveTo(1, 1) + "a" + term.SeqMoveTo(1, 4) + "b" + term.Reset
+    want := term.SeqMoveTo(1, 1) + "a" + term.SeqMoveTo(1, 4) + "b"
     testing.AssertEqStr(b.diff(), want)
     b.free()
 end
 
 func test_diff_style_only():
     mut b := basalam.NewBuffer(2, 1)
-    bold := term.Sgr(term.StyleBold)
+    bold := basalam.Style { bold = true }
     b.set(0, 0, basalam.Cell { ch = "a" })
     b.commit()
     b.set(0, 0, basalam.Cell { ch = "a", style = bold })
-    // Same character, new style: reset into the style, then draw it again.
-    want := term.SeqMoveTo(1, 1) + term.Reset + bold + "a" + term.Reset
+    // Same character, new style: enter the style, draw it, then leave it.
+    want := term.SeqMoveTo(1, 1) + basalam.StyleSgr(bold, basalam.ColorTier.TrueColor) + "a" + basalam.StyleSgrOff(bold, basalam.ColorTier.TrueColor)
     testing.AssertEqStr(b.diff(), want)
     b.free()
 end
 
 func test_clear_redraw_is_empty():
     mut b := basalam.NewBuffer(3, 1)
-    b.put_str(0, 0, "abc", "")
+    b.put_str(0, 0, "abc", basalam.StyleDefault)
     b.commit()
     // Repainting the same content after a clear leaves nothing to draw.
     b.clear()
-    b.put_str(0, 0, "abc", "")
+    b.put_str(0, 0, "abc", basalam.StyleDefault)
     testing.AssertEqStr(b.diff(), "")
     b.free()
 end
@@ -349,7 +357,7 @@ func test_front_shared_through_copies():
     mut view := b
     view.set(0, 0, basalam.Cell { ch = "z" })
     // The copy writes the shared back grid, so the original diffs the change.
-    want := term.SeqMoveTo(1, 1) + "z" + term.Reset
+    want := term.SeqMoveTo(1, 1) + "z"
     testing.AssertEqStr(b.diff(), want)
     // free() releases both grids once; teardown exercises it here.
     b.free()
@@ -361,7 +369,7 @@ func test_diff_sparse_rows():
     b.set(0, 0, basalam.Cell { ch = "a" })
     b.set(4, 2, basalam.Cell { ch = "b" })
     // Changed cells on different rows are separate runs.
-    want := term.SeqMoveTo(1, 1) + "a" + term.SeqMoveTo(3, 5) + "b" + term.Reset
+    want := term.SeqMoveTo(1, 1) + "a" + term.SeqMoveTo(3, 5) + "b"
     testing.AssertEqStr(b.diff(), want)
     b.free()
 end
@@ -377,11 +385,11 @@ end
 
 func test_clear_round_trip():
     mut b := basalam.NewBuffer(4, 1)
-    b.put_str(0, 0, "ab", "")
+    b.put_str(0, 0, "ab", basalam.StyleDefault)
     b.commit()
     b.clear()
     // Only the two cells that held text differ from the front grid.
-    want := term.SeqMoveTo(1, 1) + "  " + term.Reset
+    want := term.SeqMoveTo(1, 1) + "  "
     testing.AssertEqStr(b.diff(), want)
     b.commit()
     testing.AssertEqStr(b.diff(), "")
@@ -391,7 +399,7 @@ end
 
 func test_commit_front_matches_cells():
     mut b := basalam.NewBuffer(3, 2)
-    bold := term.Sgr(term.StyleBold)
+    bold := basalam.Style { bold = true }
     b.set(0, 0, basalam.Cell { ch = "a" })
     b.set(2, 0, basalam.Cell { ch = "b", style = bold })
     b.set(1, 1, basalam.Cell { ch = "c" })
@@ -399,7 +407,7 @@ func test_commit_front_matches_cells():
     // commit filled front. Read it; nothing here writes it.
     repeat b.cells.len() in i:
         testing.AssertEqStr(b.front.get(i).ch, b.cells.get(i).ch)
-        testing.AssertEqStr(b.front.get(i).style, b.cells.get(i).style)
+        testing.AssertTrue(basalam.StyleEq(b.front.get(i).style, b.cells.get(i).style))
     end
     b.free()
 end

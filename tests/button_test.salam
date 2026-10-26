@@ -18,7 +18,7 @@
 // the predicates (focusable, hits, and the disabled gate), the one-row render
 // vectors (brackets, label centring and clipping, bold focus, dim disabled,
 // focus_style), the preferred size, the screen-level focus gating, and the
-// SGR memo probe (a second identical render builds nothing). Keys
+// SGR build count (the buffer, not the widget, builds at emission). Keys
 // and clicks are built from the exact bytes a terminal sends. Styles are
 // compared as StyleSgr output, never as hand-written escapes.
 
@@ -77,20 +77,17 @@ func paint(b: basalam.Button, w: int, h: int, focused: bool): basalam.Buffer:
     ret buf
 end
 
-// The bytes Buffer.ansi emits for a one-row buffer whose cells all carry sgr
-// and whose text is text: a cursor move, the style when it is not the
-// default, the text, and a trailing reset.
-func row_bytes(sgr: str, text: str): str:
-    if sgr == "":
-        ret term.SeqMoveTo(1, 1) + text + term.Reset
-    end
-    ret term.SeqMoveTo(1, 1) + term.Reset + sgr + text + term.Reset
+// The bytes Buffer.ansi emits for a one-row buffer whose cells all carry
+// style and whose text is text: a cursor move, the style's on sequence
+// (empty for the default), the text, and the style's off sequence.
+func row_bytes(style: basalam.Style, text: str): str:
+    ret term.SeqMoveTo(1, 1) + basalam.StyleSgr(style, basalam.ColorTier.TrueColor) + text + basalam.StyleSgrOff(style, basalam.ColorTier.TrueColor)
 end
 
 // Renders b at width w, unfocused or focused, and checks the whole row.
-func check_row(b: basalam.Button, w: int, focused: bool, text: str, sgr: str):
+func check_row(b: basalam.Button, w: int, focused: bool, text: str, style: basalam.Style):
     buf := paint(b, w, 1, focused)
-    testing.AssertEqStr(buf.ansi(), row_bytes(sgr, text))
+    testing.AssertEqStr(buf.ansi(), row_bytes(style, text))
     buf.free()
 end
 
@@ -182,12 +179,12 @@ end
 
 func test_render_label_and_brackets():
     ok := basalam.NewButton("OK")
-    bold := basalam.StyleSgr(basalam.Style { bold = true }, basalam.ColorTier.TrueColor)
-    dim := basalam.StyleSgr(basalam.Style { dim = true }, basalam.ColorTier.TrueColor)
+    bold := basalam.Style { bold = true }
+    dim := basalam.Style { dim = true }
     // BT01: centred label, default style.
-    check_row(ok, 10, false, "[   OK   ]", "")
+    check_row(ok, 10, false, "[   OK   ]", basalam.StyleDefault)
     // Odd leftover width: the extra cell goes to the right, so the pad floors.
-    check_row(ok, 9, false, "[  OK   ]", "")
+    check_row(ok, 9, false, "[  OK   ]", basalam.StyleDefault)
     // BT02: bold on every cell while focused.
     check_row(ok, 10, true, "[   OK   ]", bold)
     // BT03: dim while disabled.
@@ -195,15 +192,15 @@ func test_render_label_and_brackets():
     dis.disabled = true
     check_row(dis, 10, false, "[   OK   ]", dim)
     // BT04: a long label is clipped to the inner width, no ellipsis.
-    check_row(basalam.NewButton("Save and continue"), 10, false, "[Save and]", "")
+    check_row(basalam.NewButton("Save and continue"), 10, false, "[Save and]", basalam.StyleDefault)
     // BT05: the label fills the inner width exactly.
     check_row(ok, 4, true, "[OK]", bold)
     // BT06: one inner cell.
-    check_row(ok, 3, false, "[O]", "")
+    check_row(ok, 3, false, "[O]", basalam.StyleDefault)
     // BT07: no inner cell, both brackets still drawn.
-    check_row(ok, 2, false, "[]", "")
+    check_row(ok, 2, false, "[]", basalam.StyleDefault)
     // BT08: a width of one draws only the opening bracket.
-    check_row(ok, 1, false, "[", "")
+    check_row(ok, 1, false, "[", basalam.StyleDefault)
 end
 
 // BT09: a width of zero draws nothing, even when focused.
@@ -212,7 +209,7 @@ func test_render_zero_width():
     buf.focused = true
     mut b := basalam.NewButton("OK")
     b.render(buf, rect(0, 0, 0, 1))
-    testing.AssertEqStr(buf.ansi(), row_bytes("", "          "))
+    testing.AssertEqStr(buf.ansi(), row_bytes(basalam.StyleDefault, "          "))
     buf.free()
 end
 
@@ -220,7 +217,7 @@ end
 func test_render_keeps_colours():
     mut b := basalam.NewButton("OK")
     b.style = basalam.Style { fg = basalam.Blue, bg = basalam.White }
-    want := basalam.StyleSgr(basalam.Style { fg = basalam.Blue, bg = basalam.White, bold = true }, basalam.ColorTier.TrueColor)
+    want := basalam.Style { fg = basalam.Blue, bg = basalam.White, bold = true }
     check_row(b, 10, true, "[   OK   ]", want)
 end
 
@@ -228,7 +225,7 @@ end
 func test_render_disabled_beats_focus():
     mut b := basalam.NewButton("OK")
     b.disabled = true
-    dim := basalam.StyleSgr(basalam.Style { dim = true }, basalam.ColorTier.TrueColor)
+    dim := basalam.Style { dim = true }
     check_row(b, 10, true, "[   OK   ]", dim)
 end
 
@@ -237,8 +234,8 @@ end
 func test_render_disabled_drops_caller_bold():
     mut b := basalam.NewButton("OK")
     b.style = basalam.Style { bold = true }
-    bold := basalam.StyleSgr(basalam.Style { bold = true }, basalam.ColorTier.TrueColor)
-    dim := basalam.StyleSgr(basalam.Style { dim = true }, basalam.ColorTier.TrueColor)
+    bold := basalam.Style { bold = true }
+    dim := basalam.Style { dim = true }
     b.disabled = true
     mut buf := paint(b, 10, 1, false)
     testing.AssertEqStr(buf.ansi(), row_bytes(dim, "[   OK   ]"))
@@ -259,29 +256,30 @@ func test_focus_style():
     mut b := basalam.NewButton("OK")
     b.style = basalam.Style { fg = basalam.Blue }
     b.focus_style = basalam.Style { bg = basalam.White }
-    check_row(b, 10, true, "[   OK   ]", basalam.StyleSgr(basalam.Style { bg = basalam.White }, basalam.ColorTier.TrueColor))
-    check_row(b, 10, false, "[   OK   ]", basalam.StyleSgr(basalam.Style { fg = basalam.Blue }, basalam.ColorTier.TrueColor))
+    check_row(b, 10, true, "[   OK   ]", basalam.Style { bg = basalam.White })
+    check_row(b, 10, false, "[   OK   ]", basalam.Style { fg = basalam.Blue })
     b.disabled = true
-    dim := basalam.StyleSgr(basalam.Style { fg = basalam.Blue, dim = true }, basalam.ColorTier.TrueColor)
+    dim := basalam.Style { fg = basalam.Blue, dim = true }
     check_row(b, 10, true, "[   OK   ]", dim)
 end
 
-// CUR-455 probe. A second render with an unchanged style reuses the cached
-// SGR, so the build counter does not move; changing a style field costs exactly
-// one build. Rendering through a Screen covers the real frame path, where the
-// widget is a copy stored in the tree.
+// SGR-build probe after the typed-style migration: the widget builds nothing. One uniform styled
+// row costs exactly two strings when the buffer emits it — the on and off
+// sequences — and a default row costs none. Rendering through a Screen covers
+// the real frame path, where the widget is a copy stored in the tree.
 func test_sgr_memo_probe():
     mut b := basalam.NewButton("OK")
     buf := basalam.NewBuffer(10, 1)
     before := basalam.SgrBuilds()
     b.render(buf, rect(0, 0, 10, 1))
-    first := basalam.SgrBuilds()
-    testing.AssertEqInt(first - before, 1)
-    b.render(buf, rect(0, 0, 10, 1))
-    testing.AssertEqInt(basalam.SgrBuilds() - first, 0)
+    testing.AssertEqInt(basalam.SgrBuilds() - before, 0)
+    _ := buf.ansi()
+    testing.AssertEqInt(basalam.SgrBuilds() - before, 0)
     b.style = basalam.Style { fg = basalam.Blue }
     b.render(buf, rect(0, 0, 10, 1))
-    testing.AssertEqInt(basalam.SgrBuilds() - first, 1)
+    testing.AssertEqInt(basalam.SgrBuilds() - before, 0)
+    _ := buf.ansi()
+    testing.AssertEqInt(basalam.SgrBuilds() - before, 2)
     buf.free()
 
     mut s := basalam.NewScreen(basalam.BaseWidget {}, 10, 1)
@@ -292,6 +290,7 @@ func test_sgr_memo_probe():
     built := basalam.SgrBuilds()
     s.invalidate(id)
     s.present()
+    // Nothing changed, so the diff is empty and builds nothing.
     testing.AssertEqInt(basalam.SgrBuilds(), built)
 end
 

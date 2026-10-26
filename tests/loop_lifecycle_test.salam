@@ -41,7 +41,7 @@ struct App:
 
     pub func render(buf: basalam.Buffer, bounds: basalam.Rect):
         renders += 1
-        buf.put_str(bounds.x, bounds.y, "app", "")
+        buf.put_str(bounds.x, bounds.y, "app", basalam.StyleDefault)
     end
 end
 
@@ -68,7 +68,7 @@ struct Spot:
     end
 
     pub func render(buf: basalam.Buffer, bounds: basalam.Rect):
-        buf.put_str(bounds.x, bounds.y, this.mark, "")
+        buf.put_str(bounds.x, bounds.y, this.mark, basalam.StyleDefault)
     end
 end
 

@@ -33,7 +33,7 @@
  *
  * This file deliberately has no border, no pressed or hover state, no
  * focus or blur callbacks, no label ellipsis, and no terminal output. The
- * styles are Style values rendered through StyleSgr, and placement in the
+ * styles are Style values that the buffer emits, and placement in the
  * parent's box belongs to whoever owns the layout.
  */
 
@@ -72,10 +72,6 @@ pub struct Button:
     @en "on_click"
     /// Called when the button is activated. The default does nothing.
     pub on_click: func () = (): end
-
-    // The SGR of the resolved style, kept between renders. Written only by
-    // render, never by the app.
-    sgr_memo: _SgrMemo = _SgrMemo {}
 
     @en "focusable"
     /// True when the button is enabled and has a width, so keyboard focus
@@ -146,11 +142,10 @@ pub struct Button:
                 st = this.focus_style
             end
         end
-        sgr := this.sgr_memo._sgr(st, buf.tier)
-        buf.fill(Rect { x = bounds.x, y = bounds.y, width = w, height = 1 }, " ", sgr)
-        buf.put_str(bounds.x, bounds.y, "[", sgr)
+        buf.fill(Rect { x = bounds.x, y = bounds.y, width = w, height = 1 }, " ", st)
+        buf.put_str(bounds.x, bounds.y, "[", st)
         if w >= 2:
-            buf.put_str(bounds.x + w - 1, bounds.y, "]", sgr)
+            buf.put_str(bounds.x + w - 1, bounds.y, "]", st)
         end
         avail := w - 2
         mut pad := (avail - str.CharCount(this.label)) / 2
@@ -159,7 +154,7 @@ pub struct Button:
         end
         room := avail - pad
         if room > 0:
-            buf.put_str(bounds.x + 1 + pad, bounds.y, str.CharSubstr(this.label, 0, room), sgr)
+            buf.put_str(bounds.x + 1 + pad, bounds.y, str.CharSubstr(this.label, 0, room), st)
         end
     end
 end

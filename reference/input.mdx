@@ -157,7 +157,7 @@ func main:
     buf.focused = true
     inp.render(buf, basalam.Rect { width = 6, height = 1 })
     println "[" + buf.row_text(0) + "]" // [Ac    ]
-    println buf.get(2, 0).style != "" // true: the cursor cell is styled
+    println basalam.StyleEq(buf.get(2, 0).style, basalam.Style { reverse = true }) // true: the cursor cell is reversed
 end
 ```
 

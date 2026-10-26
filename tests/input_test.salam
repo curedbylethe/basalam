@@ -20,8 +20,8 @@
 // codepoint counts), the overflow window, and the screen-level focus gating
 // that routes keys to the input only while it holds the focus. Keys are
 // built with term.Decode from the exact bytes a terminal sends, or as a
-// literal term.Key code for specials. SGR strings are compared as produced
-// by term.Sgr, never hand-written.
+// literal term.Key code for specials. Cell styles are compared with StyleEq,
+// never as hand-written escapes.
 
 import testing
 import term
@@ -57,9 +57,9 @@ func test_defaults():
     testing.AssertTrue(e.focusable())
     testing.AssertEqStr(e.value(), "")
     testing.AssertEqStr(e.placeholder, "")
-    testing.AssertEqStr(e.style, "")
-    testing.AssertEqStr(e.cursor_style, "")
-    testing.AssertEqStr(e.placeholder_style, "")
+    testing.AssertTrue(basalam.StyleEq(e.style, basalam.StyleDefault))
+    testing.AssertTrue(basalam.StyleEq(e.cursor_style, basalam.Style { reverse = true }))
+    testing.AssertTrue(basalam.StyleEq(e.placeholder_style, basalam.Style { fg = basalam.BrightBlack }))
 end
 
 // ---- Editing (AC2) ----------------------------------------------------
@@ -139,10 +139,11 @@ func test_render_value_unfocused():
     testing.AssertEqStr(b.row_text(0), "hello           ")
     // The background fill carries the base style; nothing is reverse while
     // unfocused.
-    testing.AssertEqStr(b.get(15, 0).style, "")
+    testing.AssertTrue(basalam.StyleEq(b.get(15, 0).style, basalam.StyleDefault))
+    cursor := basalam.Style { reverse = true }
     mut reversed := false
     repeat 16 in x:
-        if b.get(x, 0).style == term.Sgr(term.StyleReverse):
+        if basalam.StyleEq(b.get(x, 0).style, cursor):
             reversed = true
         end
     end
@@ -150,7 +151,7 @@ func test_render_value_unfocused():
 end
 
 func test_render_cursor_default():
-    reverse := term.Sgr(term.StyleReverse)
+    reverse := basalam.Style { reverse = true }
     mut e := basalam.NewInput()
     e.set_value("hello")
     mut b := basalam.NewBuffer(16, 1)
@@ -160,7 +161,7 @@ func test_render_cursor_default():
     // The caret is past the last glyph, so the cursor cell is the blank at
     // column 5, reverse video (G04).
     testing.AssertEqStr(b.get(5, 0).ch, " ")
-    testing.AssertEqStr(b.get(5, 0).style, reverse)
+    testing.AssertTrue(basalam.StyleEq(b.get(5, 0).style, reverse))
     testing.AssertEqStr(b.row_text(0), "hello           ")
 
     // Empty content puts the cursor at column 0.
@@ -170,12 +171,12 @@ func test_render_cursor_default():
     b2.focused = true
     empty.render(b2, rect(0, 0, 16, 1))
     testing.AssertEqStr(b2.get(0, 0).ch, " ")
-    testing.AssertEqStr(b2.get(0, 0).style, reverse)
+    testing.AssertTrue(basalam.StyleEq(b2.get(0, 0).style, reverse))
 end
 
 func test_render_placeholder_default():
-    gray := term.Sgr(term.FgBlack + term.FgBright)
-    reverse := term.Sgr(term.StyleReverse)
+    gray := basalam.Style { fg = basalam.BrightBlack }
+    reverse := basalam.Style { reverse = true }
     mut e := basalam.NewInput()
     e.set_placeholder("Name")
     testing.AssertEqStr(e.value(), "")
@@ -185,9 +186,9 @@ func test_render_placeholder_default():
     e.render(b, rect(0, 0, 16, 1))
     testing.AssertEqStr(b.row_text(0), "Name            ")
     testing.AssertEqStr(b.get(0, 0).ch, "N")
-    testing.AssertEqStr(b.get(0, 0).style, gray)
-    testing.AssertEqStr(b.get(3, 0).style, gray)
-    testing.AssertEqStr(b.get(4, 0).style, "")
+    testing.AssertTrue(basalam.StyleEq(b.get(0, 0).style, gray))
+    testing.AssertTrue(basalam.StyleEq(b.get(3, 0).style, gray))
+    testing.AssertTrue(basalam.StyleEq(b.get(4, 0).style, basalam.StyleDefault))
 
     mut b2 := basalam.NewBuffer(16, 1)
     defer b2.free()
@@ -195,14 +196,14 @@ func test_render_placeholder_default():
     e.render(b2, rect(0, 0, 16, 1))
     // The cursor cell keeps the placeholder glyph but drops the grey (G02).
     testing.AssertEqStr(b2.get(0, 0).ch, "N")
-    testing.AssertEqStr(b2.get(0, 0).style, reverse)
-    testing.AssertEqStr(b2.get(1, 0).style, gray)
+    testing.AssertTrue(basalam.StyleEq(b2.get(0, 0).style, reverse))
+    testing.AssertTrue(basalam.StyleEq(b2.get(1, 0).style, gray))
     testing.AssertEqStr(e.value(), "")
 end
 
-func test_render_default_fallbacks_built_once():
-    // The first focused placeholder render builds both fallbacks; later
-    // renders reuse them.
+func test_render_default_fallbacks_from_fields():
+    // The defaults now live in the field initialisers, so the first render
+    // needs no lazy build, and the widget never builds an SGR itself.
     mut e := basalam.NewInput()
     e.set_placeholder("Name")
     mut b := basalam.NewBuffer(8, 1)
@@ -210,22 +211,15 @@ func test_render_default_fallbacks_built_once():
     b.focused = true
     before := basalam.SgrBuilds()
     e.render(b, rect(0, 0, 8, 1))
-    testing.AssertEqInt(basalam.SgrBuilds() - before, 2)
-    primed := basalam.SgrBuilds()
-    mut b2 := basalam.NewBuffer(8, 1)
-    defer b2.free()
-    b2.focused = true
-    e.render(b2, rect(0, 0, 8, 1))
-    testing.AssertEqInt(basalam.SgrBuilds(), primed)
-    // Bytes are unchanged: the cursor cell is reverse, the placeholder dim.
-    testing.AssertEqStr(b2.get(0, 0).ch, "N")
-    testing.AssertEqStr(b2.get(0, 0).style, term.Sgr(term.StyleReverse))
-    testing.AssertEqStr(b2.get(1, 0).style, term.Sgr(term.FgBlack + term.FgBright))
+    testing.AssertEqInt(basalam.SgrBuilds() - before, 0)
+    // Bytes are unchanged: the cursor cell is reverse, the placeholder grey.
+    testing.AssertEqStr(b.get(0, 0).ch, "N")
+    testing.AssertTrue(basalam.StyleEq(b.get(0, 0).style, basalam.Style { reverse = true }))
+    testing.AssertTrue(basalam.StyleEq(b.get(1, 0).style, basalam.Style { fg = basalam.BrightBlack }))
 
-    // A caller-supplied style is still used verbatim: the "" sentinel is
-    // the only thing that selects a fallback.
-    bold := term.Sgr(term.StyleBold)
-    italic := term.Sgr(term.StyleItalic)
+    // A caller-supplied style replaces the default outright.
+    bold := basalam.Style { bold = true }
+    italic := basalam.Style { italic = true }
     mut c := basalam.NewInput()
     c.set_placeholder("Name")
     c.cursor_style = italic
@@ -234,27 +228,31 @@ func test_render_default_fallbacks_built_once():
     defer b3.free()
     b3.focused = true
     c.render(b3, rect(0, 0, 8, 1))
-    testing.AssertEqStr(b3.get(0, 0).style, italic)
-    testing.AssertEqStr(b3.get(1, 0).style, bold)
+    testing.AssertTrue(basalam.StyleEq(b3.get(0, 0).style, italic))
+    testing.AssertTrue(basalam.StyleEq(b3.get(1, 0).style, bold))
+    // StyleDefault adds nothing: a caller can ask for a plain cursor.
+    c.cursor_style = basalam.StyleDefault
+    c.render(b3, rect(0, 0, 8, 1))
+    testing.AssertTrue(basalam.StyleEq(b3.get(0, 0).style, basalam.StyleDefault))
 end
 
 func test_render_themed_styles():
-    base := term.Sgr(term.FgBlack) + term.Sgr(term.BgWhite)
-    gray := term.Sgr(term.FgBlack + term.FgBright)
-    reverse := term.Sgr(term.StyleReverse)
+    base := basalam.Style { fg = basalam.Black, bg = basalam.White }
+    gray := basalam.Style { fg = basalam.BrightBlack, bg = basalam.White }
+    reverse := basalam.Style { reverse = true }
     mut b := basalam.NewBuffer(16, 1)
     defer b.free()
     mut e := basalam.NewInput()
     e.style = base
     e.set_value("hi")
     e.render(b, rect(0, 0, 16, 1))
-    testing.AssertEqStr(b.get(0, 0).style, base)
-    testing.AssertEqStr(b.get(15, 0).style, base)
-    testing.AssertFalse(b.get(2, 0).style == reverse)
+    testing.AssertTrue(basalam.StyleEq(b.get(0, 0).style, base))
+    testing.AssertTrue(basalam.StyleEq(b.get(15, 0).style, base))
+    testing.AssertFalse(basalam.StyleEq(b.get(2, 0).style, reverse))
     b.focused = true
     e.render(b, rect(0, 0, 16, 1))
-    testing.AssertEqStr(b.get(0, 0).style, base)
-    testing.AssertEqStr(b.get(2, 0).style, base + reverse)
+    testing.AssertTrue(basalam.StyleEq(b.get(0, 0).style, base))
+    testing.AssertTrue(basalam.StyleEq(b.get(2, 0).style, basalam.StyleMerge(base, reverse)))
 
     // Placeholder and cursor compose on top of the base style.
     mut p := basalam.NewInput()
@@ -262,28 +260,28 @@ func test_render_themed_styles():
     p.set_placeholder("Name")
     p.render(b, rect(0, 0, 16, 1))
     testing.AssertEqStr(b.get(0, 0).ch, "N")
-    testing.AssertEqStr(b.get(0, 0).style, base + reverse)
-    testing.AssertEqStr(b.get(1, 0).style, base + gray)
-    testing.AssertEqStr(b.get(4, 0).style, base)
+    testing.AssertTrue(basalam.StyleEq(b.get(0, 0).style, basalam.StyleMerge(base, reverse)))
+    testing.AssertTrue(basalam.StyleEq(b.get(1, 0).style, basalam.StyleMerge(base, gray)))
+    testing.AssertTrue(basalam.StyleEq(b.get(4, 0).style, base))
 end
 
 // ---- Cursor tracking (AC5) --------------------------------------------
 
 func test_cursor_tracks_value_and_backspace():
-    reverse := term.Sgr(term.StyleReverse)
+    reverse := basalam.Style { reverse = true }
     mut e := basalam.NewInput()
     mut b := basalam.NewBuffer(16, 1)
     defer b.free()
     b.focused = true
     e.set_value("ab")
     e.render(b, rect(0, 0, 16, 1))
-    testing.AssertEqStr(b.get(2, 0).style, reverse)
+    testing.AssertTrue(basalam.StyleEq(b.get(2, 0).style, reverse))
     testing.AssertTrue(e.handle_event(special(term.KeyBackspace)))
     e.render(b, rect(0, 0, 16, 1))
-    testing.AssertEqStr(b.get(1, 0).style, reverse)
+    testing.AssertTrue(basalam.StyleEq(b.get(1, 0).style, reverse))
     testing.AssertTrue(e.handle_event(special(term.KeyBackspace)))
     e.render(b, rect(0, 0, 16, 1))
-    testing.AssertEqStr(b.get(0, 0).style, reverse)
+    testing.AssertTrue(basalam.StyleEq(b.get(0, 0).style, reverse))
 end
 
 func test_render_overflow_wide_value():
@@ -299,7 +297,7 @@ func test_render_overflow_wide_value():
     b.focused = true
     e.render(b, rect(0, 0, 8, 1))
     testing.AssertEqStr(b.row_text(0), "defghij ")
-    testing.AssertEqStr(b.get(7, 0).style, term.Sgr(term.StyleReverse))
+    testing.AssertTrue(basalam.StyleEq(b.get(7, 0).style, basalam.Style { reverse = true }))
 end
 
 func test_render_scroll_starts_at_boundary():
@@ -326,7 +324,7 @@ func test_render_width5_focused():
     b.focused = true
     e.render(b, rect(0, 0, 5, 1))
     testing.AssertEqStr(b.row_text(0), "ello ")
-    testing.AssertEqStr(b.get(4, 0).style, term.Sgr(term.StyleReverse))
+    testing.AssertTrue(basalam.StyleEq(b.get(4, 0).style, basalam.Style { reverse = true }))
 end
 
 func test_render_width1():
@@ -338,7 +336,7 @@ func test_render_width1():
     b.focused = true
     e.render(b, rect(0, 0, 1, 1))
     testing.AssertEqStr(b.row_text(0), " ")
-    testing.AssertEqStr(b.get(0, 0).style, term.Sgr(term.StyleReverse))
+    testing.AssertTrue(basalam.StyleEq(b.get(0, 0).style, basalam.Style { reverse = true }))
     // Unfocused: the last cell of the value.
     b.focused = false
     e.render(b, rect(0, 0, 1, 1))
@@ -376,7 +374,7 @@ func test_screen_dispatch_reaches_focused_input():
     testing.AssertEqStr(probe.get(1, 0).ch, " ")
     s.present()
     testing.AssertEqStr(s.buffer.get(0, 0).ch, "a")
-    testing.AssertEqStr(s.buffer.get(1, 0).style, term.Sgr(term.StyleReverse))
+    testing.AssertTrue(basalam.StyleEq(s.buffer.get(1, 0).style, basalam.Style { reverse = true }))
 end
 
 func test_screen_unfocused_input_does_not_consume():
@@ -397,9 +395,10 @@ func test_screen_unfocused_input_does_not_consume():
     s.present()
     testing.AssertEqStr(s.buffer.get(0, 0).ch, " ")
     // Unfocused: no cursor cell is drawn anywhere.
+    cursor := basalam.Style { reverse = true }
     mut reversed := false
     repeat 24 in x:
-        if s.buffer.get(x, 0).style == term.Sgr(term.StyleReverse):
+        if basalam.StyleEq(s.buffer.get(x, 0).style, cursor):
             reversed = true
         end
     end
@@ -409,7 +408,7 @@ end
 // ---- Unicode ----------------------------------------------------------
 
 func test_unicode_codepoint_editing():
-    reverse := term.Sgr(term.StyleReverse)
+    reverse := basalam.Style { reverse = true }
     mut e := basalam.NewInput()
     mut b := basalam.NewBuffer(16, 1)
     defer b.free()
@@ -419,12 +418,12 @@ func test_unicode_codepoint_editing():
     testing.AssertEqStr(e.value(), "é")
     e.render(b, rect(0, 0, 16, 1))
     testing.AssertEqStr(b.get(0, 0).ch, "é")
-    testing.AssertEqStr(b.get(1, 0).style, reverse)
+    testing.AssertTrue(basalam.StyleEq(b.get(1, 0).style, reverse))
     // Two codepoints: the caret is at codepoint column 2.
     testing.AssertTrue(e.handle_event(key("é")))
     testing.AssertEqStr(e.value(), "éé")
     e.render(b, rect(0, 0, 16, 1))
-    testing.AssertEqStr(b.get(2, 0).style, reverse)
+    testing.AssertTrue(basalam.StyleEq(b.get(2, 0).style, reverse))
     // Backspace removes the whole codepoint, not one byte.
     testing.AssertTrue(e.handle_event(special(term.KeyBackspace)))
     testing.AssertEqStr(e.value(), "é")
@@ -433,7 +432,7 @@ func test_unicode_codepoint_editing():
 end
 
 func main:
-    test_render_default_fallbacks_built_once()
+    test_render_default_fallbacks_from_fields()
     test_defaults()
     test_editing_append_printable()
     test_editing_space_wire_shape()

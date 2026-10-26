@@ -31,16 +31,14 @@
  *             downgrade; and FgSeqAt / BgSeqAt, which encode a color at a
  *             given tier.
  *
- *   fit:      sits beside buffer.salam and text.salam, whose Cell.style is a
- *             raw SGR string today. This is the value half of the styling
- *             work; style.salam carries it and emits through FgSeqAt / BgSeqAt.
+ *   fit:      sits beside buffer.salam and text.salam. Cells carry a Style,
+ *             which carries a Color; style.salam emits through FgSeqAt /
+ *             BgSeqAt when the buffer serializes a frame.
  *
- *   absent:   any wiring into Cell, Buffer, Screen, or the widgets (still
- *             deferred), and any caching of the detected tier — DetectTier
- *             is a pure env read, so a per-frame caller hoists the tier and
- *             passes it to FgSeqAt / BgSeqAt. No validation or clamping
- *             either — Ansi is documented for 0-15, but any int follows the
- *             same arithmetic.
+ *   absent:   any caching of the detected tier — DetectTier is a pure env
+ *             read, so the buffer hoists the tier once and passes it to
+ *             FgSeqAt / BgSeqAt. No validation or clamping either — Ansi is
+ *             documented for 0-15, but any int follows the same arithmetic.
  *
  * Why raw sequences live here: the encoding is the one thing every consumer
  * of a color needs, and it must be built from std/term's sequence builders

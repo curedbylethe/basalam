@@ -281,14 +281,13 @@ func test_header_style_replaces_body_style():
     mut b := basalam.NewBuffer(3, 3)
     mut tt := t
     tt.render(b, rect(0, 0, 3, 3))
-    testing.AssertEqStr(b.get(0, 0).style, basalam.StyleSgr(basalam.Style { bold = true }, basalam.ColorTier.TrueColor))
-    testing.AssertEqStr(b.get(0, 2).style, "")
+    testing.AssertTrue(basalam.StyleEq(b.get(0, 0).style, basalam.Style { bold = true }))
+    testing.AssertTrue(basalam.StyleEq(b.get(0, 2).style, basalam.StyleDefault))
     b.free()
 end
 
-// CUR-455 probe. A second render with unchanged styles reuses both cached
-// SGRs, so the build counter does not move; changing header_style costs exactly
-// one build. The body and header styles each own a memo.
+// After the typed-style migration: the widget builds nothing. The header is one styled run and
+// the body default, so an emitted frame costs one on and one off sequence.
 func test_sgr_memo_probe():
     mut t := basalam.NewTable()
     t.pad_x = 0
@@ -299,13 +298,14 @@ func test_sgr_memo_probe():
     buf := basalam.NewBuffer(4, 3)
     before := basalam.SgrBuilds()
     t.render(buf, rect(0, 0, 4, 3))
-    first := basalam.SgrBuilds()
-    testing.AssertEqInt(first - before, 2)
-    t.render(buf, rect(0, 0, 4, 3))
-    testing.AssertEqInt(basalam.SgrBuilds() - first, 0)
+    testing.AssertEqInt(basalam.SgrBuilds() - before, 0)
+    _ := buf.ansi()
+    testing.AssertEqInt(basalam.SgrBuilds() - before, 2)
     t.header_style = basalam.Style { fg = basalam.Blue }
     t.render(buf, rect(0, 0, 4, 3))
-    testing.AssertEqInt(basalam.SgrBuilds() - first, 1)
+    testing.AssertEqInt(basalam.SgrBuilds() - before, 2)
+    _ := buf.ansi()
+    testing.AssertEqInt(basalam.SgrBuilds() - before, 4)
     buf.free()
 end
 
@@ -405,7 +405,7 @@ func test_rows_past_height_are_not_painted():
     t.add_row(row1("r3"))
     t.add_row(row1("r4"))
     mut b := basalam.NewBuffer(2, 5)
-    b.fill(rect(0, 0, 2, 5), "x", "")
+    b.fill(rect(0, 0, 2, 5), "x", basalam.StyleDefault)
     t.render(b, rect(0, 0, 2, 3))
     mut out := ""
     repeat 5 in y:

@@ -59,7 +59,7 @@ struct Tile:
         if buf.focused:
             mark = "*"
         end
-        buf.put_str(bounds.x, bounds.y, mark + this.name + this.keys, "")
+        buf.put_str(bounds.x, bounds.y, mark + this.name + this.keys, basalam.StyleDefault)
     end
 end
 

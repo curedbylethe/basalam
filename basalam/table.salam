@@ -129,12 +129,6 @@ pub struct Table:
 
     cell_aligns: Vector<_CellAlign> = Vector {}
 
-    // The SGRs of the body and header styles, kept between renders. Written
-    // only by render, never by the app.
-    body_memo: _SgrMemo = _SgrMemo {}
-
-    head_memo: _SgrMemo = _SgrMemo {}
-
     @en "focusable"
     /// Returns false: a table takes no keyboard focus.
     pub func focusable(): bool:
@@ -262,8 +256,8 @@ pub struct Table:
             ret
         end
         ws := this._resolve_widths(bounds.width)
-        body := this.body_memo._sgr(this.style, buf.tier)
-        head := this.head_memo._sgr(this.header_style, buf.tier)
+        body := this.style
+        head := this.header_style
         mut y := 0
         mut first := 0
         if this.header:
@@ -441,7 +435,7 @@ pub struct Table:
         ret Alignment.Left
     end
 
-    func _paint_row(buf: Buffer, bounds: Rect, ws: Vector<int>, r: int, y: int, sgr: str):
+    func _paint_row(buf: Buffer, bounds: Rect, ws: Vector<int>, r: int, y: int, style: Style):
         pad := this._pad()
         mut x := 0
         repeat this.columns.len() in c:
@@ -452,7 +446,7 @@ pub struct Table:
             end
             if cw > 0:
                 cell := Rect { x = bounds.x + x, y = bounds.y + y, width = cw, height = 1 }
-                buf.fill(cell, " ", sgr)
+                buf.fill(cell, " ", style)
                 area := cw - 2 * pad
                 mut text := ""
                 mut shown := 0
@@ -474,13 +468,13 @@ pub struct Table:
                 else align == Alignment.Center:
                     offset = slack / 2
                 end
-                buf.put_str(cell.x + pad + offset, cell.y, text, sgr)
+                buf.put_str(cell.x + pad + offset, cell.y, text, style)
             end
             x = x + w
         end
     end
 
-    func _paint_rule(buf: Buffer, bounds: Rect, ws: Vector<int>, y: int, sgr: str):
+    func _paint_rule(buf: Buffer, bounds: Rect, ws: Vector<int>, y: int, style: Style):
         mut total := 0
         repeat ws.len() in i:
             total = total + ws.get(i)
@@ -488,7 +482,7 @@ pub struct Table:
         if total > bounds.width:
             total = bounds.width
         end
-        buf.fill(Rect { x = bounds.x, y = bounds.y + y, width = total, height = 1 }, "─", sgr)
+        buf.fill(Rect { x = bounds.x, y = bounds.y + y, width = total, height = 1 }, "─", style)
     end
 end
 

@@ -18,17 +18,15 @@
 //
 //     salam build examples/hello.salam && ./hello
 
-import term
-
 include "../basalam/basalam.salam"
 
 struct Hello:
     pub use basalam.BaseWidget
 
     pub func render(buf: basalam.Buffer, bounds: basalam.Rect):
-        buf.put_str(2, 1, "Hello from basalam!", term.Sgr(term.StyleBold))
-        buf.put_str(2, 3, "Screen size: " + bounds.width + "x" + bounds.height, "")
-        buf.put_str(2, 4, "Press q to quit.", "")
+        buf.put_str(2, 1, "Hello from basalam!", basalam.Style { bold = true })
+        buf.put_str(2, 3, "Screen size: " + bounds.width + "x" + bounds.height, basalam.StyleDefault)
+        buf.put_str(2, 4, "Press q to quit.", basalam.StyleDefault)
     end
 end
 

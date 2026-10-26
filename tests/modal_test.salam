@@ -14,10 +14,9 @@
 // close, and the nested-modal Esc rule), the shared state that makes calls
 // after Screen.add reach the stored copy (open, close, set_title, Esc), and
 // the sizing preferences. Keys and clicks are built from the exact bytes a
-// terminal sends. Styles are compared as StyleSgr output, never as
+// terminal sends. Cell styles are compared with StyleEq, never as
 // hand-written escapes.
 
-import str
 import term
 import testing
 
@@ -189,9 +188,8 @@ end
 // Outside cells keep their glyph and gain DIM on top of their own style.
 // The dialog's interior keeps its style.
 func test_sc01_scrim_dims_outside_only():
-    base := basalam.StyleSgr(basalam.Style { fg = basalam.Red }, basalam.ColorTier.TrueColor)
-    esc := str.CharSubstr(base, 0, 2)
-    dimmed := esc + "2;" + str.CharSubstr(base, 2, str.CharCount(base) - 2)
+    base := basalam.Style { fg = basalam.Red }
+    dimmed := basalam.Style { fg = basalam.Red, dim = true }
     mut b := basalam.NewBuffer(8, 3)
     b.fill(rect(0, 0, 8, 3), "x", base)
     m := openModal(8, 3, basalam.ModalSize.Fixed(4, 3), "")
@@ -199,24 +197,23 @@ func test_sc01_scrim_dims_outside_only():
     testing.AssertEqStr(b.row_text(0), "xx┌──┐xx")
     testing.AssertEqStr(b.row_text(1), "xx│xx│xx")
     testing.AssertEqStr(b.row_text(2), "xx└──┘xx")
-    testing.AssertEqStr(b.get(0, 0).style, dimmed)
-    testing.AssertEqStr(b.get(7, 2).style, dimmed)
-    testing.AssertEqStr(b.get(3, 1).style, base)
+    testing.AssertTrue(basalam.StyleEq(b.get(0, 0).style, dimmed))
+    testing.AssertTrue(basalam.StyleEq(b.get(7, 2).style, dimmed))
+    testing.AssertTrue(basalam.StyleEq(b.get(3, 1).style, base))
     b.free()
 end
 
-// A cell with several SGR parameters (bold and fg, as Text or Button paints)
-// keeps every one of them; DIM is inserted after ESC[ and nothing is cut.
-func test_scrim_keeps_every_sgr_parameter():
-    base := basalam.StyleSgr(basalam.Style { bold = true, fg = basalam.Red }, basalam.ColorTier.TrueColor)
-    esc := str.CharSubstr(base, 0, 2)
-    dimmed := esc + "2;" + str.CharSubstr(base, 2, str.CharCount(base) - 2)
+// A cell with several style fields (bold and a colour, as Text or Button
+// paints) keeps every one of them; only DIM is added.
+func test_scrim_keeps_every_style_field():
+    base := basalam.Style { bold = true, fg = basalam.Red }
+    dimmed := basalam.Style { bold = true, fg = basalam.Red, dim = true }
     mut b := basalam.NewBuffer(8, 3)
     b.fill(rect(0, 0, 8, 3), "x", base)
     m := openModal(8, 3, basalam.ModalSize.Fixed(4, 3), "")
     m.render(b, rect(0, 0, 8, 3))
-    testing.AssertEqStr(b.get(0, 0).style, dimmed)
-    testing.AssertEqStr(b.get(3, 1).style, base)
+    testing.AssertTrue(basalam.StyleEq(b.get(0, 0).style, dimmed))
+    testing.AssertTrue(basalam.StyleEq(b.get(3, 1).style, base))
     b.free()
 end
 
@@ -225,7 +222,7 @@ func test_scrim_on_unstyled_cell_is_dim_alone():
     mut b := basalam.NewBuffer(8, 3)
     m := openModal(8, 3, basalam.ModalSize.Fixed(4, 3), "")
     m.render(b, rect(0, 0, 8, 3))
-    testing.AssertEqStr(b.get(0, 0).style, basalam.StyleSgr(basalam.Style { dim = true }, basalam.ColorTier.TrueColor))
+    testing.AssertTrue(basalam.StyleEq(b.get(0, 0).style, basalam.Style { dim = true }))
     testing.AssertEqStr(b.get(0, 0).ch, " ")
     b.free()
 end
@@ -239,57 +236,28 @@ func test_percent_in_small_bounds_fills_bounds():
     m.render(b, rect(0, 0, 8, 3))
     testing.AssertEqStr(b.row_text(0), "┌──────┐")
     testing.AssertEqStr(b.row_text(2), "└──────┘")
-    testing.AssertEqStr(b.get(0, 0).style, basalam.StyleSgr(basalam.Style {}, basalam.ColorTier.TrueColor))
+    testing.AssertTrue(basalam.StyleEq(b.get(0, 0).style, basalam.StyleDefault))
     b.free()
 end
 
-// The scrim memo: rendering the same unscrimmed buffer twice builds the
-// dimmed style once, and the second frame still paints it. The buffer is
-// repainted between frames because a scrimmed cell would otherwise become
-// the next frame's input style.
-func test_scrim_memo_builds_once_per_input_style():
-    base := basalam.StyleSgr(basalam.Style { fg = basalam.Red }, basalam.ColorTier.TrueColor)
-    esc := str.CharSubstr(base, 0, 2)
-    dimmed := esc + "2;" + str.CharSubstr(base, 2, str.CharCount(base) - 2)
+// The scrim is a field copy, so painting builds no SGR. The bytes appear only
+// when the buffer emits the frame — the cost model the old map existed for.
+func test_scrim_painting_builds_nothing():
     area := rect(0, 0, 8, 3)
     mut b := basalam.NewBuffer(8, 3)
+    defer b.free()
     m := openModal(8, 3, basalam.ModalSize.Fixed(4, 3), "")
-
-    b.fill(area, "x", base)
-    mut before := basalam.SgrBuilds()
-    m.render(b, area)
-    testing.AssertEqInt(basalam.SgrBuilds() - before, 1)
-
-    b.fill(area, "x", base)
-    before = basalam.SgrBuilds()
+    b.fill(area, "x", basalam.Style { fg = basalam.Red })
+    before := basalam.SgrBuilds()
     m.render(b, area)
     testing.AssertEqInt(basalam.SgrBuilds() - before, 0)
-    testing.AssertEqStr(b.get(0, 0).style, dimmed)
-    testing.AssertEqStr(b.get(3, 1).style, base)
-    b.free()
-end
-
-// Two distinct underlying styles build once each; the repeat builds nothing.
-func test_scrim_memo_two_styles_two_builds():
-    red := basalam.StyleSgr(basalam.Style { fg = basalam.Red }, basalam.ColorTier.TrueColor)
-    green := basalam.StyleSgr(basalam.Style { fg = basalam.Green }, basalam.ColorTier.TrueColor)
-    area := rect(0, 0, 8, 3)
-    left := rect(0, 0, 2, 3)
-    mut b := basalam.NewBuffer(8, 3)
-    m := openModal(8, 3, basalam.ModalSize.Fixed(4, 3), "")
-
-    b.fill(area, "x", red)
-    b.fill(left, "y", green)
-    mut before := basalam.SgrBuilds()
-    m.render(b, area)
-    testing.AssertEqInt(basalam.SgrBuilds() - before, 2)
-
-    b.fill(area, "x", red)
-    b.fill(left, "y", green)
-    before = basalam.SgrBuilds()
-    m.render(b, area)
-    testing.AssertEqInt(basalam.SgrBuilds() - before, 0)
-    b.free()
+    // The dimmed cells carry the underlying style plus DIM, per cell.
+    testing.AssertTrue(basalam.StyleEq(b.get(0, 0).style, basalam.Style { fg = basalam.Red, dim = true }))
+    testing.AssertTrue(basalam.StyleEq(b.get(6, 2).style, basalam.Style { fg = basalam.Red, dim = true }))
+    // The interior keeps its style untouched.
+    testing.AssertTrue(basalam.StyleEq(b.get(3, 1).style, basalam.Style { fg = basalam.Red }))
+    _ := b.ansi()
+    testing.AssertTrue(basalam.SgrBuilds() > before)
 end
 
 // Esc: the first press closes while closable, fires on_close and is
@@ -358,13 +326,13 @@ end
 func test_hidden_modal_paints_nothing_and_passes_events():
     events_log = ""
     mut b := basalam.NewBuffer(8, 3)
-    b.fill(rect(0, 0, 8, 3), "x", "")
+    b.fill(rect(0, 0, 8, 3), "x", basalam.StyleDefault)
     m := basalam.NewModal()
     m.add(Probe { tag = "c" })
     m.set_bounds(rect(0, 0, 8, 3))
     m.render(b, rect(0, 0, 8, 3))
     testing.AssertEqStr(b.row_text(0), "xxxxxxxx")
-    testing.AssertEqStr(b.get(0, 0).style, "")
+    testing.AssertTrue(basalam.StyleEq(b.get(0, 0).style, basalam.StyleDefault))
     testing.AssertFalse(m.handle_event(click(0, 0)))
     testing.AssertFalse(m.handle_event(key(term.KeyEscape)))
     testing.AssertEqStr(events_log, "")
@@ -702,11 +670,10 @@ func main:
     test_md04_two_by_two_corners_only()
     test_md05_title_clipped_to_width_minus_five()
     test_sc01_scrim_dims_outside_only()
-    test_scrim_keeps_every_sgr_parameter()
+    test_scrim_keeps_every_style_field()
     test_scrim_on_unstyled_cell_is_dim_alone()
     test_percent_in_small_bounds_fills_bounds()
-    test_scrim_memo_builds_once_per_input_style()
-    test_scrim_memo_two_styles_two_builds()
+    test_scrim_painting_builds_nothing()
     test_esc_closes_and_fires_on_close()
     test_not_closable_passes_esc()
     test_child_consuming_esc_keeps_open()

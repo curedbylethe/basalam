@@ -42,7 +42,7 @@ struct Button:
     end
 
     pub func render(buf: basalam.Buffer, bounds: basalam.Rect):
-        buf.put_str(bounds.x, bounds.y, "[" + this.label + "]", "")
+        buf.put_str(bounds.x, bounds.y, "[" + this.label + "]", basalam.StyleDefault)
     end
 end
 
@@ -54,7 +54,7 @@ struct List:
 
     pub func render(buf: basalam.Buffer, bounds: basalam.Rect):
         repeat this.items.len() in i:
-            buf.put_str(bounds.x, bounds.y + i, this.items.get(i), "")
+            buf.put_str(bounds.x, bounds.y + i, this.items.get(i), basalam.StyleDefault)
         end
     end
 end

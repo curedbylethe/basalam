@@ -21,7 +21,6 @@
 
 import str
 import testing
-import term
 
 include "../basalam/basalam.salam"
 
@@ -29,14 +28,14 @@ include "../basalam/basalam.salam"
 SaveId := 3
 WrapId := 4
 
-// Draws "no" in reverse video. Text's Style has no reverse attribute, so this
-// keeps the ANSI snapshot a real reverse-video cell.
+// Draws "no" in reverse video through a widget of its own, so the ANSI
+// snapshot pins a reverse cell next to a styled one.
 struct RevText:
     pub use basalam.BaseWidget
     pub text: str = ""
 
     pub func render(buf: basalam.Buffer, bounds: basalam.Rect):
-        buf.put_str(bounds.x, bounds.y, this.text, term.Sgr(term.StyleReverse))
+        buf.put_str(bounds.x, bounds.y, this.text, basalam.Style { reverse = true })
     end
 end
 
@@ -95,16 +94,16 @@ func test_focus_changes_only_styles():
     before := frame(s)
     save_style := s.buffer.get(1, 2).style
     wrap_style := s.buffer.get(12, 2).style
-    testing.AssertNeStr(save_style, "")
+    testing.AssertFalse(basalam.StyleEq(save_style, basalam.StyleDefault))
 
     testing.AssertTrue(s.focus_next())
     testing.AssertEqInt(s.focused_id(), WrapId)
     s.present()
     testing.AssertEqStr(frame(s), before)
-    testing.AssertEqStr(s.buffer.get(1, 2).style, "")
-    testing.AssertNeStr(s.buffer.get(12, 2).style, "")
-    testing.AssertNeStr(save_style, s.buffer.get(1, 2).style)
-    testing.AssertNeStr(wrap_style, s.buffer.get(12, 2).style)
+    testing.AssertTrue(basalam.StyleEq(s.buffer.get(1, 2).style, basalam.StyleDefault))
+    testing.AssertFalse(basalam.StyleEq(s.buffer.get(12, 2).style, basalam.StyleDefault))
+    testing.AssertFalse(basalam.StyleEq(save_style, s.buffer.get(1, 2).style))
+    testing.AssertFalse(basalam.StyleEq(wrap_style, s.buffer.get(12, 2).style))
 end
 
 // A widget wider than the screen is cut at the buffer edge, not wrapped.
@@ -120,7 +119,8 @@ func test_clipped_widget_frame():
     testing.AssertEqStr(frame(s), "abcdefghijkl|            ")
 end
 
-// One literal 8x2 ANSI frame: bold and reverse survive into the bytes.
+// One literal 8x2 ANSI frame: bold and reverse survive into the bytes, and
+// each style change is an off-then-on pair with no reset.
 func test_ansi_frame_snapshot():
     mut s := basalam.NewScreen(basalam.BaseWidget {}, 8, 2)
     defer s.close()
@@ -132,7 +132,7 @@ func test_ansi_frame_snapshot():
     s.widget(nid).set_bounds(rect(4, 0, 2, 1))
     s.present()
 
-    testing.AssertEqStr(s.buffer.ansi(), "\x1b[1;1H\x1b[0m\x1b[1mok\x1b[0m  \x1b[0m\x1b[7mno\x1b[0m  \x1b[2;1H        \x1b[0m")
+    testing.AssertEqStr(s.buffer.ansi(), "\x1b[1;1H\x1b[1mok\x1b[22m  \x1b[7mno\x1b[27m  \x1b[2;1H        ")
 end
 
 func main:

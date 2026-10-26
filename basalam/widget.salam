@@ -36,7 +36,7 @@
  *         pub use basalam.BaseWidget
  *         pub text: str = ""
  *         pub func render(buf: basalam.Buffer, bounds: basalam.Rect):
- *             buf.put_str(bounds.x, bounds.y, this.text, "")
+ *             buf.put_str(bounds.x, bounds.y, this.text, basalam.StyleDefault)
  *         end
  *     end
  *

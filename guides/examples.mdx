@@ -36,17 +36,15 @@ The repository's `examples/` directory holds `hello.salam` and `demo.salam`, bot
 //
 //     salam build examples/hello.salam && ./hello
 
-import term
-
 include "../basalam/basalam.salam"
 
 struct Hello:
     pub use basalam.BaseWidget
 
     pub func render(buf: basalam.Buffer, bounds: basalam.Rect):
-        buf.put_str(2, 1, "Hello from basalam!", term.Sgr(term.StyleBold))
-        buf.put_str(2, 3, "Screen size: " + bounds.width + "x" + bounds.height, "")
-        buf.put_str(2, 4, "Press q to quit.", "")
+        buf.put_str(2, 1, "Hello from basalam!", basalam.Style { bold = true })
+        buf.put_str(2, 3, "Screen size: " + bounds.width + "x" + bounds.height, basalam.StyleDefault)
+        buf.put_str(2, 4, "Press q to quit.", basalam.StyleDefault)
     end
 end
 
@@ -70,7 +68,7 @@ What to notice:
 
 - `Hello` embeds `BaseWidget`, so it already satisfies every widget method; it overrides only `render`.
 - `render` receives the buffer to draw into and the widget's `bounds`. Drawing into a buffer, never the terminal, is what keeps widgets testable.
-- `put_str` writes a string at a cell with a style. `term.Sgr(term.StyleBold)` builds that style; writing escape sequences by hand is never necessary.
+- `put_str` writes a string at a cell with a `Style`. `basalam.Style { bold = true }` is that style; writing escape sequences by hand is never necessary.
 - `NewTerminalScreen` makes `Hello` the root widget and sizes it to the terminal.
 - `start()` switches the terminal to raw mode and the alternate screen. `defer screen.close()` restores all of it on every exit path, including a crash.
 - `next_event` blocks for one event and fills `ev`; `dispatch` offers it to the widgets.

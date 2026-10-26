@@ -19,7 +19,7 @@
 // (never focusable, never hittable, consumes no event), and the preferred size
 // and measure for both orientations. Buffers that must show "not painted" are
 // pre-filled with "x", so an untouched cell is distinguishable from a blank.
-// SGR strings are built with StyleSgr at TrueColor, never written by hand.
+// Cell styles are compared with StyleEq, never as hand-written escapes.
 
 import testing
 import term
@@ -38,7 +38,7 @@ end
 // origin. The caller frees the buffer.
 func draw(s: basalam.Separator, w: int, h: int): basalam.Buffer:
     b := basalam.NewBuffer(w, h)
-    b.fill(rect(0, 0, w, h), "x", "")
+    b.fill(rect(0, 0, w, h), "x", basalam.StyleDefault)
     s.render(b, rect(0, 0, w, h))
     ret b
 end
@@ -142,7 +142,7 @@ func test_zero_length_paints_nothing():
     s := basalam.NewSeparator()
     b := basalam.NewBuffer(4, 1)
     defer b.free()
-    b.fill(rect(0, 0, 4, 1), "x", "")
+    b.fill(rect(0, 0, 4, 1), "x", basalam.StyleDefault)
     before := b.row_text(0)
     s.render(b, rect(0, 0, 0, 1))
     testing.AssertEqStr(b.row_text(0), before)
@@ -159,20 +159,18 @@ func test_style_fg_and_bg():
     // Rune cells carry the full style, background included.
     b := basalam.NewBuffer(6, 3)
     defer b.free()
-    b.fill(rect(0, 0, 6, 3), "x", "")
+    b.fill(rect(0, 0, 6, 3), "x", basalam.StyleDefault)
     s.render(b, rect(0, 0, 3, 3))
-    want_rune := basalam.StyleSgr(st, basalam.ColorTier.TrueColor)
-    testing.AssertEqStr(b.get(0, 0).style, want_rune)
+    testing.AssertTrue(basalam.StyleEq(b.get(0, 0).style, st))
     testing.AssertEqStr(b.get(0, 0).ch, "─")
 
     // An off-line cell inside the rect is filled with the background only.
-    want_bg := basalam.StyleSgr(basalam.Style { bg = basalam.Color.Ansi(4) }, basalam.ColorTier.TrueColor)
-    testing.AssertEqStr(b.get(1, 1).style, want_bg)
+    testing.AssertTrue(basalam.StyleEq(b.get(1, 1).style, basalam.Style { bg = basalam.Color.Ansi(4) }))
     testing.AssertEqStr(b.get(1, 1).ch, " ")
 
     // A cell outside the rect is untouched.
     testing.AssertEqStr(b.get(4, 0).ch, "x")
-    testing.AssertEqStr(b.get(4, 0).style, "")
+    testing.AssertTrue(basalam.StyleEq(b.get(4, 0).style, basalam.StyleDefault))
 end
 
 func test_style_fg_without_bg_leaves_off_line_cells():
@@ -180,51 +178,40 @@ func test_style_fg_without_bg_leaves_off_line_cells():
     s.set_style(basalam.Style { fg = basalam.Green })
     b := basalam.NewBuffer(4, 3)
     defer b.free()
-    b.fill(rect(0, 0, 4, 3), "x", "")
+    b.fill(rect(0, 0, 4, 3), "x", basalam.StyleDefault)
     s.render(b, rect(0, 0, 4, 3))
-    testing.AssertEqStr(b.get(0, 0).style, basalam.StyleSgr(basalam.Style { fg = basalam.Green }, basalam.ColorTier.TrueColor))
+    testing.AssertTrue(basalam.StyleEq(b.get(0, 0).style, basalam.Style { fg = basalam.Green }))
     testing.AssertEqStr(b.row_text(1), "xxxx")
-    testing.AssertEqStr(b.get(0, 1).style, "")
+    testing.AssertTrue(basalam.StyleEq(b.get(0, 1).style, basalam.StyleDefault))
 end
 
 // ---- Style memo ---------------------------------------------------------
 
-// The style cache: a repeated render with unchanged inputs builds no SGR
-// string, changing the rule style rebuilds exactly that string, and an unset
-// background never builds a fill at all.
-func test_style_memo():
+// After the typed-style migration: painting stores Style values, so it builds no SGR. The buffer
+// builds one on and one off per styled run it emits.
+func test_style_bytes_at_emission():
     mut s := basalam.NewSeparator()
     s.set_style(basalam.Style { fg = basalam.Green, bg = basalam.Color.Ansi(4) })
     b := basalam.NewBuffer(6, 3)
     defer b.free()
 
-    // First render builds the background fill and the rule: two strings.
     before := basalam.SgrBuilds()
     s.render(b, rect(0, 0, 6, 3))
-    testing.AssertEqInt(basalam.SgrBuilds() - before, 2)
+    testing.AssertEqInt(basalam.SgrBuilds() - before, 0)
+    // Two runs: the rule row, then the background-only rows below it.
+    _ := b.ansi()
+    testing.AssertEqInt(basalam.SgrBuilds() - before, 4)
 
-    // Unchanged inputs: nothing is rebuilt.
-    mid := basalam.SgrBuilds()
-    s.render(b, rect(0, 0, 6, 3))
-    testing.AssertEqInt(basalam.SgrBuilds() - mid, 0)
-
-    // A new foreground changes the rule only; the background fill is reused.
-    s.set_style(basalam.Style { fg = basalam.Red, bg = basalam.Color.Ansi(4) })
-    changed := basalam.SgrBuilds()
-    s.render(b, rect(0, 0, 6, 3))
-    testing.AssertEqInt(basalam.SgrBuilds() - changed, 1)
-
-    // Without a background only the rule is built, and only once.
+    // Without a background only row 0 is styled, and only once.
     mut u := basalam.NewSeparator()
     u.set_style(basalam.Style { fg = basalam.Red })
     ub := basalam.NewBuffer(4, 3)
     defer ub.free()
     first := basalam.SgrBuilds()
     u.render(ub, rect(0, 0, 4, 3))
-    testing.AssertEqInt(basalam.SgrBuilds() - first, 1)
-    again := basalam.SgrBuilds()
-    u.render(ub, rect(0, 0, 4, 3))
-    testing.AssertEqInt(basalam.SgrBuilds() - again, 0)
+    testing.AssertEqInt(basalam.SgrBuilds() - first, 0)
+    _ := ub.ansi()
+    testing.AssertEqInt(basalam.SgrBuilds() - first, 2)
 end
 
 // ---- Predicates ----------------------------------------------------------
@@ -288,7 +275,7 @@ func main:
     test_zero_length_paints_nothing()
     test_style_fg_and_bg()
     test_style_fg_without_bg_leaves_off_line_cells()
-    test_style_memo()
+    test_style_bytes_at_emission()
     test_predicates()
     test_defaults()
     test_preferred_size_and_measure()
