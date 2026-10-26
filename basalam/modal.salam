@@ -296,7 +296,7 @@ pub struct Modal:
                     if hit != "":
                         cell.style = hit
                     else:
-                        cell.style = _dim(under, ColorTier.TrueColor)
+                        cell.style = _dim(under, buf.tier)
                         if holder[0].scrim.size() < _ScrimMemoCap:
                             holder[0].scrim.put(under, cell.style)
                         end

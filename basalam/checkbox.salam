@@ -151,8 +151,8 @@ pub struct Checkbox:
             ret
         end
         f := buf.focused and not this.disabled
-        gb := this.box_sgr_memo._sgr(_overlay(this.box_style, f, this.disabled), ColorTier.TrueColor)
-        gl := this.label_sgr_memo._sgr(_overlay(this.label_style, f, this.disabled), ColorTier.TrueColor)
+        gb := this.box_sgr_memo._sgr(_overlay(this.box_style, f, this.disabled), buf.tier)
+        gl := this.label_sgr_memo._sgr(_overlay(this.label_style, f, this.disabled), buf.tier)
         w := bounds.width
         buf.fill(Rect { x = bounds.x, y = bounds.y, width = w, height = 1 }, " ", gl)
         mut tick := " "

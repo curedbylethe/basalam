@@ -23,7 +23,8 @@
 // clear and row_text do not), and the per-copy focused flag. Finally the
 // front-buffer machinery: diff() is a whole frame while force_full and then
 // only the changed runs (one cursor move per run), commit() silences it, and
-// resize() reallocates both grids and forces a full repaint.
+// resize() reallocates both grids, forces a full repaint, and keeps the
+// buffer's colour tier.
 // Touched-cell tracking marks each write so diff() emits only those cells.
 
 import testing
@@ -136,6 +137,20 @@ func test_resize():
     testing.AssertEqInt(b.width, 0)
     testing.AssertEqInt(b.height, 0)
     testing.AssertEqStr(b.row_text(0), "")
+    b.free()
+end
+
+func test_resize_preserves_tier():
+    mut b := basalam.NewBuffer(2, 2)
+    // A fresh buffer is true colour whatever the environment says.
+    testing.AssertTrue(b.tier == basalam.ColorTier.TrueColor)
+    b.tier = basalam.ColorTier.Ansi16
+    b.resize(4, 3)
+    // A reallocation is not a new terminal: the detected tier survives, or a
+    // live resize would silently put a low-colour terminal back on true colour.
+    testing.AssertTrue(b.tier == basalam.ColorTier.Ansi16)
+    b.resize(0, 0)
+    testing.AssertTrue(b.tier == basalam.ColorTier.Ansi16)
     b.free()
 end
 
@@ -407,6 +422,7 @@ func main:
     test_put_str_codepoints()
     test_fill_and_clear()
     test_resize()
+    test_resize_preserves_tier()
     test_ansi_serialization()
     test_put_str_style()
     test_off_grid_starts()

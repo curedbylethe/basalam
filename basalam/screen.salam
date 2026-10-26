@@ -797,6 +797,10 @@ pub struct Screen:
         this.attached = true
         size := term.Size()
         this.resize(size.cols, size.rows)
+        // Detect once, here, at the moment the process takes the terminal.
+        // Not in NewScreen: a headless screen must not depend on TERM, and
+        // resize() above must not clobber the result.
+        this.buffer.tier = DetectTier()
         if WinchSupported():
             // Order matters. Give SIGWINCH a non-default disposition before
             // blocking it (a blocked signal whose disposition is still

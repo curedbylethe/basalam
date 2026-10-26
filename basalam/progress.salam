@@ -112,9 +112,9 @@ pub struct Progress:
         if w <= 0:
             ret
         end
-        fill_sgr := this.fill_memo._sgr(this.fill_style, ColorTier.TrueColor)
-        empty_sgr := this.empty_memo._sgr(this.empty_style, ColorTier.TrueColor)
-        text_sgr := this.text_memo._sgr(this.text_style, ColorTier.TrueColor)
+        fill_sgr := this.fill_memo._sgr(this.fill_style, buf.tier)
+        empty_sgr := this.empty_memo._sgr(this.empty_style, buf.tier)
+        text_sgr := this.text_memo._sgr(this.text_style, buf.tier)
         tail := w >= 6
         mut bar := w
         if tail:

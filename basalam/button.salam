@@ -143,7 +143,7 @@ pub struct Button:
                 st = this.focus_style
             end
         end
-        sgr := this.sgr_memo._sgr(st, ColorTier.TrueColor)
+        sgr := this.sgr_memo._sgr(st, buf.tier)
         buf.fill(Rect { x = bounds.x, y = bounds.y, width = w, height = 1 }, " ", sgr)
         buf.put_str(bounds.x, bounds.y, "[", sgr)
         if w >= 2:

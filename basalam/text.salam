@@ -48,11 +48,11 @@
  * layout engine. The style is a basalam.Style value (style.salam), not a raw
  * SGR string: render paints the box's padding with the style's background
  * only and the glyph runs with the full style, both cached per style and
- * rebuilt only when that style changes, at ColorTier.TrueColor. That tier is a
- * fixed constant, not a DetectTier
- * read, so the bytes never depend on the ambient environment and the goldens
- * stay deterministic; real tier plumbing — the screen detecting the tier once
- * and lowering colors at emission — is the boundary-B follow-up.
+ * rebuilt only when that style or the buffer's tier changes. The tier is
+ * `buf.tier`: the screen detects the terminal once when it starts and every
+ * widget reads it from the buffer it is handed. A headless NewBuffer keeps
+ * TrueColor, so the bytes never depend on the ambient environment and the
+ * goldens stay deterministic.
  */
 
 package basalam
@@ -106,7 +106,7 @@ pub struct Text:
     /// How the content is drawn. The background fills the whole box; the
     /// foreground and attributes apply to the glyph cells only, interior
     /// spaces included, so an underline stays continuous. StyleDefault draws
-    /// with the terminal's defaults. render emits it at ColorTier.TrueColor.
+    /// with the terminal's defaults. render emits it at the buffer's tier.
     pub style: Style = StyleDefault
 
     @en "wrap"
@@ -165,10 +165,10 @@ pub struct Text:
     /// then placed with the alignment offset and written as one run in the
     /// full style, interior spaces included, so an underline never breaks; at
     /// most bounds.height lines are drawn. Both SGR strings are cached on the
-    /// widget, at ColorTier.TrueColor. A degenerate box draws nothing and never
+    /// widget, at the buffer's tier. A degenerate box draws nothing and never
     /// panics.
     pub func render(buf: Buffer, bounds: Rect):
-        tier := ColorTier.TrueColor
+        tier := buf.tier
         pad := this.pad_memo._sgr(Style { bg = this.style.bg }, tier)
         glyph := this.glyph_memo._sgr(this.style, tier)
         buf.fill(bounds, " ", pad)
