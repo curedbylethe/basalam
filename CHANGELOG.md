@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `Keymap.unbind_for_seq(widget_id, seq)` removes a single widget's scoped
+  sequence binding, leaving the global sequence and other widgets' overrides in
+  place, and resets a pending key sequence.
+
 ## [0.3.2] - 2026-10-24
 
 ### Added
