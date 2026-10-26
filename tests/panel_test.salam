@@ -12,8 +12,8 @@
 // child being positioned inside the frame, and the preferred size it reports:
 // the child's natural size plus the ring (including a container child that
 // answers through measure), the max_width forwarded to the child, the
-// per-axis sentinel, and the empty slot. Expected SGR strings come from
-// basalam.StyleSgr, so no escape appears by hand.
+// per-axis sentinel, and the empty slot. Frame cells are compared as Style
+// values, never as hand-written escapes.
 
 import term
 import testing
@@ -122,7 +122,7 @@ end
 
 func test_none_pass_through():
     mut b := basalam.NewBuffer(8, 3)
-    b.fill(basalam.Rect { x = 0, y = 0, width = 8, height = 3 }, "x", "")
+    b.fill(basalam.Rect { x = 0, y = 0, width = 8, height = 3 }, "x", basalam.StyleDefault)
     mut p := basalam.Panel { title = "Files" }
     p.add(Probe {})
     r := basalam.Rect { x = 0, y = 0, width = 8, height = 3 }
@@ -178,10 +178,10 @@ func test_border_style_fg_only():
     r := basalam.Rect { x = 0, y = 0, width = 8, height = 3 }
     p.set_bounds(r)
     p.render(b, r)
-    want := basalam.StyleSgr(basalam.Style { fg = basalam.Color.Ansi(2) }, basalam.ColorTier.TrueColor)
-    testing.AssertEqStr(b.get(0, 0).style, want)
-    testing.AssertEqStr(b.get(3, 0).style, want)
-    testing.AssertEqStr(b.get(7, 2).style, want)
+    want := basalam.Style { fg = basalam.Color.Ansi(2) }
+    testing.AssertTrue(basalam.StyleEq(b.get(0, 0).style, want))
+    testing.AssertTrue(basalam.StyleEq(b.get(3, 0).style, want))
+    testing.AssertTrue(basalam.StyleEq(b.get(7, 2).style, want))
     b.free()
 end
 
@@ -302,7 +302,7 @@ func test_focused_frame_uses_focus_style():
     r := basalam.Rect { x = 0, y = 0, width = 8, height = 3 }
     p.set_bounds(r)
     p.render(b, r)
-    testing.AssertEqStr(b.get(0, 0).style, basalam.StyleSgr(basalam.Style { fg = basalam.Color.Ansi(3) }, basalam.ColorTier.TrueColor))
+    testing.AssertTrue(basalam.StyleEq(b.get(0, 0).style, basalam.Style { fg = basalam.Color.Ansi(3) }))
     b.free()
 end
 
@@ -313,7 +313,7 @@ func test_unfocused_frame_uses_border_style():
     r := basalam.Rect { x = 0, y = 0, width = 8, height = 3 }
     p.set_bounds(r)
     p.render(b, r)
-    testing.AssertEqStr(b.get(0, 0).style, basalam.StyleSgr(basalam.Style { fg = basalam.Color.Ansi(4) }, basalam.ColorTier.TrueColor))
+    testing.AssertTrue(basalam.StyleEq(b.get(0, 0).style, basalam.Style { fg = basalam.Color.Ansi(4) }))
     b.free()
 end
 
@@ -325,7 +325,7 @@ func test_default_focus_style_keeps_border_style():
     r := basalam.Rect { x = 0, y = 0, width = 8, height = 3 }
     p.set_bounds(r)
     p.render(b, r)
-    testing.AssertEqStr(b.get(0, 0).style, basalam.StyleSgr(basalam.Style { fg = basalam.Color.Ansi(4) }, basalam.ColorTier.TrueColor))
+    testing.AssertTrue(basalam.StyleEq(b.get(0, 0).style, basalam.Style { fg = basalam.Color.Ansi(4) }))
     b.free()
 end
 

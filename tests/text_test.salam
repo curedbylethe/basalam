@@ -184,17 +184,17 @@ end
 func test_text_style_covers_box():
     mut b := basalam.NewBuffer(6, 1)
     defer b.free()
-    glyph := basalam.StyleSgr(basalam.Style { bold = true }, basalam.ColorTier.TrueColor)
-    pad := basalam.StyleSgr(basalam.Style {}, basalam.ColorTier.TrueColor)
+    glyph := basalam.Style { bold = true }
+    pad := basalam.StyleDefault
     mut t := basalam.NewText("hi")
     t.set_style(basalam.Style { bold = true })
     t.render(b, rect(0, 0, 6, 1))
     testing.AssertEqStr(b.get(0, 0).ch, "h")
-    testing.AssertEqStr(b.get(0, 0).style, glyph)
-    testing.AssertEqStr(b.get(1, 0).style, glyph)
+    testing.AssertTrue(basalam.StyleEq(b.get(0, 0).style, glyph))
+    testing.AssertTrue(basalam.StyleEq(b.get(1, 0).style, glyph))
     // Under the pad rule a cell past the glyphs carries only the style's
-    // background; for a bold-only style that is the empty string.
-    testing.AssertEqStr(b.get(5, 0).style, pad)
+    // background; for a bold-only style that is the default style.
+    testing.AssertTrue(basalam.StyleEq(b.get(5, 0).style, pad))
 end
 
 func test_text_wrap_none_clips_at_edge():
@@ -329,73 +329,72 @@ end
 func test_text_style_foreground_and_background():
     mut b := basalam.NewBuffer(4, 1)
     defer b.free()
-    fg := basalam.StyleSgr(basalam.Style { fg = basalam.Red }, basalam.ColorTier.TrueColor)
-    pad := basalam.StyleSgr(basalam.Style {}, basalam.ColorTier.TrueColor)
+    fg := basalam.Style { fg = basalam.Red }
+    pad := basalam.StyleDefault
     mut t := basalam.NewText("hi")
     t.set_style(basalam.Style { fg = basalam.Red })
     t.render(b, rect(0, 0, 4, 1))
-    testing.AssertEqStr(b.get(0, 0).style, fg)
-    testing.AssertEqStr(b.get(1, 0).style, fg)
+    testing.AssertTrue(basalam.StyleEq(b.get(0, 0).style, fg))
+    testing.AssertTrue(basalam.StyleEq(b.get(1, 0).style, fg))
     // A foreground never reaches the padding: the pad cell carries bg only.
-    testing.AssertEqStr(b.get(3, 0).style, pad)
+    testing.AssertTrue(basalam.StyleEq(b.get(3, 0).style, pad))
 
     mut b2 := basalam.NewBuffer(4, 1)
     defer b2.free()
-    bg := basalam.StyleSgr(basalam.Style { bg = basalam.Blue }, basalam.ColorTier.TrueColor)
+    bg := basalam.Style { bg = basalam.Blue }
     mut t2 := basalam.NewText("hi")
     t2.set_style(basalam.Style { bg = basalam.Blue })
     t2.render(b2, rect(0, 0, 4, 1))
-    testing.AssertEqStr(b2.get(0, 0).style, bg)
+    testing.AssertTrue(basalam.StyleEq(b2.get(0, 0).style, bg))
     testing.AssertEqStr(b2.get(2, 0).ch, " ")
-    testing.AssertEqStr(b2.get(2, 0).style, bg)
+    testing.AssertTrue(basalam.StyleEq(b2.get(2, 0).style, bg))
 end
 
 func test_text_style_padding_on_wrapped_row():
     mut b := basalam.NewBuffer(5, 2)
     defer b.free()
-    pad := basalam.StyleSgr(basalam.Style {}, basalam.ColorTier.TrueColor)
+    pad := basalam.StyleDefault
     mut t := basalam.NewText("ab cde")
     t.set_style(basalam.Style { bold = true })
     t.render(b, rect(0, 0, 5, 2))
     // Row 0 holds "ab" then blank padding cells the glyphs never touch.
     testing.AssertEqStr(b.row_text(0), "ab   ")
     testing.AssertEqStr(b.row_text(1), "cde  ")
-    testing.AssertEqStr(b.get(4, 0).style, pad)
-    testing.AssertEqStr(b.get(4, 1).style, pad)
+    testing.AssertTrue(basalam.StyleEq(b.get(4, 0).style, pad))
+    testing.AssertTrue(basalam.StyleEq(b.get(4, 1).style, pad))
 end
 
 func test_text_ansi_frame_carries_style():
     mut b := basalam.NewBuffer(4, 1)
     defer b.free()
-    glyph := basalam.StyleSgr(basalam.Style { bold = true }, basalam.ColorTier.TrueColor)
-    pad := basalam.StyleSgr(basalam.Style {}, basalam.ColorTier.TrueColor)
+    glyph := basalam.Style { bold = true }
     mut t := basalam.NewText("hi")
     t.set_style(basalam.Style { bold = true })
     t.render(b, rect(0, 0, 4, 1))
     // Glyphs carry the full style; the pad cells carry bg only (here nothing),
-    // so the buffer resets back to "" before the trailing spaces.
-    want := term.SeqMoveTo(1, 1) + term.Reset + glyph + "hi" + term.Reset + pad + "  " + term.Reset
+    // so the buffer leaves bold before the trailing spaces.
+    seq_on := basalam.StyleSgr(glyph, basalam.ColorTier.TrueColor)
+    seq_off := basalam.StyleSgrOff(glyph, basalam.ColorTier.TrueColor)
+    want := term.SeqMoveTo(1, 1) + seq_on + "hi" + seq_off + "  "
     testing.AssertEqStr(b.ansi(), want)
 end
 
-// CUR-455 probe. Two SGR strings per render: the pad fill (style.bg only) and
-// the glyph run (the whole style). A second render with unchanged inputs builds
-// nothing; changing a style field rebuilds only the memo that serializes it, so
-// an fg-only change costs one build and leaves the pad alone.
-// CUR-419 AC-5/AC-6. The tier is render context on the buffer: a buffer pinned
-// to Ansi16 emits the lowered ANSI foreground, and at Off the colour vanishes
-// while attributes survive. A fresh buffer stays true colour (see
-// test_text_style_foreground_and_background above).
+// The tier is render context on the buffer: the cell keeps the
+// Style, and a buffer pinned to Ansi16 emits the lowered ANSI foreground. A
+// fresh buffer stays true colour (see the test above).
 func test_text_tier_lowers_foreground():
     mut b := basalam.NewBuffer(2, 1)
     defer b.free()
     b.tier = basalam.ColorTier.Ansi16
     mut t := basalam.NewText("hi")
-    t.set_style(basalam.Style { fg = basalam.Color.Rgb(255, 0, 0) })
+    style := basalam.Style { fg = basalam.Color.Rgb(255, 0, 0) }
+    t.set_style(style)
     t.render(b, rect(0, 0, 2, 1))
+    testing.AssertTrue(basalam.StyleEq(b.get(0, 0).style, style))
+    testing.AssertTrue(basalam.StyleEq(b.get(1, 0).style, style))
     lowering := basalam.FgSeqAt(basalam.Color.Rgb(255, 0, 0), basalam.ColorTier.Ansi16)
-    testing.AssertEqStr(b.get(0, 0).style, lowering)
-    testing.AssertEqStr(b.get(1, 0).style, lowering)
+    want := term.SeqMoveTo(1, 1) + basalam.StyleSgr(style, basalam.ColorTier.Ansi16) + "hi" + basalam.StyleSgrOff(style, basalam.ColorTier.Ansi16)
+    testing.AssertEqStr(b.ansi(), want)
     // Not vacuous: the same style at true colour is the 24-bit sequence.
     testing.AssertTrue(lowering != basalam.FgSeqAt(basalam.Color.Rgb(255, 0, 0), basalam.ColorTier.TrueColor))
 end
@@ -407,8 +406,10 @@ func test_text_tier_off_drops_colour():
     mut t := basalam.NewText("hi")
     t.set_style(basalam.Style { fg = basalam.Color.Rgb(255, 0, 0) })
     t.render(b, rect(0, 0, 2, 1))
-    testing.AssertEqStr(b.get(0, 0).style, "")
+    testing.AssertTrue(basalam.StyleEq(b.get(0, 0).style, basalam.Style { fg = basalam.Color.Rgb(255, 0, 0) }))
     testing.AssertEqStr(b.row_text(0), "hi")
+    // At Off the colour lowers away at emission; the glyphs stay.
+    testing.AssertEqStr(b.ansi(), term.SeqMoveTo(1, 1) + "hi")
 
     // Attributes are not colours: bold still reaches the cell at Off.
     mut b2 := basalam.NewBuffer(2, 1)
@@ -417,10 +418,11 @@ func test_text_tier_off_drops_colour():
     mut t2 := basalam.NewText("hi")
     t2.set_style(basalam.Style { fg = basalam.Color.Rgb(255, 0, 0), bold = true })
     t2.render(b2, rect(0, 0, 2, 1))
-    testing.AssertEqStr(b2.get(0, 0).style, term.Sgr(term.StyleBold))
-    testing.AssertEqStr(b2.get(1, 0).style, term.Sgr(term.StyleBold))
+    testing.AssertEqStr(b2.ansi(), term.SeqMoveTo(1, 1) + term.Sgr(term.StyleBold) + "hi" + term.Sgr(22))
 end
 
+// After the typed-style migration: the widget builds nothing. A styled glyph run followed by
+// default padding is one on and one off sequence when the buffer emits it.
 func test_sgr_memo_probe():
     mut b := basalam.NewBuffer(6, 1)
     defer b.free()
@@ -428,13 +430,14 @@ func test_sgr_memo_probe():
     t.set_style(basalam.Style { fg = basalam.Red })
     before := basalam.SgrBuilds()
     t.render(b, rect(0, 0, 6, 1))
-    first := basalam.SgrBuilds()
-    testing.AssertEqInt(first - before, 2)
-    t.render(b, rect(0, 0, 6, 1))
-    testing.AssertEqInt(basalam.SgrBuilds() - first, 0)
+    testing.AssertEqInt(basalam.SgrBuilds() - before, 0)
+    _ := b.ansi()
+    testing.AssertEqInt(basalam.SgrBuilds() - before, 2)
     t.set_style(basalam.Style { fg = basalam.Blue })
     t.render(b, rect(0, 0, 6, 1))
-    testing.AssertEqInt(basalam.SgrBuilds() - first, 1)
+    testing.AssertEqInt(basalam.SgrBuilds() - before, 2)
+    _ := b.ansi()
+    testing.AssertEqInt(basalam.SgrBuilds() - before, 4)
 end
 
 // ---- AC4: wrapping within bounds -------------------------------------
@@ -476,8 +479,8 @@ func test_text_wrap_none_does_not_spill():
     // Exactly the first 4 codepoints; outside the box stays buffer default.
     testing.AssertEqStr(b.row_text(0), "abcd  ")
     testing.AssertEqStr(b.get(4, 0).ch, " ")
-    testing.AssertEqStr(b.get(4, 0).style, "")
-    testing.AssertEqStr(b.get(5, 0).style, "")
+    testing.AssertTrue(basalam.StyleEq(b.get(4, 0).style, basalam.StyleDefault))
+    testing.AssertTrue(basalam.StyleEq(b.get(5, 0).style, basalam.StyleDefault))
 end
 
 // ---- AC5: preferred size ---------------------------------------------

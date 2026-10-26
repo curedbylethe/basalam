@@ -51,7 +51,7 @@ struct ZBox:
     end
 
     pub func render(buf: basalam.Buffer, bounds: basalam.Rect):
-        buf.put_str(paint_at, bounds.y, this.mark, "")
+        buf.put_str(paint_at, bounds.y, this.mark, basalam.StyleDefault)
         paint_at = paint_at + 1
     end
 end
@@ -71,7 +71,7 @@ struct Frame:
     end
 
     pub func render(buf: basalam.Buffer, bounds: basalam.Rect):
-        buf.put_str(bounds.x, bounds.y, this.title + " " + this.seen, "")
+        buf.put_str(bounds.x, bounds.y, this.title + " " + this.seen, basalam.StyleDefault)
     end
 end
 
@@ -98,7 +98,7 @@ struct Spot:
     end
 
     pub func render(buf: basalam.Buffer, bounds: basalam.Rect):
-        buf.put_str(bounds.x, bounds.y, this.mark, "")
+        buf.put_str(bounds.x, bounds.y, this.mark, basalam.StyleDefault)
     end
 end
 
@@ -115,7 +115,7 @@ struct Flag:
         if buf.focused:
             ch = "*"
         end
-        buf.put_str(bounds.x, bounds.y, ch, "")
+        buf.put_str(bounds.x, bounds.y, ch, basalam.StyleDefault)
     end
 end
 
@@ -126,7 +126,7 @@ struct Counter:
     pub ch: str = "1"
 
     pub func render(buf: basalam.Buffer, bounds: basalam.Rect):
-        buf.put_str(bounds.x, bounds.y, this.ch, "")
+        buf.put_str(bounds.x, bounds.y, this.ch, basalam.StyleDefault)
         if this.ch == "1":
             this.ch = "2"
         else:
@@ -141,7 +141,7 @@ struct Block:
     pub ch: str = "#"
 
     pub func render(buf: basalam.Buffer, bounds: basalam.Rect):
-        buf.fill(bounds, this.ch, "")
+        buf.fill(bounds, this.ch, basalam.StyleDefault)
     end
 end
 
@@ -370,11 +370,13 @@ end
 func test_ansi_frame():
     mut b := basalam.NewBuffer(3, 2)
     defer b.free()
-    bold := term.Sgr(term.StyleBold)
+    bold := basalam.Style { bold = true }
     b.put_str(0, 0, "ab", bold)
-    b.put_str(0, 1, "c", "")
+    b.put_str(0, 1, "c", basalam.StyleDefault)
     out := b.ansi()
-    want := term.SeqMoveTo(1, 1) + term.Reset + bold + "ab" + term.Reset + " " + term.SeqMoveTo(2, 1) + "c  " + term.Reset
+    seq_on := basalam.StyleSgr(bold, basalam.ColorTier.TrueColor)
+    seq_off := basalam.StyleSgrOff(bold, basalam.ColorTier.TrueColor)
+    want := term.SeqMoveTo(1, 1) + seq_on + "ab" + seq_off + " " + term.SeqMoveTo(2, 1) + "c  "
     testing.AssertEqStr(out, want)
 end
 

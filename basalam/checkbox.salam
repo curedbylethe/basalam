@@ -78,11 +78,6 @@ pub struct Checkbox:
 
     state: bool = false
 
-    // The SGR of the resolved box and label styles, kept between renders.
-    // Written only by render, never by the app.
-    box_sgr_memo: _SgrMemo = _SgrMemo {}
-    label_sgr_memo: _SgrMemo = _SgrMemo {}
-
     @en "focusable"
     /// True when enabled and at least one cell wide, so the checkbox can take
     /// keyboard focus.
@@ -154,8 +149,8 @@ pub struct Checkbox:
             ret
         end
         f := buf.focused and not this.disabled
-        gb := this.box_sgr_memo._sgr(_overlay(this.box_style, f, this.disabled), buf.tier)
-        gl := this.label_sgr_memo._sgr(_overlay(this.label_style, f, this.disabled), buf.tier)
+        gb := _overlay(this.box_style, f, this.disabled)
+        gl := _overlay(this.label_style, f, this.disabled)
         w := bounds.width
         buf.fill(Rect { x = bounds.x, y = bounds.y, width = w, height = 1 }, " ", gl)
         mut tick := " "

@@ -73,7 +73,7 @@ struct Tile:
     end
 
     pub func render(buf: basalam.Buffer, bounds: basalam.Rect):
-        buf.put_str(bounds.x, bounds.y, str.CharSubstr(this.name, 0, 1), "")
+        buf.put_str(bounds.x, bounds.y, str.CharSubstr(this.name, 0, 1), basalam.StyleDefault)
     end
 end
 

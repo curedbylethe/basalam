@@ -212,9 +212,11 @@ func test_render_colours():
     defer b.free()
     testing.AssertEqStr(b.row_text(0), "######---------  42%")
     green := basalam.StyleSgr(basalam.Style { fg = basalam.Green }, basalam.ColorTier.TrueColor)
+    green_off := basalam.StyleSgrOff(basalam.Style { fg = basalam.Green }, basalam.ColorTier.TrueColor)
     bright := basalam.StyleSgr(basalam.Style { fg = basalam.BrightBlack }, basalam.ColorTier.TrueColor)
+    bright_off := basalam.StyleSgrOff(basalam.Style { fg = basalam.BrightBlack }, basalam.ColorTier.TrueColor)
     // The whole row, not just the boundary cells: fill, empty, then the tail.
-    want := term.SeqMoveTo(1, 1) + term.Reset + green + "######" + term.Reset + bright + "---------" + term.Reset + "  42%" + term.Reset
+    want := term.SeqMoveTo(1, 1) + green + "######" + green_off + bright + "---------" + bright_off + "  42%"
     testing.AssertEqStr(b.ansi(), want)
 
     // The tail takes text_style.
@@ -223,12 +225,11 @@ func test_render_colours():
     t.set_progress(42)
     c := draw(t, 20, 1)
     defer c.free()
-    testing.AssertEqStr(c.get(18, 0).style, green)
+    testing.AssertTrue(basalam.StyleEq(c.get(18, 0).style, basalam.Style { fg = basalam.Green }))
 end
 
-// CUR-455 probe. A second render with unchanged styles reuses all three cached
-// SGRs, so the build counter does not move; changing one style field costs
-// exactly one build.
+// After the typed-style migration: the widget builds nothing. Each styled run costs one on and
+// one off sequence when the buffer emits it; default cells cost none.
 func test_sgr_memo_probe():
     mut p := basalam.NewProgress()
     p.set_progress(42)
@@ -236,13 +237,15 @@ func test_sgr_memo_probe():
     defer buf.free()
     before := basalam.SgrBuilds()
     p.render(buf, rect(0, 0, 20, 1))
-    first := basalam.SgrBuilds()
-    testing.AssertEqInt(first - before, 3)
-    p.render(buf, rect(0, 0, 20, 1))
-    testing.AssertEqInt(basalam.SgrBuilds() - first, 0)
+    testing.AssertEqInt(basalam.SgrBuilds() - before, 0)
+    _ := buf.ansi()
+    testing.AssertEqInt(basalam.SgrBuilds() - before, 0)
     p.fill_style = basalam.Style { fg = basalam.Green }
     p.render(buf, rect(0, 0, 20, 1))
-    testing.AssertEqInt(basalam.SgrBuilds() - first, 1)
+    testing.AssertEqInt(basalam.SgrBuilds() - before, 0)
+    // The filled run is one styled style, the rest default.
+    _ := buf.ansi()
+    testing.AssertEqInt(basalam.SgrBuilds() - before, 2)
 end
 
 func main:

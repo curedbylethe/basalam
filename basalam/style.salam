@@ -42,24 +42,25 @@
  *             sequence builders and color.salam's tier-aware encoders.
  *
  *   fit:      sits beside color.salam, whose Color it carries and whose
- *             FgSeqAt / BgSeqAt it emits through. This is the value half of
- *             the styling work; Text consumes it in a later stage, where its
- *             raw SGR string becomes a Style.
+ *             FgSeqAt / BgSeqAt it emits through, and beside buffer.salam,
+ *             whose cells carry a Style. Widgets resolve a Style and hand it
+ *             to the buffer, which turns it into bytes here at emission.
  *
- *   absent:   any wiring into Cell, Buffer, Screen, or the widgets (a cell
- *             still holds a raw SGR string); any border drawing or geometry
- *             (BorderStyle is a value only, for CUR-220 to consume); a
- *             border field on Style (it is deliberately a sibling enum, so
- *             a child never inherits a parent's border); and any terminal
- *             reset — clearing a previous cell is the screen's job, so these
- *             functions never emit term.Reset and never read the environment
- *             (the capability tier is a pure parameter).
+ *   absent:   any border drawing or geometry (BorderStyle is a value only,
+ *             for CUR-220 to consume); a border field on Style (it is
+ *             deliberately a sibling enum, so a child never inherits a
+ *             parent's border); and any terminal reset — clearing a
+ *             previous cell is the buffer's job, so these functions never
+ *             emit term.Reset and never read the environment (the
+ *             capability tier is a pure parameter).
  *
- * Transition contract (not implemented here): between two cells whose styles
- * differ the screen emits StyleSgrOff(prev) then StyleSgr(next); the first
- * cell of a frame assumes the terminal's default, and the screen emits
- * StyleSgrOff(last) at the end of the frame. These functions are pure and
- * hold no state, so that sequencing lives entirely with the caller.
+ * Transition contract: Buffer.ansi and Buffer.diff implement it — between two
+ * cells whose styles differ they emit StyleSgrOff(prev, tier) then
+ * StyleSgr(next, tier); the first cell of a frame assumes the terminal's
+ * default, and the frame ends with StyleSgrOff(last, tier). These functions
+ * stay pure and hold no state, so only the sequencing lives in the buffer.
+ * That is also why nothing caches them: the bytes depend on the tier, which
+ * only the buffer knows, so it builds them once, when it emits them.
  *
  * Why no reset inside the conversion: StyleSgr never emits ESC[0m. A reset
  * would discard the previous cell's state instead of describing this one,
@@ -78,34 +79,11 @@ import term
 /// the identity of StyleMerge.
 pub const StyleDefault := Style {}
 
-// How many SGR strings the widget caching layer has built this process.
+// How many SGR strings StyleSgr and StyleSgrOff have built this process.
 // Diagnostics only: the tests read it through SgrBuilds, and it never resets.
+// The buffer calls these at emission, so one frame adds one per on or off
+// sequence it actually wrote.
 mut _sgr_builds := 0
-
-// Caches one Style serialized at one tier, so a widget that redraws with an
-// unchanged style reuses the string instead of building it again. The key is
-// the style plus the tier: StyleEq ignores the tier, so comparing the style
-// alone could serve a string built for another tier. The entry is never
-// cleared; str has no free, so a stale value costs nothing extra.
-struct _SgrMemo:
-    style: Style = StyleDefault
-    tier: ColorTier = ColorTier.TrueColor
-    sgr: str = ""
-    ready: bool = false
-
-    // The SGR for style at tier, built once per distinct style+tier pair.
-    pub func _sgr(style: Style, tier: ColorTier): str:
-        if this.ready and this.tier == tier and StyleEq(this.style, style):
-            ret this.sgr
-        end
-        this.style = style
-        this.tier = tier
-        this.sgr = StyleSgr(style, tier)
-        this.ready = true
-        _sgr_builds = _sgr_builds + 1
-        ret this.sgr
-    end
-end
 
 @en "BorderStyle"
 /// The kind of border a container draws: none, or a one-cell ring drawn with
@@ -246,6 +224,9 @@ pub func StyleSgr(style: Style, tier: ColorTier): str:
     if _color_shown(style.bg, tier):
         out = out + BgSeqAt(style.bg, tier)
     end
+    if out != "":
+        _sgr_builds = _sgr_builds + 1
+    end
     ret out
 end
 
@@ -276,13 +257,17 @@ pub func StyleSgrOff(style: Style, tier: ColorTier): str:
     if _color_shown(style.bg, tier):
         out = out + term.Sgr(term.BgDefault)
     end
+    if out != "":
+        _sgr_builds = _sgr_builds + 1
+    end
     ret out
 end
 
 @en "SgrBuilds"
-/// Diagnostics: how many SGR strings the widget caching layer has built this
-/// process. A widget that redraws with an unchanged style and tier reuses its
-/// cached string, so the count does not move. Read-only; not configuration.
+/// Diagnostics: how many non-empty SGR strings StyleSgr and StyleSgrOff have
+/// built this process. Nothing caches them: the buffer builds one per style
+/// change it writes, so a frame adds one per on or off sequence emitted.
+/// Read-only; not configuration.
 pub func SgrBuilds(): int:
     ret _sgr_builds
 end

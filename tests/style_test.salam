@@ -279,6 +279,20 @@ func test_no_reset_in_output():
     testing.AssertFalse(str.Contains(basalam.StyleSgrOff(s, basalam.ColorTier.Off), term.Reset))
 end
 
+// OQ-4. The emitters are the only place an SGR string is built, so the
+// counter counts what a frame writes and nothing else.
+func test_sgr_builds_counts_emissions():
+    before := basalam.SgrBuilds()
+    testing.AssertEqStr(basalam.StyleSgr(basalam.Style { bold = true }, basalam.ColorTier.TrueColor), term.Sgr(term.StyleBold))
+    testing.AssertEqInt(basalam.SgrBuilds() - before, 1)
+    testing.AssertEqStr(basalam.StyleSgrOff(basalam.Style { bold = true }, basalam.ColorTier.TrueColor), term.Sgr(22))
+    testing.AssertEqInt(basalam.SgrBuilds() - before, 2)
+    // Nothing set builds no string, so nothing is counted.
+    _ := basalam.StyleSgr(basalam.StyleDefault, basalam.ColorTier.TrueColor)
+    _ := basalam.StyleSgrOff(basalam.StyleDefault, basalam.ColorTier.TrueColor)
+    testing.AssertEqInt(basalam.SgrBuilds() - before, 2)
+end
+
 func main:
     test_default_fields()
     test_partial_literal()
@@ -315,5 +329,6 @@ func main:
     test_eq_implies_same_bytes()
     test_eq_incomplete_at_off()
     test_no_reset_in_output()
+    test_sgr_builds_counts_emissions()
     ret testing.Summary()
 end

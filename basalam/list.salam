@@ -16,8 +16,8 @@
 /*
  * List: a single-selection, scrollable list widget.
  *
- * List holds a vector of strings, an index into it, and three style strings.
- * It is focusable, so the screen routes keyboard events to it; its
+ * List holds a vector of strings, an index into it, and three styles. It is
+ * focusable, so the screen routes keyboard events to it; its
  * handle_event moves the selection down on j and up on k (clamped, no wrap)
  * and invokes on_select with the selected index on enter. Every other key
  * and every non-key event bubbles on.
@@ -27,29 +27,26 @@
  * (_reveal), then draws one item per row, clipping each to the width with
  * str.CharSubstr, so rows never wrap and never carry an ellipsis. The
  * selected row is painted full width in the selection style: reverse video
- * while the buffer reports focus, bright-on-black while it does not. An
- * empty list draws blank cells in the base style.
+ * while the buffer reports focus, a bright-black background while it does
+ * not. The selection style replaces the base style for that row, rather than
+ * merging into it. An empty list draws blank cells in the base style.
  *
  * This file deliberately has no border or scrollbar, no arrow/Home/End or
  * g/G keys, no wrap-around, no ellipsis or padding, no placeholder, no
- * multi-select, and no mouse handling: the style is the opaque SGR string the
- * caller builds with std/term, and placement in the parent's box belongs to
- * whoever owns the layout.
+ * multi-select, and no mouse handling. The style fields are Style values; the
+ * buffer turns them into bytes at emission. Placement in the parent's box
+ * belongs to whoever owns the layout.
+ *
+ * The unfocused default is Style { bg = BrightBlack }, a bright-black
+ * background. The old string built it as term.Sgr(term.BgBlack +
+ * term.FgBright): BgBlack is 40 and FgBright is 60, so the single code is
+ * 100. Style { bg = BrightBlack } emits the same ESC[100m.
  */
 
 package basalam
 
 import str
 import term
-
-// The two selection fallbacks read no List field, so they are constants, not
-// per-instance state: built on first use and never cleared (str has no free).
-// A ready flag keeps a legitimate "" distinct from "not built". The first
-// build bumps the package-level counter so the tests can see it.
-mut _sel_sgr := ""
-mut _sel_sgr_ready := false
-mut _unsel_sgr := ""
-mut _unsel_sgr_ready := false
 
 @en "List"
 /// A single-selection scrollable list of strings. It is focusable, so
@@ -61,19 +58,19 @@ pub struct List:
     pub use BaseWidget
 
     @en "style"
-    /// SGR escape sequence(s) for every row. "" means the terminal's
-    /// default style.
-    pub style: str = ""
+    /// The style of every unselected row. StyleDefault draws with the
+    /// terminal's defaults.
+    pub style: Style = StyleDefault
 
     @en "selected_style"
-    /// SGR escape sequence(s) for the selected row while focused.
-    /// "" means reverse video.
-    pub selected_style: str = ""
+    /// The style of the selected row while focused; it replaces `style` on
+    /// that row. Defaults to reverse video.
+    pub selected_style: Style = Style { reverse = true }
 
     @en "selected_unfocused_style"
-    /// SGR escape sequence(s) for the selected row while unfocused.
-    /// "" means bright black on a black background.
-    pub selected_unfocused_style: str = ""
+    /// The style of the selected row while unfocused; it replaces `style` on
+    /// that row. Defaults to a bright-black background.
+    pub selected_unfocused_style: Style = Style { bg = BrightBlack }
 
     @en "on_select"
     /// Called with the selected index when enter is pressed on a non-empty
@@ -149,25 +146,16 @@ pub struct List:
         if bounds.is_empty():
             ret
         end
-        base := this.style
-        mut sel := this.selected_style
-        if sel == "":
-            sel = _default_selected_sgr()
-        end
-        mut unsel := this.selected_unfocused_style
-        if unsel == "":
-            unsel = _default_unselected_sgr()
-        end
         this._reveal(bounds.height)
         n := this.items.len()
         repeat bounds.height in y:
             idx := this.window_start + y
-            mut rowStyle := base
+            mut rowStyle := this.style
             if idx < n and idx == this.selected:
                 if buf.focused:
-                    rowStyle = sel
+                    rowStyle = this.selected_style
                 else:
-                    rowStyle = unsel
+                    rowStyle = this.selected_unfocused_style
                 end
             end
             row := Rect { x = bounds.x, y = bounds.y + y, width = bounds.width, height = 1 }
@@ -208,26 +196,6 @@ pub struct List:
         end
         this.window_start = s
     end
-end
-
-// Reverse video, the fallback for an empty selected_style.
-func _default_selected_sgr(): str:
-    if not _sel_sgr_ready:
-        _sel_sgr = term.Sgr(term.StyleReverse)
-        _sel_sgr_ready = true
-        _sgr_builds = _sgr_builds + 1
-    end
-    ret _sel_sgr
-end
-
-// Bright black on black, the fallback for an empty selected_unfocused_style.
-func _default_unselected_sgr(): str:
-    if not _unsel_sgr_ready:
-        _unsel_sgr = term.Sgr(term.BgBlack + term.FgBright)
-        _unsel_sgr_ready = true
-        _sgr_builds = _sgr_builds + 1
-    end
-    ret _unsel_sgr
 end
 
 @en "NewList"

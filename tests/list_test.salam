@@ -130,9 +130,9 @@ func test_defaults_selection():
     testing.AssertTrue(l.focusable())
     testing.AssertEqInt(l.selected_index(), 0)
     testing.AssertEqStr(l.selected_item(), "inbox")
-    testing.AssertEqStr(l.style, "")
-    testing.AssertEqStr(l.selected_style, "")
-    testing.AssertEqStr(l.selected_unfocused_style, "")
+    testing.AssertTrue(basalam.StyleEq(l.style, basalam.StyleDefault))
+    testing.AssertTrue(basalam.StyleEq(l.selected_style, basalam.Style { reverse = true }))
+    testing.AssertTrue(basalam.StyleEq(l.selected_unfocused_style, basalam.Style { bg = basalam.BrightBlack }))
     // BaseWidget is embedded, so the preferred_size sentinel is inherited.
     testing.AssertEqInt(l.preferred_size(80).width, -1)
     testing.AssertEqInt(l.preferred_size(80).height, -1)
@@ -143,6 +143,20 @@ func test_defaults_empty():
     testing.AssertTrue(e.focusable())
     testing.AssertEqInt(e.selected_index(), -1)
     testing.AssertEqStr(e.selected_item(), "")
+end
+
+// OQ-2: the selection style replaces the base style on that row; it does not
+// inherit the base foreground the way StyleMerge would.
+func test_selection_replaces_base_style():
+    mut l := basalam.NewList(items3())
+    l.set_bounds(rect(0, 0, 10, 3))
+    l.style = basalam.Style { fg = basalam.Green }
+    l.selected_style = basalam.Style { reverse = true }
+    mut b := frame(l, 10, 3, true)
+    defer b.free()
+    testing.AssertTrue(basalam.StyleEq(b.get(0, 0).style, basalam.Style { reverse = true }))
+    // An unselected row keeps the base style.
+    testing.AssertTrue(basalam.StyleEq(b.get(0, 1).style, basalam.Style { fg = basalam.Green }))
 end
 
 // ---- Navigation (AC2) — K01-K07, K22-K23 ------------------------------
@@ -156,7 +170,7 @@ func test_nav_k01_j_inside_window():
     mut b := frame(l, 10, 3, true)
     defer b.free()
     testing.AssertEqStr(b.row_text(0), "inbox     ")
-    testing.AssertEqStr(b.get(0, 1).style, term.Sgr(term.StyleReverse))
+    testing.AssertTrue(basalam.StyleEq(b.get(0, 1).style, basalam.Style { reverse = true }))
 end
 
 func test_nav_k02_k_clamps_at_top():
@@ -168,7 +182,7 @@ func test_nav_k02_k_clamps_at_top():
     mut b := frame(l, 10, 3, true)
     defer b.free()
     testing.AssertEqStr(b.row_text(0), "inbox     ")
-    testing.AssertEqStr(b.get(0, 0).style, term.Sgr(term.StyleReverse))
+    testing.AssertTrue(basalam.StyleEq(b.get(0, 0).style, basalam.Style { reverse = true }))
 end
 
 func test_nav_k03_j_clamps_at_bottom():
@@ -180,7 +194,7 @@ func test_nav_k03_j_clamps_at_bottom():
     mut b := frame(l, 10, 3, true)
     defer b.free()
     testing.AssertEqStr(b.row_text(0), "notes     ")
-    testing.AssertEqStr(b.get(0, 2).style, term.Sgr(term.StyleReverse))
+    testing.AssertTrue(basalam.StyleEq(b.get(0, 2).style, basalam.Style { reverse = true }))
 end
 
 func test_nav_k04_j_crosses_bottom():
@@ -192,7 +206,7 @@ func test_nav_k04_j_crosses_bottom():
     defer b.free()
     testing.AssertEqStr(b.row_text(0), "drafts    ")
     testing.AssertEqStr(b.row_text(2), "archive   ")
-    testing.AssertEqStr(b.get(0, 2).style, term.Sgr(term.StyleReverse))
+    testing.AssertTrue(basalam.StyleEq(b.get(0, 2).style, basalam.Style { reverse = true }))
 end
 
 func test_nav_k05_k_inside_window():
@@ -203,7 +217,7 @@ func test_nav_k05_k_inside_window():
     mut b := frame(l, 10, 3, true)
     defer b.free()
     testing.AssertEqStr(b.row_text(0), "drafts    ")
-    testing.AssertEqStr(b.get(0, 1).style, term.Sgr(term.StyleReverse))
+    testing.AssertTrue(basalam.StyleEq(b.get(0, 1).style, basalam.Style { reverse = true }))
 end
 
 func test_nav_k06_k_crosses_top():
@@ -217,8 +231,8 @@ func test_nav_k06_k_crosses_top():
     mut b := frame(l, 10, 3, true)
     defer b.free()
     testing.AssertEqStr(b.row_text(0), "sent      ")
-    testing.AssertEqStr(b.get(0, 0).style, term.Sgr(term.StyleReverse))
-    testing.AssertEqStr(b.get(0, 1).style, "")
+    testing.AssertTrue(basalam.StyleEq(b.get(0, 0).style, basalam.Style { reverse = true }))
+    testing.AssertTrue(basalam.StyleEq(b.get(0, 1).style, basalam.StyleDefault))
 end
 
 func test_nav_k07_j_then_k_roundtrip():
@@ -230,7 +244,7 @@ func test_nav_k07_j_then_k_roundtrip():
     mut b := frame(l, 10, 3, true)
     defer b.free()
     testing.AssertEqStr(b.row_text(0), "inbox     ")
-    testing.AssertEqStr(b.get(0, 0).style, term.Sgr(term.StyleReverse))
+    testing.AssertTrue(basalam.StyleEq(b.get(0, 0).style, basalam.Style { reverse = true }))
 end
 
 // K22/K23: on a single-item list both j and k are consumed but neither
@@ -252,7 +266,7 @@ func test_nav_k22_k23_single_item():
     mut b := frame(l, 10, 3, true)
     defer b.free()
     testing.AssertEqStr(b.row_text(0), "only      ")
-    testing.AssertEqStr(b.get(0, 0).style, term.Sgr(term.StyleReverse))
+    testing.AssertTrue(basalam.StyleEq(b.get(0, 0).style, basalam.Style { reverse = true }))
 end
 
 // ---- Navigation sequences — S01-S03 -----------------------------------
@@ -269,7 +283,7 @@ func test_seq_s01_five_j():
     defer b.free()
     testing.AssertEqInt(start_from(items10(), b), 3)
     testing.AssertEqStr(b.row_text(0), "archive   ")
-    testing.AssertEqStr(b.get(0, 2).style, term.Sgr(term.StyleReverse))
+    testing.AssertTrue(basalam.StyleEq(b.get(0, 2).style, basalam.Style { reverse = true }))
 end
 
 func test_seq_s02_twelve_j():
@@ -284,7 +298,7 @@ func test_seq_s02_twelve_j():
     defer b.free()
     testing.AssertEqInt(start_from(items10(), b), 7)
     testing.AssertEqStr(b.row_text(0), "notes     ")
-    testing.AssertEqStr(b.get(0, 2).style, term.Sgr(term.StyleReverse))
+    testing.AssertTrue(basalam.StyleEq(b.get(0, 2).style, basalam.Style { reverse = true }))
 end
 
 func test_seq_s03_three_k():
@@ -299,7 +313,7 @@ func test_seq_s03_three_k():
     defer b.free()
     testing.AssertEqInt(start_from(items10(), b), 6)
     testing.AssertEqStr(b.row_text(0), "stars     ")
-    testing.AssertEqStr(b.get(0, 0).style, term.Sgr(term.StyleReverse))
+    testing.AssertTrue(basalam.StyleEq(b.get(0, 0).style, basalam.Style { reverse = true }))
 end
 
 // ---- Enter + callback (AC3) — K08/K09, S04/S05 ------------------------
@@ -376,35 +390,39 @@ func test_frame_f01_sel0_focused():
     defer b.free()
     testing.AssertEqStr(b.row_text(0), "inbox     ")
     testing.AssertEqStr(b.row_text(1), "drafts    ")
-    testing.AssertEqStr(b.get(0, 0).style, term.Sgr(term.StyleReverse))
-    testing.AssertEqStr(b.get(9, 0).style, term.Sgr(term.StyleReverse))
-    testing.AssertEqStr(b.get(0, 1).style, "")
+    testing.AssertTrue(basalam.StyleEq(b.get(0, 0).style, basalam.Style { reverse = true }))
+    testing.AssertTrue(basalam.StyleEq(b.get(9, 0).style, basalam.Style { reverse = true }))
+    testing.AssertTrue(basalam.StyleEq(b.get(0, 1).style, basalam.StyleDefault))
 end
 
 func test_frame_f02_sel0_unfocused():
-    unfocused := term.Sgr(term.BgBlack + term.FgBright)
+    unfocused := basalam.Style { bg = basalam.BrightBlack }
     mut b := frame(list_at(0, 3), 10, 3, false)
     defer b.free()
     testing.AssertEqStr(b.row_text(0), "inbox     ")
-    testing.AssertEqStr(b.get(0, 0).style, unfocused)
-    testing.AssertEqStr(b.get(9, 0).style, unfocused)
-    testing.AssertEqStr(b.get(0, 1).style, "")
+    testing.AssertTrue(basalam.StyleEq(b.get(0, 0).style, unfocused))
+    testing.AssertTrue(basalam.StyleEq(b.get(9, 0).style, unfocused))
+    testing.AssertTrue(basalam.StyleEq(b.get(0, 1).style, basalam.StyleDefault))
+    // G16: the bytes are unchanged by the type flip — a bright-black
+    // background, one SGR 100, not bright-on-black text.
+    want := term.SeqMoveTo(1, 1) + term.Sgr(100) + "inbox     " + term.SeqMoveTo(2, 1) + term.Sgr(49) + "drafts    " + term.SeqMoveTo(3, 1) + "sent      "
+    testing.AssertEqStr(b.ansi(), want)
 end
 
 func test_frame_f03_sel2_focused():
     mut b := frame(list_at(2, 3), 10, 3, true)
     defer b.free()
     testing.AssertEqStr(b.row_text(2), "sent      ")
-    testing.AssertEqStr(b.get(0, 2).style, term.Sgr(term.StyleReverse))
-    testing.AssertEqStr(b.get(0, 1).style, "")
+    testing.AssertTrue(basalam.StyleEq(b.get(0, 2).style, basalam.Style { reverse = true }))
+    testing.AssertTrue(basalam.StyleEq(b.get(0, 1).style, basalam.StyleDefault))
 end
 
 func test_frame_f04_sel2_unfocused():
-    unfocused := term.Sgr(term.BgBlack + term.FgBright)
+    unfocused := basalam.Style { bg = basalam.BrightBlack }
     mut b := frame(list_at(2, 3), 10, 3, false)
     defer b.free()
     testing.AssertEqStr(b.row_text(2), "sent      ")
-    testing.AssertEqStr(b.get(0, 2).style, unfocused)
+    testing.AssertTrue(basalam.StyleEq(b.get(0, 2).style, unfocused))
 end
 
 func test_frame_f05_sel3_focused():
@@ -413,7 +431,7 @@ func test_frame_f05_sel3_focused():
     testing.AssertEqInt(start_from(items10(), b), 1)
     testing.AssertEqStr(b.row_text(0), "drafts    ")
     testing.AssertEqStr(b.row_text(2), "archive   ")
-    testing.AssertEqStr(b.get(0, 2).style, term.Sgr(term.StyleReverse))
+    testing.AssertTrue(basalam.StyleEq(b.get(0, 2).style, basalam.Style { reverse = true }))
 end
 
 func test_frame_f06_sel5_focused():
@@ -422,7 +440,7 @@ func test_frame_f06_sel5_focused():
     testing.AssertEqInt(start_from(items10(), b), 3)
     testing.AssertEqStr(b.row_text(0), "archive   ")
     testing.AssertEqStr(b.row_text(2), "spam      ")
-    testing.AssertEqStr(b.get(0, 2).style, term.Sgr(term.StyleReverse))
+    testing.AssertTrue(basalam.StyleEq(b.get(0, 2).style, basalam.Style { reverse = true }))
 end
 
 func test_frame_f07_sel9_focused():
@@ -431,25 +449,25 @@ func test_frame_f07_sel9_focused():
     testing.AssertEqInt(start_from(items10(), b), 7)
     testing.AssertEqStr(b.row_text(0), "notes     ")
     testing.AssertEqStr(b.row_text(2), "done      ")
-    testing.AssertEqStr(b.get(0, 2).style, term.Sgr(term.StyleReverse))
+    testing.AssertTrue(basalam.StyleEq(b.get(0, 2).style, basalam.Style { reverse = true }))
 end
 
 func test_frame_f08_sel3_unfocused():
-    unfocused := term.Sgr(term.BgBlack + term.FgBright)
+    unfocused := basalam.Style { bg = basalam.BrightBlack }
     mut b := frame(list_at(3, 3), 10, 3, false)
     defer b.free()
     testing.AssertEqInt(start_from(items10(), b), 1)
     testing.AssertEqStr(b.row_text(2), "archive   ")
-    testing.AssertEqStr(b.get(0, 2).style, unfocused)
+    testing.AssertTrue(basalam.StyleEq(b.get(0, 2).style, unfocused))
 end
 
 func test_frame_f09_sel9_unfocused():
-    unfocused := term.Sgr(term.BgBlack + term.FgBright)
+    unfocused := basalam.Style { bg = basalam.BrightBlack }
     mut b := frame(list_at(9, 3), 10, 3, false)
     defer b.free()
     testing.AssertEqInt(start_from(items10(), b), 7)
     testing.AssertEqStr(b.row_text(2), "done      ")
-    testing.AssertEqStr(b.get(0, 2).style, unfocused)
+    testing.AssertTrue(basalam.StyleEq(b.get(0, 2).style, unfocused))
 end
 
 func test_frame_f10_f11_empty_identical():
@@ -476,9 +494,9 @@ func test_frame_f12_n_less_than_h():
     testing.AssertEqStr(b.row_text(1), "drafts    ")
     testing.AssertEqStr(b.row_text(2), "          ")
     testing.AssertEqStr(b.row_text(3), "          ")
-    testing.AssertEqStr(b.get(0, 0).style, term.Sgr(term.StyleReverse))
-    testing.AssertEqStr(b.get(0, 2).style, "")
-    testing.AssertEqStr(b.get(0, 3).style, "")
+    testing.AssertTrue(basalam.StyleEq(b.get(0, 0).style, basalam.Style { reverse = true }))
+    testing.AssertTrue(basalam.StyleEq(b.get(0, 2).style, basalam.StyleDefault))
+    testing.AssertTrue(basalam.StyleEq(b.get(0, 3).style, basalam.StyleDefault))
 end
 
 func test_frame_f13_f14_clip():
@@ -490,13 +508,13 @@ func test_frame_f13_f14_clip():
     defer bf.free()
     testing.AssertEqStr(bf.row_text(0), "basalam-")
     testing.AssertEqStr(bf.get(7, 0).ch, "-")
-    testing.AssertEqStr(bf.get(0, 0).style, term.Sgr(term.StyleReverse))
+    testing.AssertTrue(basalam.StyleEq(bf.get(0, 0).style, basalam.Style { reverse = true }))
     testing.AssertEqStr(bf.row_text(1), "second  ")
-    testing.AssertEqStr(bf.get(0, 1).style, "")
+    testing.AssertTrue(basalam.StyleEq(bf.get(0, 1).style, basalam.StyleDefault))
     mut bu := frame(l, 8, 2, false)
     defer bu.free()
     testing.AssertEqStr(bu.row_text(0), "basalam-")
-    testing.AssertEqStr(bu.get(0, 0).style, term.Sgr(term.BgBlack + term.FgBright))
+    testing.AssertTrue(basalam.StyleEq(bu.get(0, 0).style, basalam.Style { bg = basalam.BrightBlack }))
 end
 
 func test_frame_f15_leading_space():
@@ -508,7 +526,7 @@ func test_frame_f15_leading_space():
     defer b.free()
     testing.AssertEqStr(b.row_text(0), "  pad ")
     testing.AssertEqStr(b.get(0, 0).ch, " ")
-    testing.AssertEqStr(b.get(0, 0).style, term.Sgr(term.StyleReverse))
+    testing.AssertTrue(basalam.StyleEq(b.get(0, 0).style, basalam.Style { reverse = true }))
     testing.AssertEqStr(b.row_text(1), "next  ")
 end
 
@@ -516,9 +534,11 @@ func test_frame_f16_w4_h1():
     mut b := frame(list_at(2, 1), 4, 1, true)
     defer b.free()
     testing.AssertEqStr(b.row_text(0), "sent")
-    testing.AssertEqStr(b.get(0, 0).style, term.Sgr(term.StyleReverse))
-    // Whole-frame bytes: cursor move, the reverse run, and a final reset.
-    want := term.SeqMoveTo(1, 1) + term.Reset + term.Sgr(term.StyleReverse) + "sent" + term.Reset
+    testing.AssertTrue(basalam.StyleEq(b.get(0, 0).style, basalam.Style { reverse = true }))
+    // Whole-frame bytes: cursor move, the reverse run, and its off sequence.
+    seq_on := basalam.StyleSgr(basalam.Style { reverse = true }, basalam.ColorTier.TrueColor)
+    seq_off := basalam.StyleSgrOff(basalam.Style { reverse = true }, basalam.ColorTier.TrueColor)
+    want := term.SeqMoveTo(1, 1) + seq_on + "sent" + seq_off
     testing.AssertEqStr(b.ansi(), want)
 end
 
@@ -529,16 +549,16 @@ func test_frame_f17_exact_fit():
     testing.AssertEqStr(b.row_text(0), "inbox     ")
     testing.AssertEqStr(b.row_text(1), "drafts    ")
     testing.AssertEqStr(b.row_text(2), "sent      ")
-    testing.AssertEqStr(b.get(0, 0).style, term.Sgr(term.StyleReverse))
-    testing.AssertEqStr(b.get(0, 2).style, "")
+    testing.AssertTrue(basalam.StyleEq(b.get(0, 0).style, basalam.Style { reverse = true }))
+    testing.AssertTrue(basalam.StyleEq(b.get(0, 2).style, basalam.StyleDefault))
 end
 
 func test_frame_f18_w1_unfocused():
-    unfocused := term.Sgr(term.BgBlack + term.FgBright)
+    unfocused := basalam.Style { bg = basalam.BrightBlack }
     mut b := frame(list_at(0, 1), 1, 1, false)
     defer b.free()
     testing.AssertEqStr(b.row_text(0), "i")
-    testing.AssertEqStr(b.get(0, 0).style, unfocused)
+    testing.AssertTrue(basalam.StyleEq(b.get(0, 0).style, unfocused))
 end
 
 // ---- Scrolling (AC5) — F05-F07, invariant -----------------------------
@@ -670,8 +690,8 @@ func test_screen_focused_list_receives_j():
     testing.AssertFalse(s.dirty)
     s.present()
     testing.AssertEqStr(s.buffer.row_text(1), "drafts      ")
-    testing.AssertEqStr(s.buffer.get(0, 1).style, term.Sgr(term.StyleReverse))
-    testing.AssertEqStr(s.buffer.get(0, 0).style, "")
+    testing.AssertTrue(basalam.StyleEq(s.buffer.get(0, 1).style, basalam.Style { reverse = true }))
+    testing.AssertTrue(basalam.StyleEq(s.buffer.get(0, 0).style, basalam.StyleDefault))
 end
 
 func test_screen_unfocused_list_does_not_consume():
@@ -691,7 +711,7 @@ func test_screen_unfocused_list_does_not_consume():
     s.present()
     // The selection is unchanged (still row 0) and drawn unfocused.
     testing.AssertEqStr(s.buffer.row_text(0), "inbox           ")
-    testing.AssertEqStr(s.buffer.get(0, 0).style, term.Sgr(term.BgBlack + term.FgBright))
+    testing.AssertTrue(basalam.StyleEq(s.buffer.get(0, 0).style, basalam.Style { bg = basalam.BrightBlack }))
 end
 
 // ---- Unicode ----------------------------------------------------------
@@ -707,7 +727,7 @@ func test_unicode_codepoint_clip():
     defer b3.free()
     testing.AssertEqStr(b3.row_text(0), "ééé")
     testing.AssertEqStr(b3.get(0, 0).ch, "é")
-    testing.AssertEqStr(b3.get(0, 0).style, term.Sgr(term.StyleReverse))
+    testing.AssertTrue(basalam.StyleEq(b3.get(0, 0).style, basalam.Style { reverse = true }))
     // W2: two whole codepoints, never a split byte.
     mut b2 := frame(l, 2, 1, true)
     defer b2.free()
@@ -716,12 +736,11 @@ end
 
 // ---- CUR-455 probe ----------------------------------------------------
 
-// The two selection fallbacks are package-level constants: once built they are
-// reused, so a render that falls back adds no build. A style the caller
-// assigns is used verbatim and never builds.
+// After the typed-style migration: the widget builds nothing; the buffer builds at emission. A
+// focused list has one selected run (reverse) and default rows around it, so
+// one ansi() costs one on and one off sequence. A caller-supplied style is
+// used verbatim, including StyleDefault, which emits nothing.
 func test_sgr_defaults_probe():
-    // The first render builds both fallbacks, even though only the focused
-    // one is used: List computes selected and unselected up front.
     mut lf := basalam.NewList(items3())
     lf.set_bounds(rect(0, 0, 10, 3))
     mut bf := basalam.NewBuffer(10, 3)
@@ -729,38 +748,35 @@ func test_sgr_defaults_probe():
     bf.focused = true
     before := basalam.SgrBuilds()
     lf.render(bf, rect(0, 0, 10, 3))
+    testing.AssertEqInt(basalam.SgrBuilds() - before, 0)
+    _ := bf.ansi()
     testing.AssertEqInt(basalam.SgrBuilds() - before, 2)
 
-    // A repeat render into the same buffer adds nothing.
-    primed := basalam.SgrBuilds()
-    lf.render(bf, rect(0, 0, 10, 3))
-    testing.AssertEqInt(basalam.SgrBuilds() - primed, 0)
-
-    // An unfocused render uses the other fallback and adds nothing.
-    mut lu := basalam.NewList(items3())
-    lu.set_bounds(rect(0, 0, 10, 3))
-    mut bu := basalam.NewBuffer(10, 3)
-    defer bu.free()
-    bu.focused = false
-    lu.render(bu, rect(0, 0, 10, 3))
-    testing.AssertEqInt(basalam.SgrBuilds() - primed, 0)
-
-    custom := term.Sgr(term.StyleBold)
     mut lc := basalam.NewList(items3())
     lc.set_bounds(rect(0, 0, 10, 3))
-    lc.selected_style = custom
+    lc.selected_style = basalam.Style { bold = true }
     mut bc := basalam.NewBuffer(10, 3)
     defer bc.free()
     bc.focused = true
     lc.render(bc, rect(0, 0, 10, 3))
-    testing.AssertEqStr(bc.get(0, 0).style, custom)
-    testing.AssertEqInt(basalam.SgrBuilds() - primed, 0)
+    testing.AssertTrue(basalam.StyleEq(bc.get(0, 0).style, basalam.Style { bold = true }))
+
+    // The string API could not express this: a plain selected row.
+    mut lp := basalam.NewList(items3())
+    lp.set_bounds(rect(0, 0, 10, 3))
+    lp.selected_style = basalam.StyleDefault
+    mut bp := basalam.NewBuffer(10, 3)
+    defer bp.free()
+    bp.focused = true
+    lp.render(bp, rect(0, 0, 10, 3))
+    testing.AssertTrue(basalam.StyleEq(bp.get(0, 0).style, basalam.StyleDefault))
 end
 
 func main:
     test_sgr_defaults_probe()
     test_defaults_selection()
     test_defaults_empty()
+    test_selection_replaces_base_style()
     test_nav_k01_j_inside_window()
     test_nav_k02_k_clamps_at_top()
     test_nav_k03_j_clamps_at_bottom()

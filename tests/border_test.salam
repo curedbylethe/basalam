@@ -12,6 +12,7 @@
 // escape appears by hand. Also the colour tier: a buffer pinned to Ansi16 or
 // Off lowers the frame's colour without changing its glyphs.
 
+import term
 import testing
 
 include "../basalam/basalam.salam"
@@ -60,7 +61,7 @@ end
 
 func test_none_is_noop():
     mut b := basalam.NewBuffer(8, 3)
-    b.fill(basalam.Rect { x = 0, y = 0, width = 8, height = 3 }, "x", "")
+    b.fill(basalam.Rect { x = 0, y = 0, width = 8, height = 3 }, "x", basalam.StyleDefault)
     basalam.DrawBorder(b, basalam.Rect { x = 0, y = 0, width = 8, height = 3 }, basalam.BorderStyle.None, basalam.Style {}, "Title")
     testing.AssertEqStr(b.row_text(0), "xxxxxxxx")
     testing.AssertEqStr(b.row_text(2), "xxxxxxxx")
@@ -69,7 +70,7 @@ end
 
 func test_interior_untouched():
     mut b := basalam.NewBuffer(8, 3)
-    b.fill(basalam.Rect { x = 0, y = 0, width = 8, height = 3 }, "x", "")
+    b.fill(basalam.Rect { x = 0, y = 0, width = 8, height = 3 }, "x", basalam.StyleDefault)
     basalam.DrawBorder(b, basalam.Rect { x = 0, y = 0, width = 8, height = 3 }, basalam.BorderStyle.Single, basalam.Style {}, "")
     testing.AssertEqStr(b.row_text(1), "│xxxxxx│")
     b.free()
@@ -173,7 +174,7 @@ end
 
 func test_empty_rects_write_nothing():
     mut b := basalam.NewBuffer(4, 2)
-    b.fill(basalam.Rect { x = 0, y = 0, width = 4, height = 2 }, "x", "")
+    b.fill(basalam.Rect { x = 0, y = 0, width = 4, height = 2 }, "x", basalam.StyleDefault)
     basalam.DrawBorder(b, basalam.Rect { x = 0, y = 0, width = 0, height = 2 }, basalam.BorderStyle.Single, basalam.Style {}, "")
     basalam.DrawBorder(b, basalam.Rect { x = 0, y = 0, width = 2, height = 0 }, basalam.BorderStyle.Single, basalam.Style {}, "")
     basalam.DrawBorder(b, basalam.Rect { x = 0, y = 0, width = -1, height = 3 }, basalam.BorderStyle.Single, basalam.Style {}, "")
@@ -195,44 +196,55 @@ func test_color_is_fg_only():
     mut b := basalam.NewBuffer(8, 3)
     style := basalam.Style { fg = basalam.Color.Ansi(1), bold = true, italic = true }
     basalam.DrawBorder(b, basalam.Rect { x = 0, y = 0, width = 8, height = 3 }, basalam.BorderStyle.Single, style, "Title")
-    want := basalam.StyleSgr(basalam.Style { fg = basalam.Color.Ansi(1) }, basalam.ColorTier.TrueColor)
-    testing.AssertEqStr(b.get(0, 0).style, want)
-    testing.AssertEqStr(b.get(3, 0).style, want)
-    testing.AssertEqStr(b.get(7, 2).style, want)
+    // The cell carries the foreground as a Style; the attributes are dropped.
+    want := basalam.Style { fg = basalam.Color.Ansi(1) }
+    testing.AssertTrue(basalam.StyleEq(b.get(0, 0).style, want))
+    testing.AssertTrue(basalam.StyleEq(b.get(3, 0).style, want))
+    testing.AssertTrue(basalam.StyleEq(b.get(7, 2).style, want))
     b.free()
 end
 
 func test_default_fg_writes_no_style():
     mut b := basalam.NewBuffer(8, 3)
     basalam.DrawBorder(b, basalam.Rect { x = 0, y = 0, width = 8, height = 3 }, basalam.BorderStyle.Single, basalam.Style {}, "")
-    testing.AssertEqStr(b.get(0, 0).style, "")
+    testing.AssertTrue(basalam.StyleEq(b.get(0, 0).style, basalam.StyleDefault))
     b.free()
 end
 
-// DrawBorder has no tier parameter; it reads buf.tier, so the
-// frame is lowered at emission like every other styled cell.
+// DrawBorder has no tier parameter; the cells carry the Style
+// and the buffer lowers it at emission, like every other styled cell.
 func test_tier_lowers_frame_color():
     mut b := basalam.NewBuffer(4, 3)
     defer b.free()
     b.tier = basalam.ColorTier.Ansi16
-    basalam.DrawBorder(b, basalam.Rect { x = 0, y = 0, width = 4, height = 3 }, basalam.BorderStyle.Single, basalam.Style { fg = basalam.Color.Rgb(255, 0, 0) }, "")
-    lowering := basalam.FgSeqAt(basalam.Color.Rgb(255, 0, 0), basalam.ColorTier.Ansi16)
-    testing.AssertEqStr(b.get(0, 0).style, lowering)
-    testing.AssertEqStr(b.get(3, 0).style, lowering)
-    testing.AssertEqStr(b.get(0, 2).style, lowering)
-    testing.AssertTrue(lowering != basalam.FgSeqAt(basalam.Color.Rgb(255, 0, 0), basalam.ColorTier.TrueColor))
+    style := basalam.Style { fg = basalam.Color.Rgb(255, 0, 0) }
+    basalam.DrawBorder(b, basalam.Rect { x = 0, y = 0, width = 4, height = 3 }, basalam.BorderStyle.Single, style, "")
+    testing.AssertTrue(basalam.StyleEq(b.get(0, 0).style, style))
+    testing.AssertTrue(basalam.StyleEq(b.get(3, 0).style, style))
+    testing.AssertTrue(basalam.StyleEq(b.get(0, 2).style, style))
+    seq_on := basalam.StyleSgr(style, basalam.ColorTier.Ansi16)
+    seq_off := basalam.StyleSgrOff(style, basalam.ColorTier.Ansi16)
+    // The ring is not a filled row: the interior cells are default, so the
+    // middle row leaves the colour and re-enters it.
+    want := term.SeqMoveTo(1, 1) + seq_on + "┌──┐" + term.SeqMoveTo(2, 1) + "│" + seq_off + "  " + seq_on + "│" + term.SeqMoveTo(3, 1) + "└──┘" + seq_off
+    testing.AssertEqStr(b.ansi(), want)
+    testing.AssertTrue(seq_on != basalam.StyleSgr(style, basalam.ColorTier.TrueColor))
 end
 
 func test_tier_off_drops_frame_color_keeps_shape():
     mut b := basalam.NewBuffer(4, 3)
     defer b.free()
     b.tier = basalam.ColorTier.Off
-    basalam.DrawBorder(b, basalam.Rect { x = 0, y = 0, width = 4, height = 3 }, basalam.BorderStyle.Single, basalam.Style { fg = basalam.Color.Rgb(255, 0, 0) }, "")
-    testing.AssertEqStr(b.get(0, 0).style, "")
-    testing.AssertEqStr(b.get(1, 1).style, "")
+    style := basalam.Style { fg = basalam.Color.Rgb(255, 0, 0) }
+    basalam.DrawBorder(b, basalam.Rect { x = 0, y = 0, width = 4, height = 3 }, basalam.BorderStyle.Single, style, "")
+    testing.AssertTrue(basalam.StyleEq(b.get(0, 0).style, style))
+    testing.AssertTrue(basalam.StyleEq(b.get(1, 1).style, basalam.StyleDefault))
     testing.AssertEqStr(b.row_text(0), "┌──┐")
     testing.AssertEqStr(b.row_text(1), "│  │")
     testing.AssertEqStr(b.row_text(2), "└──┘")
+    // At Off every colour lowers to Default, so the frame is glyphs only.
+    want := term.SeqMoveTo(1, 1) + "┌──┐" + term.SeqMoveTo(2, 1) + "│  │" + term.SeqMoveTo(3, 1) + "└──┘"
+    testing.AssertEqStr(b.ansi(), want)
 end
 
 func test_tier_never_changes_glyphs():

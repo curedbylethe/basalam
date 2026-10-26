@@ -206,7 +206,7 @@ struct Label:
     end
 
     pub func render(buf: basalam.Buffer, bounds: basalam.Rect):
-        buf.put_str(bounds.x, bounds.y, this.text, "")
+        buf.put_str(bounds.x, bounds.y, this.text, basalam.StyleDefault)
     end
 end
 

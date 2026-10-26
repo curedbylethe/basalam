@@ -47,12 +47,11 @@
  * per cell and no layout pass: placement in the parent's box belongs to the
  * layout engine. The style is a basalam.Style value (style.salam), not a raw
  * SGR string: render paints the box's padding with the style's background
- * only and the glyph runs with the full style, both cached per style and
- * rebuilt only when that style or the buffer's tier changes. The tier is
- * `buf.tier`: the screen detects the terminal once when it starts and every
- * widget reads it from the buffer it is handed. A headless NewBuffer keeps
- * TrueColor, so the bytes never depend on the ambient environment and the
- * goldens stay deterministic.
+ * only and the glyph runs with the full style, and the buffer turns each into
+ * bytes at emission, at `buf.tier`. The screen detects the terminal once when
+ * it starts and every widget reads the tier from the buffer it is handed. A
+ * headless NewBuffer keeps TrueColor, so the bytes never depend on the
+ * ambient environment and the goldens stay deterministic.
  */
 
 package basalam
@@ -114,11 +113,6 @@ pub struct Text:
     /// WrapMode.Word.
     pub wrap: WrapMode = WrapMode.Word
 
-    // The SGR of the pad fill (style.bg only) and of the glyph run (the whole
-    // style). Written only by render, never by the app.
-    pad_memo: _SgrMemo = _SgrMemo {}
-    glyph_memo: _SgrMemo = _SgrMemo {}
-
     @en "set_text"
     /// Replaces the content; the next render draws it.
     pub func set_text(content: str):
@@ -164,13 +158,11 @@ pub struct Text:
     /// reads full-bleed while nothing else reaches the padding. Each line is
     /// then placed with the alignment offset and written as one run in the
     /// full style, interior spaces included, so an underline never breaks; at
-    /// most bounds.height lines are drawn. Both SGR strings are cached on the
-    /// widget, at the buffer's tier. A degenerate box draws nothing and never
-    /// panics.
+    /// most bounds.height lines are drawn. A degenerate box draws nothing and
+    /// never panics.
     pub func render(buf: Buffer, bounds: Rect):
-        tier := buf.tier
-        pad := this.pad_memo._sgr(Style { bg = this.style.bg }, tier)
-        glyph := this.glyph_memo._sgr(this.style, tier)
+        pad := Style { bg = this.style.bg }
+        glyph := this.style
         buf.fill(bounds, " ", pad)
         mut lines := Vector {} as Vector<str>
         if this.wrap == WrapMode.None:
