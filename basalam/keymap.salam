@@ -222,6 +222,27 @@ pub struct Keymap:
         drop_override(this.nodes.ref(child), widget_id)
     end
 
+    @en "unbind_for_seq"
+    /// Removes one widget's binding for one key sequence: bind_for_seq's
+    /// inverse. Only that widget's override is removed, so the global sequence
+    /// and every other widget's override on the same sequence still apply. The
+    /// trie is walked read-only, so no node is created or deleted and a later
+    /// bind_for_seq on the same sequence still works. A no-op when the map is
+    /// empty, the sequence was never bound, or the widget never bound it;
+    /// NoWidget removes the global sequence binding, and an empty string is
+    /// ignored. Resets a pending sequence.
+    pub func unbind_for_seq(widget_id: int, seq: str):
+        this.pending = -1
+        if str.CharCount(seq) == 0 or this.nodes.len() == 0:
+            ret
+        end
+        node := this.find_node_for_seq(seq)
+        if node < 0:
+            ret
+        end
+        drop_override(this.nodes.ref(node), widget_id)
+    end
+
     @en "handle"
     /// Handles one event against the bindings. Only KeyEvents reach the
     /// trie; every other kind returns false and leaves `pending` untouched.
@@ -338,6 +359,23 @@ pub struct Keymap:
                 this.nodes.push(KeyNode {})
                 child = this.nodes.len() - 1
                 this.nodes.ref(cur)[0].children.put(id, child)
+            end
+            cur = child
+        end
+        ret cur
+    end
+
+    // find_node_for_seq walks the trie without creating nodes and returns the
+    // terminal node for seq, or -1 when any step is missing. seq must be
+    // non-empty.
+    func find_node_for_seq(seq: str): int:
+        mut cur := 0
+        n := str.CharCount(seq)
+        repeat n in i:
+            id := key_id(term.Decode(str.CharSubstr(seq, i, 1)))
+            child := this.nodes.ref(cur)[0].children.get_or(id, -1)
+            if child < 0:
+                ret -1
             end
             cur = child
         end

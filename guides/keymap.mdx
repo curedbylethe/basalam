@@ -69,7 +69,7 @@ screen.keymap.unbind(term.Decode("n"))
 screen.keymap.unbind_for(panel, term.Decode("x")) // the panel no longer answers x
 ```
 
-The global binding for the same key and every other widget's override survive; pass `NoWidget` to remove the global row, which is what `unbind` does. Neither call deletes a node, so rebinding later is cheap. The snippets assume a screen and `import term`.
+The global binding for the same key and every other widget's override survive; pass `NoWidget` to remove the global row, which is what `unbind` does. Sequence bindings have the same pair: `unbind_for_seq(widget_id, seq)` drops one widget's row for a `bind_for_seq` binding. None of these calls deletes a node, so rebinding later is cheap. The snippets assume a screen and `import term`.
 
 ## Scope a binding
 

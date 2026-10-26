@@ -74,10 +74,11 @@ An action is a `func (screen: basalam.Screen*, event: basalam.Event): bool`. Onl
 | `bind_for_seq(widget_id: int, seq: str, action: func (Screen*, Event) bool)` | Binds a key sequence for the widget with this ID. `NoWidget` binds globally. |
 | `unbind(key: term.Key)` | Removes the global binding for one key. A no-op when there is none. Scoped bindings are not touched; use `bind_for` to replace one, or `unbind_for` to drop one. |
 | `unbind_for(widget_id: int, key: term.Key)` | Removes one widget's binding for one key: `bind_for`'s inverse. Only that widget's override goes, so the global row and every other widget's override on the same key still apply, and no node is deleted. A no-op when the map is empty, the key was never bound, or that widget never bound it. `unbind_for(NoWidget, key)` equals `unbind(key)`, and a pending sequence is reset. |
+| `unbind_for_seq(widget_id: int, seq: str)` | Removes one widget's binding for one key sequence: `bind_for_seq`'s inverse. Only that widget's override goes, so the global sequence and every other widget's override on the same sequence still apply, and no node is created or deleted. A no-op when the map is empty, the sequence was never bound, or that widget never bound it. `NoWidget` removes the global sequence binding, an empty string is ignored, and a pending sequence is reset. |
 | `handle(screen: Screen*, event: Event): bool` | Offers one event to the map. Only `KeyEvent`s are handled; any other kind returns `false` and leaves a pending sequence untouched. Returns whether the matched action reported the key consumed. |
 | `free()` | Releases every node's children map and binding vector, then the node storage. Call once. |
 
-`bind_seq` and `bind_for_seq` decode `seq` one rune at a time, so `"gg"` is two keys. An empty string is ignored and binds nothing.
+`bind_seq` and `bind_for_seq` decode `seq` one rune at a time, so `"gg"` is two keys. An empty string is ignored and binds nothing. `unbind_for_seq` decodes the same way.
 
 A key's identity includes its code, the `Ctrl`/`Alt`/`Shift` modifiers, and — for a character key — the character. `Space` (code `KeySpace`) and `Ctrl+Space` (a character key whose `ch` is `" "`) are therefore two different bindings.
 

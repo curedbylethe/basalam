@@ -371,6 +371,72 @@ func test_unbind_for_then_rebind():
     testing.AssertEqInt(s.focused_id(), t2)
 end
 
+func test_unbind_for_seq_drops_only_the_target_override():
+    mut s := basalam.NewScreen(Root {}, 20, 5)
+    defer s.close()
+    w1 := s.add(basalam.RootId, Field {})
+    w2 := s.add(basalam.RootId, Field {})
+    t_global := s.add(basalam.RootId, Field {})
+    t_w1 := s.add(basalam.RootId, Field {})
+    t_w2 := s.add(basalam.RootId, Field {})
+    mut km := basalam.NewKeymap()
+    km.bind_seq("jj", action_focus(t_global))
+    km.bind_for_seq(w1, "jj", action_focus(t_w1))
+    km.bind_for_seq(w2, "jj", action_focus(t_w2))
+    s.set_keymap(km)
+
+    testing.AssertTrue(s.focus(w1))
+    testing.AssertFalse(s.dispatch(key("j")))
+    testing.AssertTrue(s.dispatch(key("j")))
+    testing.AssertEqInt(s.focused_id(), t_w1)
+    // Dropping widget 1's row leaves the global sequence in place.
+    s.keymap.unbind_for_seq(w1, "jj")
+    testing.AssertTrue(s.focus(w1))
+    testing.AssertFalse(s.dispatch(key("j")))
+    testing.AssertTrue(s.dispatch(key("j")))
+    testing.AssertEqInt(s.focused_id(), t_global)
+    // The sibling widget's row on the same sequence survives.
+    testing.AssertTrue(s.focus(w2))
+    testing.AssertFalse(s.dispatch(key("j")))
+    testing.AssertTrue(s.dispatch(key("j")))
+    testing.AssertEqInt(s.focused_id(), t_w2)
+end
+
+func test_unbind_for_seq_missing_sequence_or_widget_is_inert():
+    mut s := basalam.NewScreen(Root {}, 20, 5)
+    defer s.close()
+    w1 := s.add(basalam.RootId, Field {})
+    t1 := s.add(basalam.RootId, Field {})
+    // Empty map: the root node does not exist yet.
+    s.keymap.unbind_for_seq(w1, "jj")
+    testing.AssertFalse(s.dispatch(key("j")))
+    testing.AssertFalse(s.dispatch(key("j")))
+
+    s.keymap.bind_seq("jj", action_focus(t1))
+    // A sequence nobody bound, then a widget that never bound it.
+    s.keymap.unbind_for_seq(w1, "qq")
+    s.keymap.unbind_for_seq(99, "jj")
+    testing.AssertEqInt(s.focused_id(), w1)
+    testing.AssertFalse(s.dispatch(key("j")))
+    testing.AssertTrue(s.dispatch(key("j")))
+    testing.AssertEqInt(s.focused_id(), t1)
+end
+
+func test_unbind_for_seq_clears_pending_sequence():
+    mut s := basalam.NewScreen(Root {}, 20, 5)
+    defer s.close()
+    w1 := s.add(basalam.RootId, Field {})
+    s.keymap.bind_seq("gg", count_action())
+    seq_hits = 0
+
+    testing.AssertFalse(s.dispatch(key("g")))
+    testing.AssertEqInt(seq_hits, 0)
+    s.keymap.unbind_for_seq(w1, "gg")
+    // Without the pending reset this g would complete "gg" and fire.
+    testing.AssertFalse(s.dispatch(key("g")))
+    testing.AssertEqInt(seq_hits, 0)
+end
+
 func test_sequence_across_two_events():
     mut r := Rig {}
     defer r.release()
@@ -1199,6 +1265,9 @@ func main:
     test_unbind_for_missing_key_or_widget_is_inert()
     test_unbind_for_clears_pending_sequence()
     test_unbind_for_then_rebind()
+    test_unbind_for_seq_drops_only_the_target_override()
+    test_unbind_for_seq_missing_sequence_or_widget_is_inert()
+    test_unbind_for_seq_clears_pending_sequence()
     test_sequence_across_two_events()
     test_deferral_fires_on_break()
     test_mismatch_reprocesses_from_root()
