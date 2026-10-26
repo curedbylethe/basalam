@@ -167,10 +167,10 @@ pub struct Separator:
             ret
         end
         if this.style.bg != Color.Default:
-            buf.fill(bounds, " ", this.fill_memo._sgr(Style { bg = this.style.bg }, ColorTier.TrueColor))
+            buf.fill(bounds, " ", this.fill_memo._sgr(Style { bg = this.style.bg }, buf.tier))
         end
         r := _rune(this.orientation, this.ch)
-        sgr := this.rule_memo._sgr(this.style, ColorTier.TrueColor)
+        sgr := this.rule_memo._sgr(this.style, buf.tier)
         if this.orientation == Orientation.Vertical:
             repeat bounds.height in i:
                 buf.set(bounds.x, bounds.y + i, Cell { ch = r, style = sgr })

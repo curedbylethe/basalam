@@ -382,6 +382,45 @@ end
 // the glyph run (the whole style). A second render with unchanged inputs builds
 // nothing; changing a style field rebuilds only the memo that serializes it, so
 // an fg-only change costs one build and leaves the pad alone.
+// CUR-419 AC-5/AC-6. The tier is render context on the buffer: a buffer pinned
+// to Ansi16 emits the lowered ANSI foreground, and at Off the colour vanishes
+// while attributes survive. A fresh buffer stays true colour (see
+// test_text_style_foreground_and_background above).
+func test_text_tier_lowers_foreground():
+    mut b := basalam.NewBuffer(2, 1)
+    defer b.free()
+    b.tier = basalam.ColorTier.Ansi16
+    mut t := basalam.NewText("hi")
+    t.set_style(basalam.Style { fg = basalam.Color.Rgb(255, 0, 0) })
+    t.render(b, rect(0, 0, 2, 1))
+    lowering := basalam.FgSeqAt(basalam.Color.Rgb(255, 0, 0), basalam.ColorTier.Ansi16)
+    testing.AssertEqStr(b.get(0, 0).style, lowering)
+    testing.AssertEqStr(b.get(1, 0).style, lowering)
+    // Not vacuous: the same style at true colour is the 24-bit sequence.
+    testing.AssertTrue(lowering != basalam.FgSeqAt(basalam.Color.Rgb(255, 0, 0), basalam.ColorTier.TrueColor))
+end
+
+func test_text_tier_off_drops_colour():
+    mut b := basalam.NewBuffer(2, 1)
+    defer b.free()
+    b.tier = basalam.ColorTier.Off
+    mut t := basalam.NewText("hi")
+    t.set_style(basalam.Style { fg = basalam.Color.Rgb(255, 0, 0) })
+    t.render(b, rect(0, 0, 2, 1))
+    testing.AssertEqStr(b.get(0, 0).style, "")
+    testing.AssertEqStr(b.row_text(0), "hi")
+
+    // Attributes are not colours: bold still reaches the cell at Off.
+    mut b2 := basalam.NewBuffer(2, 1)
+    defer b2.free()
+    b2.tier = basalam.ColorTier.Off
+    mut t2 := basalam.NewText("hi")
+    t2.set_style(basalam.Style { fg = basalam.Color.Rgb(255, 0, 0), bold = true })
+    t2.render(b2, rect(0, 0, 2, 1))
+    testing.AssertEqStr(b2.get(0, 0).style, term.Sgr(term.StyleBold))
+    testing.AssertEqStr(b2.get(1, 0).style, term.Sgr(term.StyleBold))
+end
+
 func test_sgr_memo_probe():
     mut b := basalam.NewBuffer(6, 1)
     defer b.free()
@@ -497,6 +536,8 @@ func main:
     test_text_style_foreground_and_background()
     test_text_style_padding_on_wrapped_row()
     test_text_ansi_frame_carries_style()
+    test_text_tier_lowers_foreground()
+    test_text_tier_off_drops_colour()
     test_sgr_memo_probe()
     test_text_render_wrapped_rows()
     test_text_render_clips_taller_content()

@@ -45,8 +45,9 @@
  *             and cursor placement for text input (epic 2 follow-ups).
  *
  *   contract to keep: Widget.render receives a Buffer by value, writes
- *             through it reach the screen's grid, and `clip` / `focused`
- *             are per-copy render context set by Screen.draw.
+ *             through it reach the screen's grid, and `clip` / `focused` /
+ *             `tier` are per-copy render context: `tier` set once by
+ *             Screen.start, the rest by Screen.draw.
  *
  * Why widgets never touch the terminal: widgets draw here, the screen
  * decides when and how a frame reaches the terminal. That keeps rendering
@@ -58,10 +59,13 @@
  * cell through any copy writes the screen's one back grid, and commit()
  * through any copy advances the shared front grid. `touched` and
  * `row_touched` are vectors too, so a copy shares the marks and a widget's
- * `set` marks the owner's grid. The scalar fields (clip, focused,
+ * `set` marks the owner's grid. The scalar fields (clip, focused, tier,
  * force_full) are per-copy: the screen hands each widget its own copy with
  * `clip` set to that widget's visible area and `focused` set when it holds
- * the focus. Only the owner of the original may resize, free, or flush it.
+ * the focus. `tier` is set once when the screen takes the terminal and every
+ * copy inherits the same value, so widgets emit at the terminal's capability
+ * without reading the environment themselves. Only the owner of the original may resize, free,
+ * or flush it.
  */
 
 package basalam
@@ -118,6 +122,14 @@ pub struct Buffer:
     /// so the widget can draw a focus indicator. Always false outside a
     /// screen-driven render.
     pub focused: bool = false
+
+    @en "tier"
+    /// Render context: the colour capability of the terminal this buffer is
+    /// drawn for. Widgets and DrawBorder emit their styles at this tier.
+    /// Screen.start() sets it to DetectTier() once; a buffer built by hand
+    /// keeps TrueColor, so headless renders stay true colour whatever the
+    /// environment says. resize() preserves it.
+    pub tier: ColorTier = ColorTier.TrueColor
 
     @en "force_full"
     /// True when the next diff() must serialize the whole frame instead of
@@ -251,6 +263,9 @@ pub struct Buffer:
         this.all_touched = fresh.all_touched
         this.clip = fresh.clip
         this.force_full = fresh.force_full
+        // tier stays: a reallocation is not a new terminal, so it must not
+        // reset the capability detected at start(). It is not copied from
+        // fresh for that reason.
         // out_buf stays. fresh.out_buf is unused, so dropping fresh neither
         // leaks nor frees this builder.
     end

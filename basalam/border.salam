@@ -9,8 +9,10 @@
 // DrawBorder helper that paints one ring into a buffer. The helper is the
 // single place frames are drawn, so widgets (Panel first) and custom widgets
 // get the same corners, title rules and color rules. It takes no capability
-// or tier, paints only the cells of its ring, and never reads or clears the
-// interior. It does not lay out children, change geometry, or decide focus.
+// or tier parameter: it reads `buf.tier`, so the frame is lowered at emission
+// like every other styled cell. It paints only the cells of its ring, and
+// never reads or clears the interior. It does not lay out children, change
+// geometry, or decide focus.
 
 package basalam
 
@@ -65,7 +67,7 @@ pub func DrawBorder(buf: Buffer, rect: Rect, border: BorderStyle, style: Style, 
         ret
     end
     g := _border_glyphs(border)
-    fg := StyleSgr(Style { fg = style.fg }, ColorTier.TrueColor)
+    fg := StyleSgr(Style { fg = style.fg }, buf.tier)
     x0 := rect.x
     y0 := rect.y
     x1 := rect.x + rect.width - 1

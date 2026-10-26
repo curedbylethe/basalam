@@ -9,7 +9,8 @@
 // vectors (trim, right truncation, minimum width), the degenerate rect rules,
 // clipping at the grid edge, the untouched interior, and the one-foreground
 // color rule. Expected SGR strings are built with basalam.StyleSgr, so no
-// escape appears by hand.
+// escape appears by hand. Also the colour tier: a buffer pinned to Ansi16 or
+// Off lowers the frame's colour without changing its glyphs.
 
 import testing
 
@@ -208,6 +209,52 @@ func test_default_fg_writes_no_style():
     b.free()
 end
 
+// DrawBorder has no tier parameter; it reads buf.tier, so the
+// frame is lowered at emission like every other styled cell.
+func test_tier_lowers_frame_color():
+    mut b := basalam.NewBuffer(4, 3)
+    defer b.free()
+    b.tier = basalam.ColorTier.Ansi16
+    basalam.DrawBorder(b, basalam.Rect { x = 0, y = 0, width = 4, height = 3 }, basalam.BorderStyle.Single, basalam.Style { fg = basalam.Color.Rgb(255, 0, 0) }, "")
+    lowering := basalam.FgSeqAt(basalam.Color.Rgb(255, 0, 0), basalam.ColorTier.Ansi16)
+    testing.AssertEqStr(b.get(0, 0).style, lowering)
+    testing.AssertEqStr(b.get(3, 0).style, lowering)
+    testing.AssertEqStr(b.get(0, 2).style, lowering)
+    testing.AssertTrue(lowering != basalam.FgSeqAt(basalam.Color.Rgb(255, 0, 0), basalam.ColorTier.TrueColor))
+end
+
+func test_tier_off_drops_frame_color_keeps_shape():
+    mut b := basalam.NewBuffer(4, 3)
+    defer b.free()
+    b.tier = basalam.ColorTier.Off
+    basalam.DrawBorder(b, basalam.Rect { x = 0, y = 0, width = 4, height = 3 }, basalam.BorderStyle.Single, basalam.Style { fg = basalam.Color.Rgb(255, 0, 0) }, "")
+    testing.AssertEqStr(b.get(0, 0).style, "")
+    testing.AssertEqStr(b.get(1, 1).style, "")
+    testing.AssertEqStr(b.row_text(0), "┌──┐")
+    testing.AssertEqStr(b.row_text(1), "│  │")
+    testing.AssertEqStr(b.row_text(2), "└──┘")
+end
+
+func test_tier_never_changes_glyphs():
+    // Same rect at every tier: only the SGR changes, never the shape.
+    mut full := basalam.NewBuffer(4, 3)
+    defer full.free()
+    mut low := basalam.NewBuffer(4, 3)
+    defer low.free()
+    low.tier = basalam.ColorTier.Ansi16
+    mut off := basalam.NewBuffer(4, 3)
+    defer off.free()
+    off.tier = basalam.ColorTier.Off
+    style := basalam.Style { fg = basalam.Color.Rgb(255, 0, 0) }
+    basalam.DrawBorder(full, basalam.Rect { x = 0, y = 0, width = 4, height = 3 }, basalam.BorderStyle.Single, style, "")
+    basalam.DrawBorder(low, basalam.Rect { x = 0, y = 0, width = 4, height = 3 }, basalam.BorderStyle.Single, style, "")
+    basalam.DrawBorder(off, basalam.Rect { x = 0, y = 0, width = 4, height = 3 }, basalam.BorderStyle.Single, style, "")
+    repeat 3 in y:
+        testing.AssertEqStr(low.row_text(y), full.row_text(y))
+        testing.AssertEqStr(off.row_text(y), full.row_text(y))
+    end
+end
+
 func main:
     test_single_box()
     test_double_box()
@@ -232,5 +279,8 @@ func main:
     test_clip_never_shifts()
     test_color_is_fg_only()
     test_default_fg_writes_no_style()
+    test_tier_lowers_frame_color()
+    test_tier_off_drops_frame_color_keeps_shape()
+    test_tier_never_changes_glyphs()
     ret testing.Summary()
 end

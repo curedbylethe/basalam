@@ -7,6 +7,7 @@ keywords:
   - "draw"
   - "clip"
   - "style"
+  - "tier"
 ---
 
 A `Buffer` is a grid of `Cell`s. Widgets draw into it; they never write to the terminal. Every write outside the grid or outside the buffer's clip rect is silently dropped, so drawing can never fail.
@@ -42,6 +43,7 @@ pub struct Buffer:
     pub front: Vector<Cell> = Vector {}
     pub clip: Rect = Rect {}
     pub focused: bool = false
+    pub tier: ColorTier = ColorTier.TrueColor
     pub force_full: bool = true
 end
 ```
@@ -70,13 +72,17 @@ end
   `true` while the screen renders the focused widget. Use it to draw a focus indicator.
 </ResponseField>
 
+<ResponseField name="tier" type="ColorTier" default="ColorTier.TrueColor">
+  The colour capability of the terminal this buffer is drawn for. Widgets and `DrawBorder` emit their styles at this tier, so an `Rgb` foreground becomes the nearest ANSI colour on a 16-colour terminal and no colour at all at `Off`. `Screen.start()` sets it to [`DetectTier`](/reference/color#capability-detection) once, when it takes the terminal; a buffer built by hand with `NewBuffer` keeps the default, so a headless render is always true colour. `resize` preserves it.
+</ResponseField>
+
 <ResponseField name="force_full" type="bool" default="true">
   `true` when the next `diff()` must serialize the whole frame instead of only the changed cells. `NewBuffer` and `resize` set it; `commit()` clears it once the front grid has caught up.
 </ResponseField>
 
 ### Copies share cells
 
-A `Buffer` reaches `render` by value, but both grids live in `Vector`s, and copies of a `Vector` share storage. The back grid (`cells`) and the front grid (`front`) are shared this way. A widget writing through its copy writes the screen's one back grid, and `commit()` through any copy advances the shared front grid. The scalar fields `clip`, `focused`, and `force_full` belong to each copy, which is how the screen gives each widget its own clip without affecting the others.
+A `Buffer` reaches `render` by value, but both grids live in `Vector`s, and copies of a `Vector` share storage. The back grid (`cells`) and the front grid (`front`) are shared this way. A widget writing through its copy writes the screen's one back grid, and `commit()` through any copy advances the shared front grid. The scalar fields `clip`, `focused`, `tier`, and `force_full` belong to each copy, which is how the screen gives each widget its own clip without affecting the others.
 
 Widgets write only through the back grid; nothing but `commit()` ever touches `front`. Only the owner of the original buffer may `resize`, `flush`, or `free` it, because those replace or release the storage the copies share.
 
@@ -97,7 +103,7 @@ Creates a blank grid with `clip` covering all of it. A negative size is treated 
 | `fill(r: Rect, ch: str, style: str)` | Sets every cell of `r`, clipped, to `ch` in `style`. |
 | `clear()` | Resets every cell to blank, ignoring the clip. |
 | `row_text(y: int): str` | The characters of row `y` of the back grid, without styles. `""` outside the grid. Meant for tests and debugging. |
-| `resize(width: int, height: int)` | Replaces both grids with blank ones and resets the clip, forcing a full repaint on the next `diff()`. Only the original buffer may call it. |
+| `resize(width: int, height: int)` | Replaces both grids with blank ones and resets the clip, forcing a full repaint on the next `diff()`. Keeps `tier`: a resize is not a new terminal. Only the original buffer may call it. |
 | `ansi(): str` | The whole grid as one frame: per row a cursor move and every cell, switching style only where it changes. Nothing is diffed. For tests and debugging. |
 | `diff(): str` | The bytes `flush()` would write: the whole frame (see `ansi`) while `force_full`, otherwise the touched cells that differ from `front`, skipping clean rows. `""` when nothing marked differs. |
 | `commit()` | Copies marked cells on marked rows into the front grid (every cell while `force_full`), then clears the marks and `force_full`. |

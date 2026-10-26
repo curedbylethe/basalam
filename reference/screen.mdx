@@ -145,7 +145,7 @@ When that order is non-empty and the current focus is outside it, `raise` saves 
 
 | Method | Description |
 | --- | --- |
-| `start()` | Raw mode, alternate screen, hidden cursor, mouse reporting if `mouse` or `mouse_motion` is set, a buffer sized to the terminal, the input thread, and, on POSIX, the resize watcher. |
+| `start()` | Raw mode, alternate screen, hidden cursor, mouse reporting if `mouse` or `mouse_motion` is set, a buffer sized to the terminal, the detected colour tier (assigned to `buffer.tier`), the input thread, and, on POSIX, the resize watcher. |
 | `stop()` | Ends the loop. `next_event` returns `false` once the queue is drained. Safe to call more than once. |
 | `close()` | Stops the loop, restores the terminal exactly as `start()` found it, joins the input thread and the resize watcher, and frees the screen's storage, including its keymap. Safe to call more than once. |
 

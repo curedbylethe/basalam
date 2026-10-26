@@ -69,7 +69,7 @@ Every ring cell, including the title, uses one foreground color, `style.fg`. The
 
 - Only `fg` is used. `bg` and the attributes `bold`, `dim`, `italic`, and `underline` are ignored, even when set.
 - A `fg` of `Color.Default` writes no escape, so the frame keeps the terminal's own foreground.
-- Border cells carry the foreground at true color, as `Text` does. The frame is not lowered to the terminal's color tier when it is drawn.
+- The frame is lowered at emission like every other styled cell: `DrawBorder` reads `buf.tier`, so an `Rgb` foreground becomes the nearest ANSI colour on a 16-colour terminal and no colour at all at `Off`. It takes no tier parameter of its own.
 
 The glyphs are the same at every color tier, so a frame keeps its shape wherever it runs.
 
