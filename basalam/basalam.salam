@@ -49,7 +49,6 @@
  *     separator.salam the Separator widget: one-line horizontal or vertical rule
  *     tree.salam     the widget registry (IDs, parents) and event bubbling
  *     screen.salam   Screen: terminal session, colour tier detection, input thread, event loop
- *     signal.salam   SIGWINCH listening primitives for the resize watch
  *     focus.salam    spatial focus search (Nearest) and the Dir* constants
  *     keymap.salam   the opt-in key and key-sequence binding table
  *
