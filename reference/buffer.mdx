@@ -73,7 +73,7 @@ end
 </ResponseField>
 
 <ResponseField name="tier" type="ColorTier" default="ColorTier.TrueColor">
-  The colour capability of the terminal this buffer is drawn for. Widgets and `DrawBorder` emit their styles at this tier, so an `Rgb` foreground becomes the nearest ANSI colour on a 16-colour terminal and no colour at all at `Off`. `Screen.start()` sets it to [`DetectTier`](/reference/color#capability-detection) once, when it takes the terminal; a buffer built by hand with `NewBuffer` keeps the default, so a headless render is always true colour. `resize` preserves it.
+  The colour capability of the terminal this buffer is drawn for. The buffer lowers every cell's `Style` to this tier when it emits a frame, so an `Rgb` foreground becomes the nearest ANSI colour on a 16-colour terminal and no colour at all at `Off`. `Screen.start()` sets it to [`DetectTier`](/reference/color#capability-detection) once, when it takes the terminal; a buffer built by hand with `NewBuffer` keeps the default, so a headless render is always true colour. `resize` preserves it.
 </ResponseField>
 
 <ResponseField name="force_full" type="bool" default="true">
