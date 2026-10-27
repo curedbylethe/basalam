@@ -89,7 +89,7 @@
  * Resize detection. On POSIX a dedicated winch thread (winch_loop) parks in
  * sigwait(SIGWINCH) and, on every wake, reads term.Size() and sends a
  * ResizeEvent only when the size actually changed. The signal plumbing
- * lives in signal.salam; the watcher is spawned in start() and joined in
+ * lives in the signal package; the watcher is spawned in start() and joined in
  * close() before the channel is freed. SIGWINCH coalesces, so two quick
  * resizes can arrive as one wake: the event carries the current size, not a
  * count, and a wake with an unchanged size emits nothing, preserving the
@@ -115,6 +115,7 @@ import chan
 import mem
 import sync
 import term
+import "github.com/curedbylethe/signal"
 
 @en "PollMs"
 /// How often, at most, the input thread wakes when no key arrives, in
@@ -801,15 +802,15 @@ pub struct Screen:
         // Not in NewScreen: a headless screen must not depend on TERM, and
         // resize() above must not clobber the result.
         this.buffer.tier = DetectTier()
-        if WinchSupported():
+        if signal.WinchSupported():
             // Order matters. Give SIGWINCH a non-default disposition before
             // blocking it (a blocked signal whose disposition is still
             // SIG_DFL is discarded at generation on Darwin), then block it
             // before spawning either thread so both inherit the mask: the
             // watcher parks in sigwait instead of running the handler, and
             // the input thread must not receive it on some arbitrary stack.
-            InstallWinchHandler()
-            BlockWinch()
+            signal.InstallWinchHandler()
+            signal.BlockWinch()
             wctx := mem.Allocate(sizeof(WinchContext) as u64) as WinchContext*
             wctx[0] = WinchContext {
                 events = this.events, width = size.cols, height = size.rows
@@ -855,7 +856,7 @@ pub struct Screen:
                 // the wake it needs to get there, and join waits for it to
                 // finish. Both must happen before events.ch.free(), which
                 // requires every user of the channel to be gone.
-                WakeWinch()
+                signal.WakeWinch()
                 join(this.winch_thread)
                 this.winch_thread = 0
             end
@@ -1160,7 +1161,7 @@ func input_loop(ctx: InputContext*):
         else:
             sync.SleepMs(wait)
         end
-        if not WinchSupported():
+        if not signal.WinchSupported():
             // Windows only: no SIGWINCH, so the size is polled here. On
             // POSIX winch_loop produces ResizeEvents and this block is
             // skipped, so the size is queried only when something happened.
@@ -1201,9 +1202,9 @@ func winch_loop(ctx: WinchContext*):
     events := c.events
     mut width := c.width
     mut height := c.height
-    set := NewWinchSet()
+    set := signal.NewWinchSet()
     until events.ch.is_closed():
-        n := WaitWinch(set)
+        n := signal.WaitWinch(set)
         if n == 0:
             // No signal arrived (a null set or a non-POSIX build). Waiting
             // again would spin, so leave instead.
