@@ -48,6 +48,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   actually emits. To check that a redraw built nothing, compare `SgrBuilds()`
   before and after one `ansi()` or `diff()` call; the `button_test` and
   `list_test` cases do this.
+- The SIGWINCH listening primitives (`WinchSignal`, `WinchSupported`,
+  `NewWinchSet`, `InstallWinchHandler`, `BlockWinch`, `WaitWinch`, `WakeWinch`)
+  now live in [`github.com/curedbylethe/signal`](https://github.com/curedbylethe/signal)
+  v0.1.0, installed with `salam add github.com/curedbylethe/signal@v0.1.0` and
+  used by basalam's resize watcher. `basalam/signal.salam` is deleted and
+  nothing is re-exported: the names stay internal, and application code still
+  just calls `Screen.start()` and reads `ResizeEvent`s.
 
 ## [0.3.2] - 2026-10-24
 
