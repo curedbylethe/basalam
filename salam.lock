@@ -1,0 +1,7 @@
+# Written by salam add, remove and update. Do not edit by hand.
+
+[[package]]
+path = "github.com/curedbylethe/signal"
+version = "v0.1.0"
+commit = "c1fab8865e6459b6981fa9412134b937e3e3087f"
+sum = "sha256:b211e2e2704e0195be42ab75a80ced5924020e1ab57bb1206a8a29c46d916ea0"

@@ -3,3 +3,6 @@ name = "basalam"
 version = "0.3.2"
 salam = ">=0.5.9"
 kind = "lib"
+
+[dependencies]
+"github.com/curedbylethe/signal" = "v0.1.0"
