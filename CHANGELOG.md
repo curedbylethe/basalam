@@ -45,7 +45,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Breaking:** `SgrBuilds()` counts the non-empty strings `StyleSgr` and
   `StyleSgrOff` build at emission, not widget cache hits. A redraw with no style
   change no longer moves the count; one frame adds one per on or off sequence it
-  actually emits.
+  actually emits. To check that a redraw built nothing, compare `SgrBuilds()`
+  before and after one `ansi()` or `diff()` call; the `button_test` and
+  `list_test` cases do this.
 
 ## [0.3.2] - 2026-10-24
 
