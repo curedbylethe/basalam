@@ -122,7 +122,7 @@ t.set_style(basalam.Style { fg = basalam.Cyan, bg = basalam.Black, bold = true }
 
 A style is a plain value, so a partial literal leaves every other field at its default and `StyleDefault` is the style that asks for nothing.
 
-`render` paints in two passes. It fills the whole box with the style's background only, so a background colour reads full-bleed across the widget's area while nothing else reaches the padding. It then writes each line of glyph cells — interior spaces included, so an underline stays continuous — in the full style. Both are `Style` values handed to the buffer, which builds the SGR bytes when it emits the frame. It emits at `buf.tier`, which `Screen.start()` sets to the detected tier of the terminal; a buffer built by hand keeps `ColorTier.TrueColor`.
+`render` paints in two passes. It fills the whole box with the style's background only, so a background colour reads full-bleed across the widget's area while nothing else reaches the padding. It then writes each line of glyph cells — interior spaces included, so an underline stays continuous — in the full style. Both are `Style` values handed to the buffer, which builds the SGR bytes at `buf.tier` when it emits the frame. `Screen.start()` sets that tier to the terminal's detected capability; a buffer built by hand keeps `ColorTier.TrueColor`.
 
 ## Preferred size
 

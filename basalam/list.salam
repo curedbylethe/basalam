@@ -140,8 +140,8 @@ pub struct List:
     /// Draws the visible window into bounds: each row is filled full width
     /// with the base style and then the item that occupies it is written,
     /// clipped to the width, with the selected row in the selection style
-    /// (reverse video focused, bright-on-black unfocused). A degenerate box
-    /// draws nothing and never panics.
+    /// (reverse video focused, a bright-black background unfocused). A
+    /// degenerate box draws nothing and never panics.
     pub func render(buf: Buffer, bounds: Rect):
         if bounds.is_empty():
             ret

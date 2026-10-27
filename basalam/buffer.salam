@@ -73,9 +73,9 @@
  * force_full) are per-copy: the screen hands each widget its own copy with
  * `clip` set to that widget's visible area and `focused` set when it holds
  * the focus. `tier` is set once when the screen takes the terminal and every
- * copy inherits the same value, so widgets emit at the terminal's capability
- * without reading the environment themselves. Only the owner of the original may resize, free,
- * or flush it.
+ * copy inherits the same value: it is the tier the buffer lowers styles to
+ * when it writes a frame, so widgets never read the environment themselves.
+ * Only the owner of the original may resize, free, or flush it.
  */
 
 package basalam
@@ -135,7 +135,8 @@ pub struct Buffer:
 
     @en "tier"
     /// Render context: the colour capability of the terminal this buffer is
-    /// drawn for. Widgets and DrawBorder emit their styles at this tier.
+    /// drawn for. The buffer lowers every cell's Style to this tier when it
+    /// emits a frame; widgets and DrawBorder only store styles.
     /// Screen.start() sets it to DetectTier() once; a buffer built by hand
     /// keeps TrueColor, so headless renders stay true colour whatever the
     /// environment says. resize() preserves it.

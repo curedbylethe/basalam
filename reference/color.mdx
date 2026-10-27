@@ -84,7 +84,7 @@ pub func BgSeq(c: Color): str
 
 ## Capability detection
 
-`DetectTier` reports how much color the terminal can show, reading only the environment. It is pure and uncached — it reads no tty and remembers nothing — so the screen detects once when it starts and every widget reads the tier from the buffer.
+`DetectTier` reports how much color the terminal can show, reading only the environment. It is pure and uncached — it reads no tty and remembers nothing — so the screen detects once when it starts, stores the result on the buffer, and the buffer applies it when it emits a frame.
 
 ```salam
 pub enum ColorTier:
