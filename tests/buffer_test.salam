@@ -325,6 +325,19 @@ func test_diff_style_only():
     b.free()
 end
 
+func test_diff_reverse_only():
+    mut b := basalam.NewBuffer(2, 1)
+    rev := basalam.Style { reverse = true }
+    b.set(0, 0, basalam.Cell { ch = "a" })
+    b.commit()
+    b.set(0, 0, basalam.Cell { ch = "a", style = rev })
+    // Reverse is a stored field for exactly this case: an inversion StyleEq
+    // could not see would leave the cursor and the selection stale.
+    want := term.SeqMoveTo(1, 1) + basalam.StyleSgr(rev, basalam.ColorTier.TrueColor) + "a" + basalam.StyleSgrOff(rev, basalam.ColorTier.TrueColor)
+    testing.AssertEqStr(b.diff(), want)
+    b.free()
+end
+
 func test_clear_redraw_is_empty():
     mut b := basalam.NewBuffer(3, 1)
     b.put_str(0, 0, "abc", basalam.StyleDefault)
@@ -443,6 +456,7 @@ func main:
     test_diff_adjacent_run()
     test_diff_two_runs()
     test_diff_style_only()
+    test_diff_reverse_only()
     test_clear_redraw_is_empty()
     test_resize_forces_full()
     test_front_shared_through_copies()
