@@ -46,7 +46,7 @@ sequenceDiagram
 
 **The resize watcher** (POSIX only) starts in `screen.start()` as well. Size is a signal, not input: the terminal announces a resize with `SIGWINCH`, so `start()` installs a handler and blocks the signal before spawning either thread. The watcher parks in `sigwait`, reads `term.Size()` on each wake, and sends a `ResizeEvent` only when the size actually changed, so a wake with an unchanged size emits nothing. Windows has no `SIGWINCH`: there the input thread keeps polling `term.Size()` once per pass, and `PollMs` bounds that poll. See [Limitations](#limitations).
 
-The signal plumbing is exposed as `WinchSignal`, `WinchSupported`, `NewWinchSet`, `InstallWinchHandler`, `BlockWinch`, `WaitWinch`, and `WakeWinch`. They are public so `Screen` and the tests can install, block, wait on, and wake the watcher; they are not an application API.
+The signal plumbing lives in the [`github.com/curedbylethe/signal`](https://github.com/curedbylethe/signal) package (`salam add github.com/curedbylethe/signal@v0.1.0`), which basalam depends on: `WinchSignal`, `WinchSupported`, `NewWinchSet`, `InstallWinchHandler`, `BlockWinch`, `WaitWinch`, and `WakeWinch`. They are public so basalam's `Screen` can install, block, wait on, and wake the watcher, but they are still not an application API: applications should not call them directly.
 
 Neither thread touches widgets, the tree, or the buffer. Their only shared state is the channel, which `std/chan` already synchronizes.
 
