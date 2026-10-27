@@ -37,6 +37,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   replaces the base style for that row, and `style` covers unselected rows.
 - **Breaking:** a disabled `Button` or `Checkbox` now drops a caller-set bold. It
   draws dim and keeps the colors, italic, underline, and reverse you set.
+- **Breaking:** a frame no longer contains a terminal reset between cells.
+  `Buffer.ansi` and `Buffer.diff` emit `StyleSgrOff(previous, tier)` followed by
+  `StyleSgr(next, tier)` on every style change and close by turning the last
+  style off. A test or recorder that compares frame bytes should build its
+  expectation from those two functions instead of `ESC[0m` plus a style string.
+- **Breaking:** `SgrBuilds()` counts the non-empty strings `StyleSgr` and
+  `StyleSgrOff` build at emission, not widget cache hits. A redraw with no style
+  change no longer moves the count; one frame adds one per on or off sequence it
+  actually emits.
 
 ## [0.3.2] - 2026-10-24
 
