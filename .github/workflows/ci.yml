@@ -35,6 +35,11 @@ jobs:
       - name: Show compiler version
         run: salam version
 
+      # A fresh runner has an empty ~/.salam/pkg and `salam build` does not
+      # fetch, so the library gate below would stop at E008 without this.
+      - name: Fetch the locked packages
+        run: salam deps
+
       # Format check, library build, examples build, test suite, doc examples.
       - name: make check
         run: make check
