@@ -51,10 +51,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The SIGWINCH listening primitives (`WinchSignal`, `WinchSupported`,
   `NewWinchSet`, `InstallWinchHandler`, `BlockWinch`, `WaitWinch`, `WakeWinch`)
   now live in [`github.com/curedbylethe/signal`](https://github.com/curedbylethe/signal)
-  v0.1.0, installed with `salam add github.com/curedbylethe/signal@v0.1.0` and
+  v0.1.2, installed with `salam add github.com/curedbylethe/signal@v0.1.2` and
   used by basalam's resize watcher. `basalam/signal.salam` is deleted and
   nothing is re-exported: the names stay internal, and application code still
-  just calls `Screen.start()` and reads `ResizeEvent`s.
+  just calls `Screen.start()` and reads `ResizeEvent`s. The watcher treats a
+  positive `WaitWinch` return as the signal number, `0` as Windows only, and a
+  negative `Wait*` status as a failure it retries after a `WinchRetryMs`
+  (50 ms) sleep instead of reading a wake.
 
 ## [0.3.2] - 2026-10-24
 
