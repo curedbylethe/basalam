@@ -8,7 +8,7 @@ build full-screen terminal interfaces. It sits on top of Salam's standard
 `term` package and adds geometry, widgets, events, focus, and a screen that
 draws frames.
 
-> **Status: 0.3.2, early development.** See the
+> **Status: 0.4.0, early development.** See the
 > [CHANGELOG](CHANGELOG.md) for what this release contains.
 
 ## Install
@@ -23,7 +23,7 @@ Add basalam with Salam's package manager. If the project has no `salam.toml`
 yet, run `salam init` first, then pin a release tag:
 
 ```sh
-salam add github.com/curedbylethe/basalam@v0.3.2
+salam add github.com/curedbylethe/basalam@v0.4.0
 ```
 
 `salam add` writes the dependency to `salam.toml` and pins its commit and
