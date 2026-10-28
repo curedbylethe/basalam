@@ -2,6 +2,6 @@
 
 [[package]]
 path = "github.com/curedbylethe/signal"
-version = "v0.1.0"
-commit = "c1fab8865e6459b6981fa9412134b937e3e3087f"
-sum = "sha256:b211e2e2704e0195be42ab75a80ced5924020e1ab57bb1206a8a29c46d916ea0"
+version = "v0.1.2"
+commit = "d104dd7181d6b6240dd6ecdcaf898996d5bdae80"
+sum = "sha256:ce4c1f3641c128fdbf8f13502ef9d83d28ff2de4561fe16aabec11739d47c6f0"

@@ -5,4 +5,4 @@ salam = ">=0.5.9"
 kind = "lib"
 
 [dependencies]
-"github.com/curedbylethe/signal" = "v0.1.0"
+"github.com/curedbylethe/signal" = "v0.1.2"
