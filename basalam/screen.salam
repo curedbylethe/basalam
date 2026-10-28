@@ -90,9 +90,12 @@
  * sigwait(SIGWINCH) and, on every wake, reads term.Size() and sends a
  * ResizeEvent only when the size actually changed. The signal plumbing
  * lives in the signal package; the watcher is spawned in start() and joined in
- * close() before the channel is freed. SIGWINCH coalesces, so two quick
- * resizes can arrive as one wake: the event carries the current size, not a
- * count, and a wake with an unchanged size emits nothing, preserving the
+ * close() before the channel is freed. WaitWinch returns the signal number
+ * (positive) on arrival, zero on Windows only, and a negative Wait* status on
+ * failure; the watcher breaks on zero and retries a negative status after a
+ * bounded sleep (WinchRetryMs) instead of spinning. SIGWINCH coalesces, so two
+ * quick resizes can arrive as one wake: the event carries the current size,
+ * not a count, and a wake with an unchanged size emits nothing, preserving the
  * only-on-change behavior the old poll had. Windows has no SIGWINCH
  * (WinchSupported is false), so there the input thread keeps polling
  * term.Size() once per pass instead, and PollMs bounds that poll's latency.
@@ -130,6 +133,11 @@ pub const EventCapacity := 256
 // More pending regions than this, or a combined area over half the screen,
 // becomes a full repaint. Both knobs are cheap to retune.
 const RegionLimit := 4
+
+// Backoff for the winch thread when WaitWinch fails (a negative Wait* status)
+// instead of arriving, in milliseconds. Bounds both the CPU cost of a
+// persistent failure and close()'s join latency.
+const WinchRetryMs := 50
 
 // What the input thread needs, copied onto the heap because spawn() passes
 // exactly one pointer. The channel copy shares the screen's channel.
@@ -809,7 +817,11 @@ pub struct Screen:
             // before spawning either thread so both inherit the mask: the
             // watcher parks in sigwait instead of running the handler, and
             // the input thread must not receive it on some arbitrary stack.
-            signal.InstallWinchHandler()
+            // The returned snapshot is unreachable here by design.
+            // shortcut: one snapshot per Screen.start() is never freed and the
+            // process-wide disposition is not restored, matching v0.1.0;
+            // upgrade to Restore + mem.Free if start() becomes repeatable.
+            _ := signal.InstallWinchHandler()
             signal.BlockWinch()
             wctx := mem.Allocate(sizeof(WinchContext) as u64) as WinchContext*
             wctx[0] = WinchContext {
@@ -1191,8 +1203,10 @@ end
 // The winch thread (POSIX only). It owns nothing but its copy of the
 // channel and its baseline size, parks in WaitWinch(set), and on each wake
 // re-reads term.Size(): a change updates the baseline and becomes a
-// ResizeEvent, a same-size wake emits nothing. SIGWINCH coalesces, so
-// several resizes can collapse into one wake; the event carries the current
+// ResizeEvent, a same-size wake emits nothing. A negative WaitWinch status
+// (WaitInvalid, WaitFailed, WaitBusy) means the wait failed, so it sleeps for
+// WinchRetryMs and retries without touching term.Size(). SIGWINCH coalesces,
+// so several resizes can collapse into one wake; the event carries the current
 // size, not a count. It exits when the channel is closed, either noticed
 // before the wait or because a send was refused. It is never spawned on
 // Windows (WinchSupported is false).
@@ -1206,20 +1220,28 @@ func winch_loop(ctx: WinchContext*):
     until events.ch.is_closed():
         n := signal.WaitWinch(set)
         if n == 0:
-            // No signal arrived (a null set or a non-POSIX build). Waiting
-            // again would spin, so leave instead.
+            // Windows only: WaitWinch returns 0 there instead of a status,
+            // and the watcher is never spawned on Windows.
             break
         end
-        if events.ch.is_closed():
-            break
-        end
-        now := term.Size()
-        if now.cols != width or now.rows != height:
-            width = now.cols
-            height = now.rows
-            resized := Event { kind = ResizeEvent, width = now.cols, height = now.rows }
-            if not events.ch.send(resized):
+        if n < 0:
+            // WaitInvalid, WaitFailed or WaitBusy: the wait did not run or
+            // failed. Retrying at once would spin, so back off; close() still
+            // interrupts, because it closes the channel and wakes the thread.
+            sync.SleepMs(WinchRetryMs)
+        else:
+            // A positive return is the signal number: a wake.
+            if events.ch.is_closed():
                 break
+            end
+            now := term.Size()
+            if now.cols != width or now.rows != height:
+                width = now.cols
+                height = now.rows
+                resized := Event { kind = ResizeEvent, width = now.cols, height = now.rows }
+                if not events.ch.send(resized):
+                    break
+                end
             end
         end
     end
