@@ -1,6 +1,6 @@
 [package]
 name = "basalam"
-version = "0.4.0"
+version = "0.4.1"
 salam = ">=0.5.9"
 kind = "lib"
 
