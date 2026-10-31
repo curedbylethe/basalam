@@ -34,7 +34,8 @@ not scheduled.
 - The tag is annotated and named `vX.Y.Z`, for example `v0.1.0`:
   `git tag -a v0.1.0 -m "basalam 0.1.0"`.
 - Tag the release commit on `main` — the merge or squash commit of the release
-  pull request, never a commit only on a branch.
+  pull request, never a commit only on a branch. A release that targets an older
+  line is the exception: tag it on that line's maintenance branch.
 - A published tag is immutable. Never move it, delete it, or re-point it at
   another commit; if a release is wrong, publish a new patch.
 - No `v`-less tags, and no pre-release suffixes (`-rc.1`, `+build`) until a
