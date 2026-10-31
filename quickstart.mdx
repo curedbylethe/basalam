@@ -26,7 +26,7 @@ keywords:
     basalam is a package on GitHub, so Salam's package manager installs it. Run `salam init` once if the project has no `salam.toml`, then pin a release tag so your builds stay reproducible:
 
     ```bash
-    salam add github.com/curedbylethe/basalam@v0.3.2
+    salam add github.com/curedbylethe/basalam@v0.3.3
     ```
 
     `salam add` writes the dependency to `salam.toml` and pins its commit and sha256 in `salam.lock`. Commit both files. The lock is what makes the pin reproducible, and a fresh clone restores the download with `salam deps`.
@@ -89,7 +89,7 @@ keywords:
 - `NewTerminalScreen` makes `Hello` the root widget, sized to the terminal.
 - `start()` switches the terminal to raw mode and the alternate screen and starts the input thread. `defer screen.close()` undoes all of it on every exit path.
 - The `until` loop takes one event at a time. `dispatch` offers it to the widgets; `q` is not consumed by any widget, so the loop stops the screen.
-- `basalam.Version` is the library version (`0.3.2`); the [demo](/guides/examples) prints it in its title bar.
+- `basalam.Version` is the library version (`0.3.3`); the [demo](/guides/examples) prints it in its title bar.
 
 Read [The event loop](/concepts/event-loop) for the details, or [Writing a widget](/guides/writing-a-widget) to build an interactive one.
 

@@ -62,4 +62,4 @@ package basalam
 
 @en "Version"
 /// The library version, following semantic versioning.
-pub const Version := "0.3.2"
+pub const Version := "0.3.3"
