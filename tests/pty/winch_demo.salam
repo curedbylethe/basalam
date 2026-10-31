@@ -1,0 +1,47 @@
+/*
+ * basalam - a terminal user interface library for Salam (2026)
+ *
+ *   +-------------------+
+ *   |   B A S A L A M   |
+ *   +-------------------+
+ *
+ * Built on the Salam standard library's std/term package
+ * Salam: https://github.com/SalamLang/Salam
+ *
+ * Repository: https://github.com/curedbylethe/basalam
+ * License: GPL-3.0-or-later
+ *
+ */
+
+// The program tests/pty/winch_test.py drives through a pty. It is not a test
+// in the tests/run.sh sense: it needs a real terminal and prints no golden
+// output. start() takes the terminal, one frame is presented, `ready` marks
+// the moment the watcher must be parked, and the loop then waits for the
+// first ResizeEvent and prints its payload before closing the screen.
+
+import term
+
+include "../../basalam/basalam.salam"
+
+// The root widget: the screen only needs one, and it paints nothing.
+struct Root:
+    pub use basalam.BaseWidget
+end
+
+func main:
+    mut screen := basalam.NewTerminalScreen(Root {} as dyn basalam.Widget)
+    screen.start()
+    defer screen.close()
+    screen.present()
+    // A leading newline keeps `ready` on its own line after the alt-screen
+    // sequence start() wrote, which has no trailing newline.
+    term.Emit("\nready\n")
+    mut ev := basalam.Event {}
+    until screen.next_event(ev):
+        if ev.kind == basalam.ResizeEvent:
+            term.Emit("\nresize " + ev.width + " " + ev.height + "\n")
+            break
+        end
+    end
+    ret 0
+end
