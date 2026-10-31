@@ -5,6 +5,8 @@
 /examples/*
 !/examples/*.salam
 /tests/*
+!/tests/pty/
+!/tests/pty/*
 !/tests/*.salam
 !/tests/*.out
 !/tests/run.sh
