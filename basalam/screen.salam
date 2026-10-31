@@ -1217,7 +1217,7 @@ func winch_loop(ctx: WinchContext*):
     mut width := c.width
     mut height := c.height
     set := signal.NewWinchSet()
-    until events.ch.is_closed():
+    until not events.ch.is_closed():
         n := signal.WaitWinch(set)
         if n == 0:
             // Windows only: WaitWinch returns 0 there instead of a status,
