@@ -1198,7 +1198,7 @@ func winch_loop(ctx: WinchContext*):
     mut width := c.width
     mut height := c.height
     set := NewWinchSet()
-    until events.ch.is_closed():
+    until not events.ch.is_closed():
         n := WaitWinch(set)
         if n == 0:
             // No signal arrived (a null set or a non-POSIX build). Waiting
