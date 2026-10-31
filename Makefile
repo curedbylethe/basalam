@@ -13,12 +13,13 @@ endif
 
 EXAMPLES := $(patsubst examples/%.salam,$(BUILD)/examples/%,$(wildcard examples/*.salam))
 
-.PHONY: help build test test-llvm example examples docs-examples run format check release-check docs docs-check docs-format-check clean
+.PHONY: help build test test-llvm test-pty example examples docs-examples run format check release-check docs docs-check docs-format-check clean
 
 help:
 	@echo "make build     type-check and compile every file in basalam/ with --backend=llvm"
 	@echo "make test      build and run the test suite (tests/run.sh)"
 	@echo "make test-llvm build and run the test suite with --backend=llvm"
+	@echo "make test-pty  build tests/pty/winch_demo and drive it through a pty (needs a terminal; not in check)"
 	@echo "make examples  build every program in examples/ into build/examples/ with --backend=llvm"
 	@echo "make docs-examples type-check every complete example in the docs"
 	@echo "make run       build and run the demo example"
@@ -43,6 +44,15 @@ test:
 
 test-llvm:
 	SALAM=$(SALAM) SALAM_BACKEND=llvm sh tests/run.sh
+
+# The repo's only pty test: it owns a terminal, so it cannot live in
+# tests/run.sh. Kept out of `check` on purpose (it is new and unproven in CI).
+test-pty: $(BUILD)/tests/pty/winch_demo
+	python3 tests/pty/winch_test.py $(BUILD)/tests/pty/winch_demo
+
+$(BUILD)/tests/pty/winch_demo: tests/pty/winch_demo.salam $(wildcard basalam/*.salam)
+	@mkdir -p $(BUILD)/tests/pty
+	$(SALAM) build $< --output=$@ $(FLAGS)
 
 examples: $(EXAMPLES)
 example: examples
