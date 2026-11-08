@@ -159,23 +159,23 @@ pub struct Input:
             this._insert(" ")
             ret true
         end
-        if code == term.KeyLeft:
+        if code == term.KeyLeft and not event.key.ctrl and not event.key.alt:
             if this.caret > 0:
                 this.caret = this.caret - 1
             end
             ret true
         end
-        if code == term.KeyRight:
+        if code == term.KeyRight and not event.key.ctrl and not event.key.alt:
             if this.caret < total:
                 this.caret = this.caret + 1
             end
             ret true
         end
-        if code == term.KeyHome:
+        if code == term.KeyHome and not event.key.ctrl and not event.key.alt:
             this.caret = 0
             ret true
         end
-        if code == term.KeyEnd:
+        if code == term.KeyEnd and not event.key.ctrl and not event.key.alt:
             this.caret = total
             ret true
         end
@@ -186,7 +186,7 @@ pub struct Input:
             end
             ret true
         end
-        if code == term.KeyDelete:
+        if code == term.KeyDelete and not event.key.ctrl and not event.key.alt:
             if this.caret < total:
                 this.content = str.CharSubstr(this.content, 0, this.caret) + str.CharSubstr(this.content, this.caret + 1, total - this.caret - 1)
             end
@@ -273,6 +273,13 @@ pub struct Input:
             this.window_start = this.caret
         else this.caret > this.window_start + w - 1:
             this.window_start = this.caret - w + 1
+        end
+        // A shorter value pulls the window back so it never scrolls past the text.
+        if this.window_start > count - w:
+            this.window_start = count - w + 1
+            if this.window_start < 0:
+                this.window_start = 0
+            end
         end
         start := this.window_start
         if count == 0 and this.placeholder != "":

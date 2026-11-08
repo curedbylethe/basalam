@@ -1,6 +1,6 @@
 ---
 title: "Input"
-description: "The single-line text-entry widget: value, caret, placeholder, and a reverse-video cursor cell."
+description: "The single-line text-entry widget: value, caret editing, placeholder, a submit callback, and input shaping with max length, filter, and masking."
 keywords:
   - "input"
   - "text entry"
@@ -74,7 +74,7 @@ end
   Called on `Enter` with the real value. Its return value is the consumed flag. See [Submit](#submit).
 </ResponseField>
 
-The first three are complete style values. `StyleDefault` on `style` asks for the terminal's default; on `cursor_style` or `placeholder_style` it adds nothing, which is how you ask for a plain cursor or placeholder. There is no `""` sentinel: an empty string used to mean "use the built-in default", and a zero style now means "add no styling".
+The three style fields (`style`, `cursor_style`, `placeholder_style`) are complete style values. `StyleDefault` on `style` asks for the terminal's default; on `cursor_style` or `placeholder_style` it adds nothing, which is how you ask for a plain cursor or placeholder. There is no `""` sentinel: an empty string used to mean "use the built-in default", and a zero style now means "add no styling".
 
 The value and the caret are counted in codepoints, so a multibyte glyph is one cell and one caret step. The caret is always an index between `0` and the value's length. It moves with the arrow keys, `Home`, and `End`, and edits happen at it.
 
@@ -124,7 +124,7 @@ A keymap binding on `Enter` cannot replace `on_submit`: widgets get keys before 
 
 ```salam
 mut name := basalam.NewInput()
-name.on_submit = (v: str): ret v == "" end // an empty value lets Enter bubble
+name.on_submit = (v: str): ret v != "" end // an empty value lets Enter bubble
 ```
 
 ## Shaping
@@ -134,6 +134,7 @@ name.on_submit = (v: str): ret v == "" end // an empty value lets Enter bubble
 - **Order.** A typed glyph is checked against `max_length` first, then passed to `filter`. If either rejects it, the key is still consumed and nothing changes: no bell, no caret move.
 - **Glyph unit.** `max_length` counts glyphs (codepoints), like the caret and `value()`, not display cells.
 - **Insertions only.** `filter` receives the whole candidate value after one proposed insertion. It is never called for `Backspace`, `Delete`, or `set_value`, so a user can always delete their way out of a bad value.
+- **Lowering `max_length`.** Lowering it does not truncate the existing value, because a field write must not delete user input. Typing is rejected until the value is shorter than the new limit.
 - **`set_value`.** A value longer than `max_length` is truncated to its first `max_length` glyphs. `filter` is not called.
 - **Masking.** With `masked`, every glyph paints as the first codepoint of `mask_glyph`. The value, caret, and window are unchanged, and `Home` and `End` work as usual. An empty value shows the placeholder, never the mask.
 - **ASCII.** When the buffer's glyph policy is `GlyphPolicy.ASCII`, a non-ASCII mask glyph paints as `*`.
