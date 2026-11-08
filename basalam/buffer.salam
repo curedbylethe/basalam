@@ -36,8 +36,8 @@
  *             per-row text for tests (row_text); clipping; a render-context
  *             flag (focused); touched-cell tracking (writes go through
  *             set/fill/put_str/clear); and output: ansi() serializes the
- *             WHOLE grid (cursor moves via term.SeqMoveTo, and the
- *             StyleSgrOff / StyleSgr pair whenever the style changes) while
+ *             WHOLE grid (cursor moves via term.SeqMoveTo, and private SGR
+ *             append helpers whenever the style changes) while
  *             diff()/commit() write only the cells that changed since the
  *             last commit.
  *
@@ -48,10 +48,10 @@
  * Style transitions. A cell stores a Style; the buffer turns it into bytes at
  * emission, so the tier is applied once, here, and widgets never build SGR.
  * A frame starts from the terminal's default style (its first cell is drawn
- * under that assumption), every change emits StyleSgrOff(previous, tier)
- * followed by StyleSgr(next, tier), and the frame closes with
- * StyleSgrOff(last, tier) — "" when the last style is the default, so no
- * conditional is needed. A reset is not part of a frame; it belongs to
+ * under that assumption), every change appends StyleSgrOff(previous, tier)
+ * pieces followed by StyleSgr(next, tier) pieces, and the frame closes with
+ * the off pieces for the last style. A default style appends nothing. A reset
+ * is not part of a frame; it belongs to
  * Screen.start / Screen.close, which set the terminal up and tear it down.
  *
  *   contract to keep: Widget.render receives a Buffer by value, writes
@@ -403,15 +403,15 @@ pub struct Buffer:
             repeat this.width in x:
                 c := this.cells.get(y * this.width + x)
                 if not StyleEq(c.style, style):
-                    str.BufAppend(this.out_buf, StyleSgrOff(style, this.tier))
-                    str.BufAppend(this.out_buf, StyleSgr(c.style, this.tier))
+                    _ := _append_sgr_off(this.out_buf, style, this.tier)
+                    _ := _append_sgr(this.out_buf, c.style, this.tier)
                     style = c.style
                 end
                 // Empty continuation cells emit no bytes; the glyph owns both columns.
                 str.BufAppend(this.out_buf, c.ch)
             end
         end
-        str.BufAppend(this.out_buf, StyleSgrOff(style, this.tier))
+        _ := _append_sgr_off(this.out_buf, style, this.tier)
         ret str.BufStr(this.out_buf)
     end
 
@@ -449,8 +449,8 @@ pub struct Buffer:
                         until i < e:
                             c := this.cells.get(y * this.width + i)
                             if not StyleEq(c.style, style):
-                                str.BufAppend(this.out_buf, StyleSgrOff(style, this.tier))
-                                str.BufAppend(this.out_buf, StyleSgr(c.style, this.tier))
+                                _ := _append_sgr_off(this.out_buf, style, this.tier)
+                                _ := _append_sgr(this.out_buf, c.style, this.tier)
                                 style = c.style
                             end
                             // Empty continuation cells emit no bytes; the glyph owns both columns.
@@ -464,7 +464,7 @@ pub struct Buffer:
             end
         end
         if changed:
-            str.BufAppend(this.out_buf, StyleSgrOff(style, this.tier))
+            _ := _append_sgr_off(this.out_buf, style, this.tier)
         end
         ret str.BufStr(this.out_buf)
     end
