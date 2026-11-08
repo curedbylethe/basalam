@@ -319,7 +319,7 @@ pub struct Table:
     end
 
     @en "_resolve_widths"
-    @fa "_محاسبه_عرض‌ها"
+    @fa "محاسبه عرض‌ها"
     /// Column widths for a rect w cells wide. w < 0 means no width is given:
     /// star columns resolve to 0 and nothing shrinks. That is the preferred
     /// size. Public only so TableView can reach it; not for application code.
@@ -476,7 +476,7 @@ pub struct Table:
     end
 
     @en "_paint_row"
-    @fa "_رسم_ردیف"
+    @fa "رسم ردیف"
     /// Paints data or header row r at row y of bounds, one cell per column.
     /// Public only so TableView can reach it; not for application code.
     pub func _paint_row(buf: Buffer, bounds: Rect, ws: Vector<int>, r: int, y: int, style: Style):
@@ -519,7 +519,7 @@ pub struct Table:
     end
 
     @en "_paint_rule"
-    @fa "_رسم_خط"
+    @fa "رسم خط"
     /// Paints the rule under the header at row y of bounds. Public only so
     /// TableView can reach it; not for application code.
     pub func _paint_rule(buf: Buffer, bounds: Rect, ws: Vector<int>, y: int, style: Style):
