@@ -10,7 +10,7 @@ keywords:
   - "clip"
 ---
 
-`Text` draws a string into a [buffer](/reference/buffer). It is the first concrete widget: give it content, align it, wrap it to its box, and paint it in one style. A string set once and a string updated every frame are the same widget.
+`Text` draws a string into a [buffer](/reference/buffer). It is the first concrete widget: give it content, align it, wrap it to its box, and paint it in one style. Supply content once with `set_text`, or give the widget a source to read during render and measurement.
 
 ```salam
 mut t := basalam.NewText("Hello, terminal")
@@ -34,7 +34,7 @@ end
 ```
 
 <ResponseField name="content" type="str">
-  The text to draw. An explicit `"\n"` starts a new line.
+  The last text passed to `set_text`. An explicit `"\n"` starts a new line. This value is ignored while a source is set.
 </ResponseField>
 
 <ResponseField name="align" type="Alignment">
@@ -54,9 +54,35 @@ end
 ```salam
 pub func NewText(content: str): Text
 pub func set_text(content: str)
+pub func set_source(src: func () str)
+pub func clear_source()
 ```
 
-`NewText` creates a widget with the content already set: left-aligned, unstyled, and word-wrapped. `set_text` replaces the content on an existing widget, and the next `render` draws the new value. There is no separate type for dynamic text; you call `set_text` or you do not.
+`NewText` creates a widget with the content already set: left-aligned, unstyled, and word-wrapped. `set_text` replaces pushed content. `set_source` supplies a function that returns current content, and `clear_source` returns to the last pushed text. The last setter wins. A source is read at render and measure time, so keep its result stable within a frame.
+
+Set the source before `Screen.add`, because `Screen.add` stores a copy of the widget. Closures capture by value; read module-level state or a shared holder inside the source. A changed value does not repaint or relayout automatically. Call `invalidate(id)`, register a tick, or call `set_bounds` again. A preferred-size change takes effect on the next bounds pass.
+
+| Method | Description |
+| --- | --- |
+| `set_source` | Read current text from a function at render and measure time. |
+| `clear_source` | Return to the last value passed to `set_text`. |
+
+Use a module-level value or shared holder when source content must change. This example reads a module-level value:
+
+```salam
+include "basalam/basalam.salam"
+
+mut live := "ready"
+
+func main:
+    mut t := basalam.NewText("")
+    t.set_source((): ret live end)
+    mut buf := basalam.NewBuffer(8, 1)
+    defer buf.free()
+    t.render(buf, basalam.Rect { width = 8, height = 1 })
+    println buf.row_text(0)
+end
+```
 
 ## Alignment
 
@@ -98,7 +124,7 @@ end
 Under `WrapMode.Word`:
 
 - The widget walks the words of a paragraph. When the next word would cross the width, it starts a new line and the space at the break is consumed.
-- A word longer than the width is cut on the character grid, so no emitted line is ever wider than the width.
+- A word longer than the width is cut at display-cell boundaries. A two-cell glyph may form a line wider than a one-cell box; the buffer blanks it when both cells cannot fit.
 - An explicit `"\n"` starts a new paragraph, and each paragraph wraps on its own.
 
 `set_wrap` changes the mode. A box width of `0` or less means unbounded, so every paragraph is returned unwrapped.
@@ -108,7 +134,7 @@ Under `WrapMode.Word`:
 Drawing is a hard clip: a line keeps its first `W` cells and the box keeps its first `H` lines. There is no ellipsis, no scroll, and no overflow marker.
 
 - Vertical: at most `height` lines are drawn.
-- Horizontal: reachable only under `WrapMode.None`, because `WrapMode.Word` never emits a line wider than the box. A `None` line longer than the box is cut at the right edge.
+- Horizontal: reachable under `WrapMode.None`, and for a two-cell glyph in a one-cell `Word` box. A `None` line longer than the box is cut at the right edge; a wide glyph that cannot fit both cells is blanked by the buffer.
 
 A box with `width <= 0` or `height <= 0` draws nothing and never panics.
 
@@ -131,7 +157,7 @@ pub func preferred_size(max_width: int): Rect
 pub func preferred_width(): int
 ```
 
-`preferred_size` returns the size the content wants at `max_width`, as a `Rect` at `(0, 0)`: wrap at `max_width`, then width is the longest resulting line and height is the number of resulting lines. `max_width <= 0` means unbounded, so width is the longest explicit line and height is the explicit line count.
+`preferred_size` returns the size the active content wants at `max_width`, as a `Rect` at `(0, 0)`: wrap at `max_width`, then width is the longest resulting line in display cells and height is the number of resulting lines. `max_width <= 0` means unbounded, so width is the longest explicit line and height is the explicit line count. A source that changes its preferred size is picked up on the next bounds pass.
 
 `preferred_width` is the longest explicit line of the content, in cells — the unbounded width.
 
@@ -150,9 +176,9 @@ pub func WrapText(text: str, width: int): Vector<str>
 pub func MeasureText(text: str, max_width: int): Rect
 ```
 
-`WrapText` splits `text` into display lines of at most `width` cells, top to bottom, using the wrapping rules above. `width <= 0` means unbounded, so each paragraph is returned unwrapped.
+`WrapText` splits `text` into display lines measured in cells, top to bottom, using the wrapping rules above. A two-cell glyph can exceed a width of one. `width <= 0` means unbounded, so each paragraph is returned unwrapped.
 
-`MeasureText` returns the preferred size of `text` wrapped at `max_width`, as a `Rect` at `(0, 0)`.
+`MeasureText` returns the preferred size of `text` wrapped at `max_width`, as a `Rect` at `(0, 0)`. Widths count display cells.
 
 ## Example
 
@@ -173,5 +199,5 @@ end
 ```
 
 <Warning>
-  A cell is one codepoint, so every character counts as one column. Wide (CJK), combining, and zero-width characters are out of scope and render as ordinary one-cell glyphs, which shifts their columns.
+  A display cell is one terminal column. East Asian wide and fullwidth codepoints take two cells; controls, combining marks, and format codepoints take zero; other codepoints take one. The shared width table covers common wide and fullwidth blocks, not the full East Asian Width data. A rare wide codepoint outside those blocks still counts as one and can shift a column. `Text`, `Table`, `Buffer`, and the block widgets use this same rule. Zero-width codepoints are dropped when written to a buffer; grapheme clusters are not combined.
 </Warning>

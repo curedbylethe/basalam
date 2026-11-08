@@ -51,7 +51,7 @@ end
 
 All three are complete style values. `StyleDefault` on `style` asks for the terminal's default; on `cursor_style` or `placeholder_style` it adds nothing, which is how you ask for a plain cursor or placeholder. There is no `""` sentinel: an empty string used to mean "use the built-in default", and a zero style now means "add no styling".
 
-The value and the caret are counted in codepoints, so a multibyte glyph is one cell and one caret step. The caret is always an index between `0` and the value's length, and it stays after the last glyph.
+The value and caret index are counted in codepoints. The visible window is clipped on display cells, and the caret column is the display width of the visible prefix, so the caret stays aligned after a wide glyph. The index remains codepoint-based, so a combining mark is a separate caret position.
 
 ### Methods
 
@@ -101,7 +101,7 @@ An unfocused input draws no cursor cell.
 
 ## Placeholder
 
-The placeholder is shown whenever the value is empty, focused or not. It is styled bright black by default — `Style { fg = BrightBlack }`, which emits `ESC[90m` — through `StyleMerge(style, placeholder_style)`, and it is hard-clipped at the field width: characters past `width` are not drawn.
+The placeholder is shown whenever the value is empty, focused or not. It is styled bright black by default — `Style { fg = BrightBlack }`, which emits `ESC[90m` — through `StyleMerge(style, placeholder_style)`, and it is hard-clipped at the field width in display cells.
 
 - The placeholder never becomes part of the value, so `value()` stays `""` while only the placeholder is visible.
 - Backspacing the last character brings the placeholder back.
@@ -118,13 +118,9 @@ println in.value() // "" while the field is empty
 
 ## Overflow
 
-Rendering is tail-anchored and stateless: each frame shows the last cells that fit and recomputes the window from scratch, with no stored scroll offset. The first drawn codepoint is
+Rendering is tail-anchored and stateless: each frame shows the longest suffix that fits the available display cells and recomputes the window from scratch, with no stored scroll offset. The suffix starts at a codepoint boundary. The caret column uses the display width of the visible prefix, while the caret index remains codepoint-based.
 
-```text
-start = max(0, count - (width - focused))
-```
-
-where `count` is the value's length, `width` is the field's width in cells, and `focused` is `1` while the input has focus — reserving the last cell for the cursor — and `0` otherwise. Focused, the caret lands at column `count - start`, always inside the field.
+The window starts at the first codepoint in the longest suffix whose display width fits `width - focused`. `width` is the field's width in cells. `focused` is `1` while the input has focus — reserving the last cell for the cursor — and `0` otherwise. The caret lands at the display width of the visible prefix. Its index remains codepoint-based, so a combining mark is a separate position.
 
 Worked example, width `8`, value `"abcdefghij"`:
 
@@ -133,7 +129,7 @@ Worked example, width `8`, value `"abcdefghij"`:
 | Focused | `defghij` | `7` |
 | Unfocused | `cdefghij` | — |
 
-The window starts scrolling one cell earlier while focused: the first cell scrolls when `count` reaches `width`, and, unfocused, when it reaches `width + 1`.
+With ASCII input, the window starts scrolling one cell earlier while focused: the first cell scrolls when `count` reaches `width`, and, unfocused, when it reaches `width + 1`. Wide codepoints use their two-cell width when the window is chosen.
 
 ## Example
 
