@@ -13,7 +13,7 @@ endif
 
 EXAMPLES := $(patsubst examples/%.salam,$(BUILD)/examples/%,$(wildcard examples/*.salam))
 
-.PHONY: help build test test-llvm test-pty example examples docs-examples run format check release-check docs docs-check docs-format-check clean
+.PHONY: help build test test-llvm test-pty example examples docs-examples run format check fa-aliases release-check docs docs-check docs-format-check clean
 
 help:
 	@echo "make build     type-check and compile every file in basalam/ with --backend=llvm"
@@ -24,6 +24,7 @@ help:
 	@echo "make docs-examples type-check every complete example in the docs"
 	@echo "make run       build and run the demo example"
 	@echo "make format    format all Salam sources in place"
+	@echo "make fa-aliases fail when an @en name has no @fa Persian alias (no compiler needed)"
 	@echo "make check     format check, strict build, strict examples, tests, doc examples (the library gate; CI also runs test-llvm and the docs job)"
 	@echo "make release-check  check release metadata: Version, changelog headings and links (see RELEASING.md)"
 	@echo "make docs      preview the documentation site (needs: npm i -g mint@4.2.988)"
@@ -72,8 +73,12 @@ format:
 
 check:
 	$(SALAM) format --check $(SOURCES)
+	$(MAKE) fa-aliases
 	$(MAKE) build examples test
 	$(MAKE) docs-examples
+
+fa-aliases:
+	sh tests/fa-aliases.sh
 
 # The release policy gate: no tag, no network, no build. `make check` stays
 # independent of it so an ordinary pull request never needs a release.
