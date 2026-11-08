@@ -329,6 +329,37 @@ func test_default_focus_style_keeps_border_style():
     b.free()
 end
 
+func test_nested_rings_are_adjacent():
+    mut b := basalam.NewBuffer(8, 5)
+    mut outer := basalam.Panel { border = basalam.BorderStyle.Single }
+    mut inner := basalam.Panel { border = basalam.BorderStyle.Double }
+    inner.add(Probe {})
+    outer.add(inner)
+    r := basalam.Rect { x = 0, y = 0, width = 8, height = 5 }
+    outer.set_bounds(r)
+    outer.render(b, r)
+    inner.render(b, basalam.Rect { x = 1, y = 1, width = 6, height = 3 })
+    testing.AssertEqStr(b.row_text(0), "┌──────┐")
+    testing.AssertEqStr(b.row_text(1), "│╔════╗│")
+    testing.AssertEqStr(b.row_text(2), "│║    ║│")
+    testing.AssertEqStr(b.row_text(3), "│╚════╝│")
+    testing.AssertEqStr(b.row_text(4), "└──────┘")
+    b.free()
+end
+
+func test_ascii_policy_frames_panel():
+    mut b := basalam.NewBuffer(4, 3)
+    b.glyphs = basalam.GlyphPolicy.ASCII
+    mut p := basalam.Panel { border = basalam.BorderStyle.Rounded }
+    p.add(Probe {})
+    r := basalam.Rect { x = 0, y = 0, width = 4, height = 3 }
+    p.set_bounds(r)
+    p.render(b, r)
+    testing.AssertEqStr(b.row_text(0), "+--+")
+    testing.AssertEqStr(b.row_text(2), "+--+")
+    b.free()
+end
+
 func main:
     test_focusable_only_when_opted_in()
     test_focus_forwards_keys_to_child()
@@ -356,5 +387,7 @@ func main:
     test_preferred_size_unmeasurable_child()
     test_preferred_size_none_is_identity()
     test_preferred_size_empty_slot()
+    test_nested_rings_are_adjacent()
+    test_ascii_policy_frames_panel()
     ret testing.Summary()
 end

@@ -62,6 +62,10 @@ pub func NewTerminalScreen(root: dyn Widget): Screen
   The one [buffer](/reference/buffer) the screen owns: widgets draw into its back grid, and `present` diffs that against its front grid.
 </ResponseField>
 
+<ResponseField name="glyphs" type="GlyphPolicy" default="GlyphPolicy.Unicode">
+  The [glyph policy](/reference/buffer#glyph-policy) seeded into the buffer copy every widget receives. `start()` replaces it with `DetectGlyphPolicy()` unless you called `set_glyphs`.
+</ResponseField>
+
 <ResponseField name="running" type="bool">
   `true` from `start()` (or the start of `run`) until `stop()`.
 </ResponseField>
@@ -145,7 +149,8 @@ When that order is non-empty and the current focus is outside it, `raise` saves 
 
 | Method | Description |
 | --- | --- |
-| `start()` | Raw mode, alternate screen, hidden cursor, mouse reporting if `mouse` or `mouse_motion` is set, a buffer sized to the terminal, the detected colour tier (assigned to `buffer.tier`), the input thread, and, on POSIX, the resize watcher. |
+| `start()` | Raw mode, alternate screen, hidden cursor, mouse reporting if `mouse` or `mouse_motion` is set, a buffer sized to the terminal, the detected colour tier (assigned to `buffer.tier`), the detected glyph policy (assigned to `glyphs`, unless `set_glyphs` was called), the input thread, and, on POSIX, the resize watcher. |
+| `set_glyphs(policy: GlyphPolicy)` | Fixes the glyph policy and marks it explicit, so `start()` does not detect one. Call it before or after `start()`. |
 | `stop()` | Ends the loop. `next_event` returns `false` once the queue is drained. Safe to call more than once. |
 | `close()` | Stops the loop, restores the terminal exactly as `start()` found it, joins the input thread and the resize watcher, and frees the screen's storage, including its keymap. Safe to call more than once. |
 
