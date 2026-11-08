@@ -49,6 +49,7 @@ import str
 import term
 
 @en "List"
+@fa "فهرست"
 /// A single-selection scrollable list of strings. It is focusable, so
 /// keyboard events reach it through the screen's focus dispatch: j moves the
 /// selection down and k up (clamped, no wrap), and enter calls on_select with
@@ -58,21 +59,25 @@ pub struct List:
     pub use BaseWidget
 
     @en "style"
+    @fa "ظاهر"
     /// The style of every unselected row. StyleDefault draws with the
     /// terminal's defaults.
     pub style: Style = StyleDefault
 
     @en "selected_style"
+    @fa "ظاهر انتخاب"
     /// The style of the selected row while focused; it replaces `style` on
     /// that row. Defaults to reverse video.
     pub selected_style: Style = Style { reverse = true }
 
     @en "selected_unfocused_style"
+    @fa "ظاهر انتخاب بی‌تمرکز"
     /// The style of the selected row while unfocused; it replaces `style` on
     /// that row. Defaults to a bright-black background.
     pub selected_unfocused_style: Style = Style { bg = BrightBlack }
 
     @en "on_select"
+    @fa "هنگام انتخاب"
     /// Called with the selected index when enter is pressed on a non-empty
     /// list. The default does nothing.
     pub on_select: func (int) = (i: int): end
@@ -82,6 +87,7 @@ pub struct List:
     window_start: int = 0
 
     @en "focusable"
+    @fa "تمرکز‌پذیر است"
     /// Returns true: List is interactive, so the screen's focus dispatch
     /// routes keyboard events to it.
     pub func focusable(): bool:
@@ -89,6 +95,7 @@ pub struct List:
     end
 
     @en "handle_event"
+    @fa "پردازش رویداد"
     /// Reacts to a key press. j moves the selection down and k up, each
     /// clamped to the ends (no wrap) and each always consumed even when the
     /// list is empty. Enter is consumed and, on a non-empty list, calls
@@ -122,12 +129,14 @@ pub struct List:
     end
 
     @en "selected_index"
+    @fa "نمایه انتخاب"
     /// The selected index, or -1 when the list is empty.
     pub func selected_index(): int:
         ret this.selected
     end
 
     @en "selected_item"
+    @fa "گزینه انتخاب‌شده"
     /// The selected string, or "" when the list is empty.
     pub func selected_item(): str:
         if this.selected < 0 or this.selected >= this.items.len():
@@ -137,6 +146,7 @@ pub struct List:
     end
 
     @en "render"
+    @fa "ترسیم"
     /// Draws the visible window into bounds: each row is filled full width
     /// with the base style and then the item that occupies it is written,
     /// clipped to the width, with the selected row in the selection style
@@ -199,6 +209,7 @@ pub struct List:
 end
 
 @en "NewList"
+@fa "فهرست جدید"
 /// Creates a List over items with the selection on the first item (or on
 /// nothing when items is empty) and the window at the top, using default
 /// styles and a no-op on_select.

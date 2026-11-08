@@ -49,6 +49,7 @@ import str
 import term
 
 @en "Input"
+@fa "ورودی"
 /// A single-line text input: value, caret, optional placeholder, and styles
 /// for the value, the cursor cell, and the placeholder. It is focusable, so
 /// keyboard events reach it through the screen's focus dispatch. Set the
@@ -58,20 +59,24 @@ pub struct Input:
     pub use BaseWidget
 
     @en "placeholder"
+    @fa "متن راهنما"
     /// Text shown (dim) while the value is empty. "" means no placeholder.
     pub placeholder: str = ""
 
     @en "style"
+    @fa "ظاهر"
     /// The base style of the value and the blank background. StyleDefault
     /// draws with the terminal's defaults.
     pub style: Style = StyleDefault
 
     @en "cursor_style"
+    @fa "ظاهر مکان‌نما"
     /// The style merged over `style` for the cursor cell. Defaults to
     /// reverse video.
     pub cursor_style: Style = Style { reverse = true }
 
     @en "placeholder_style"
+    @fa "ظاهر متن راهنما"
     /// The style merged over `style` for the placeholder. Defaults to a
     /// bright-black foreground.
     pub placeholder_style: Style = Style { fg = BrightBlack }
@@ -80,6 +85,7 @@ pub struct Input:
     caret: int = 0
 
     @en "focusable"
+    @fa "تمرکز‌پذیر است"
     /// Returns true: Input is interactive, so the screen's focus dispatch
     /// routes keyboard events to it.
     pub func focusable(): bool:
@@ -87,6 +93,7 @@ pub struct Input:
     end
 
     @en "handle_event"
+    @fa "پردازش رویداد"
     /// Reacts to a key press. A printable character or space is appended at
     /// the caret; backspace drops the codepoint before the caret (nothing
     /// when it is at the start); enter is consumed without changing
@@ -121,12 +128,14 @@ pub struct Input:
     end
 
     @en "value"
+    @fa "مقدار"
     /// The current text, without styles.
     pub func value(): str:
         ret this.content
     end
 
     @en "set_value"
+    @fa "تنظیم مقدار"
     /// Replaces the value; the caret moves to its end.
     pub func set_value(v: str):
         this.content = v
@@ -134,12 +143,14 @@ pub struct Input:
     end
 
     @en "set_placeholder"
+    @fa "تنظیم متن راهنما"
     /// Sets the text shown while the value is empty.
     pub func set_placeholder(p: str):
         this.placeholder = p
     end
 
     @en "render"
+    @fa "ترسیم"
     /// Draws the value into bounds: the box is painted with `style`, the
     /// last cells that fit are written (the placeholder, dim, when the value
     /// is empty), and — while the buffer reports focus — one reverse-video
@@ -176,6 +187,7 @@ pub struct Input:
 end
 
 @en "NewInput"
+@fa "ورودی جدید"
 /// Creates an empty Input with no placeholder, unstyled values, and the
 /// default cursor and placeholder styles.
 pub func NewInput(): Input:

@@ -38,22 +38,27 @@
 package basalam
 
 @en "DirUp"
+@fa "جهت بالا"
 /// Direction: toward smaller y.
 pub const DirUp := 0
 
 @en "DirDown"
+@fa "جهت پایین"
 /// Direction: toward larger y.
 pub const DirDown := 1
 
 @en "DirLeft"
+@fa "جهت چپ"
 /// Direction: toward smaller x.
 pub const DirLeft := 2
 
 @en "DirRight"
+@fa "جهت راست"
 /// Direction: toward larger x.
 pub const DirRight := 3
 
 @en "Nearest"
+@fa "نزدیک‌ترین"
 /// Finds the candidate nearest to `from` in direction dir (DirUp, DirDown,
 /// DirLeft, DirRight) and returns its index in candidates, or -1 when no
 /// candidate qualifies. The rules are spelled out in the comments of the

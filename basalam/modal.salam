@@ -57,20 +57,24 @@ struct _ModalState:
 end
 
 @en "ModalSize"
+@fa "اندازه مودال"
 /// How big the dialog is inside the Modal's bounds.
 pub enum ModalSize:
     @en "Percent"
+    @fa "درصدی"
     /// A share of the bounds, in percent (0-100) on each axis. The product
     /// is floored, then clamped to at least 20 by 5 and at most the bounds.
     /// When the bounds are smaller than 20 by 5 the dialog is the bounds.
     Percent(w: int, h: int)
     @en "Fixed"
+    @fa "ثابت"
     /// Exactly w by h cells, clamped to the bounds and nothing more: no
     /// 20 by 5 floor applies to an explicit size.
     Fixed(w: int, h: int)
 end
 
 @en "Modal"
+@fa "مودال"
 /// An overlay dialog: a Single-line ring with a title, centred in the
 /// Modal's bounds over a DIM scrim. The child is inset one cell inside the
 /// ring. A hidden Modal paints nothing, takes no focus and hits nothing.
@@ -80,16 +84,19 @@ pub struct Modal:
     pub use BaseWidget
 
     @en "border_style"
+    @fa "ظاهر کادر"
     /// The ring's colour. Only its foreground is used; attributes are
     /// ignored, as for Panel.
     pub border_style: Style = StyleDefault
 
     @en "takes_focus"
+    @fa "تمرکز می‌گیرد"
     /// When true the Modal is a focus stop while open. Its one focus stop
     /// keeps Tab inside its layer.
     pub takes_focus: bool = true
 
     @en "on_close"
+    @fa "هنگام بستن"
     /// Called after Esc closes the Modal. close does not call it.
     pub on_close: func () = (): end
 
@@ -97,6 +104,7 @@ pub struct Modal:
     slot: Vector<LayoutSlot> = Vector {}
 
     @en "state"
+    @fa "وضعیت"
     /// The shared state holder, one element. NewModal builds it; every copy
     /// shares it. Read and write the Modal through its methods.
     pub state: Vector<_ModalState> = Vector {}
@@ -121,6 +129,7 @@ pub struct Modal:
     end
 
     @en "add"
+    @fa "افزودن"
     /// Sets the child. A second call replaces the first. The child must also
     /// be added to the Screen's tree under the Modal's id to be painted and
     /// to receive events. It is placed on the next set_bounds.
@@ -133,6 +142,7 @@ pub struct Modal:
     end
 
     @en "open"
+    @fa "باز کردن"
     /// Shows the Modal. State only: it does not raise the Modal or move
     /// focus. The app does both with Screen.push_focus, then raise_subtree.
     /// Works on the local value or on the copy Screen.add stored.
@@ -143,6 +153,7 @@ pub struct Modal:
     end
 
     @en "close"
+    @fa "بستن"
     /// Hides the Modal. State only: it does not call on_close, unraise or
     /// restore focus. The app does those with unraise_subtree, then pop_focus.
     /// Works on the local value or on the copy Screen.add stored.
@@ -153,6 +164,7 @@ pub struct Modal:
     end
 
     @en "set_title"
+    @fa "تنظیم عنوان"
     /// Sets the text on the top edge of the ring. Works before or after
     /// Screen.add.
     pub func set_title(t: str):
@@ -162,6 +174,7 @@ pub struct Modal:
     end
 
     @en "set_size"
+    @fa "تنظیم اندازه"
     /// Sets the dialog size and re-places the child for the current bounds.
     /// Works before or after Screen.add.
     pub func set_size(sz: ModalSize):
@@ -174,6 +187,7 @@ pub struct Modal:
     end
 
     @en "set_closable"
+    @fa "تنظیم امکان بستن"
     /// Sets whether Esc closes the Modal. Works before or after Screen.add.
     pub func set_closable(b: bool):
         mut s := this._get()
@@ -182,6 +196,7 @@ pub struct Modal:
     end
 
     @en "set_bounds"
+    @fa "تنظیم محدوده"
     /// Stores the Modal's rect in the shared state, then places the child in
     /// the dialog rect inset by one cell for the ring. Works before or after
     /// Screen.add.
@@ -200,6 +215,7 @@ pub struct Modal:
     end
 
     @en "bounds"
+    @fa "محدوده"
     /// The rect stored by the last set_bounds, read from the shared state so
     /// the Screen sees the same rect on the stored copy.
     pub func bounds(): Rect:
@@ -207,6 +223,7 @@ pub struct Modal:
     end
 
     @en "preferred_size"
+    @fa "اندازه ترجیحی"
     /// A Fixed size reports its exact w by h. A Percent size depends on the
     /// bounds it is given, so it reports the no-preference sentinel.
     pub func preferred_size(max_width: int): Rect:
@@ -215,18 +232,21 @@ pub struct Modal:
     end
 
     @en "focusable"
+    @fa "تمرکز‌پذیر است"
     /// True only while open and when takes_focus is set.
     pub func focusable(): bool:
         ret this._get().visible and this.takes_focus
     end
 
     @en "hits"
+    @fa "اصابت‌پذیر است"
     /// True only while open. A hidden Modal lets a click fall through.
     pub func hits(): bool:
         ret this._get().visible
     end
 
     @en "visible"
+    @fa "نمایان است"
     /// True only while open. A hidden Modal also hides its child from focus
     /// order, painting, and hit testing, because the screen checks every
     /// widget on the path to the root.
@@ -235,6 +255,7 @@ pub struct Modal:
     end
 
     @en "handle_event"
+    @fa "پردازش رویداد"
     /// Offers the event to the child first and returns true if it consumed
     /// it. Then Esc closes the Modal when closable, calls on_close and
     /// returns true. Then a mouse event inside the bounds but outside the
@@ -262,6 +283,7 @@ pub struct Modal:
     end
 
     @en "render"
+    @fa "ترسیم"
     /// Paints nothing while hidden. Otherwise dims every cell of bounds
     /// outside the dialog rect, then draws the ring around the dialog rect
     /// when it is at least 2 by 2. The child paints itself.
@@ -359,6 +381,7 @@ func _dim(under: Style): Style:
 end
 
 @en "NewModal"
+@fa "مودال جدید"
 /// Creates a hidden Modal: Percent(50, 40), no title, no child. Its state
 /// holder is created here, so every copy made later shares it.
 pub func NewModal(): Modal:

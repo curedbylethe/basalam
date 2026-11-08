@@ -42,56 +42,68 @@
 package basalam
 
 @en "Point"
+@fa "نقطه"
 /// A single cell position: x is the column, y the row, both 0-based.
 pub struct Point:
     @en "x"
+    @fa "ایکس"
     /// Column, counted from 0 at the left edge.
     pub x: int = 0
 
     @en "y"
+    @fa "ایگرگ"
     /// Row, counted from 0 at the top edge.
     pub y: int = 0
 end
 
 @en "Rect"
+@fa "مستطیل"
 /// An axis-aligned, half-open rectangle of terminal cells.
 /// Covers columns x .. x + width - 1 and rows y .. y + height - 1.
 pub struct Rect:
     @en "x"
+    @fa "ایکس"
     /// Column of the left edge.
     pub x: int = 0
 
     @en "y"
+    @fa "ایگرگ"
     /// Row of the top edge.
     pub y: int = 0
 
     @en "width"
+    @fa "عرض"
     /// Number of columns. Zero or negative means the rect is empty.
     pub width: int = 0
 
     @en "height"
+    @fa "ارتفاع"
     /// Number of rows. Zero or negative means the rect is empty.
     pub height: int = 0
 
     @en "is_empty"
+    @fa "خالی است"
     /// True when the rect covers no cells (width or height <= 0).
     pub func is_empty(): bool:
         ret this.width <= 0 or this.height <= 0
     end
 
     @en "right"
+    @fa "راست"
     /// The first column to the right of the rect (x + width), exclusive.
     pub func right(): int:
         ret this.x + this.width
     end
 
     @en "bottom"
+    @fa "پایین"
     /// The first row below the rect (y + height), exclusive.
     pub func bottom(): int:
         ret this.y + this.height
     end
 
     @en "contains"
+    @fa "دربرمی‌گیرد"
     /// True when the cell p lies inside the rect. Uses the half-open rule,
     /// so the right and bottom edges are outside, and an empty rect
     /// contains nothing.
@@ -103,6 +115,7 @@ pub struct Rect:
     end
 
     @en "intersects"
+    @fa "هم‌پوشانی دارد"
     /// True when the two rects share at least one cell. Rects that only
     /// touch along an edge do not intersect, and an empty rect intersects
     /// nothing.
@@ -114,6 +127,7 @@ pub struct Rect:
     end
 
     @en "intersection"
+    @fa "اشتراک"
     /// The cells shared by both rects. When they do not intersect the
     /// result is an empty Rect at the origin.
     pub func intersection(other: Rect): Rect:
@@ -128,6 +142,7 @@ pub struct Rect:
     end
 
     @en "center"
+    @fa "مرکز"
     /// The center cell: (x + width / 2, y + height / 2) with integer
     /// division. An odd size has an exact middle cell (3x3 at the origin
     /// gives (1, 1)). An even size has none, so the cell just right of and

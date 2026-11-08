@@ -45,6 +45,7 @@ import str
 import term
 
 @en "Checkbox"
+@fa "کادر انتخاب"
 /// A one-row boolean toggle drawn as "[x] label" when checked and "[ ] label"
 /// when not. It is focusable, so keyboard events reach it through the
 /// screen's focus dispatch: Space toggles it and is consumed, and every other
@@ -55,23 +56,28 @@ pub struct Checkbox:
     pub use BaseWidget
 
     @en "label"
+    @fa "برچسب"
     /// Text drawn after the mark. "" draws the mark alone.
     pub label: str = ""
 
     @en "box_style"
+    @fa "ظاهر کادر"
     /// Style of the three mark cells, the "[", the state glyph and the "]".
     pub box_style: Style = StyleDefault
 
     @en "label_style"
+    @fa "ظاهر برچسب"
     /// Style of the spacer, the label, and the trailing fill of the row.
     pub label_style: Style = StyleDefault
 
     @en "disabled"
+    @fa "غیرفعال"
     /// When true the checkbox is not focusable, ignores every event and does
     /// not take hits, and draws its row dim.
     pub disabled: bool = false
 
     @en "on_toggle"
+    @fa "هنگام تغییر انتخاب"
     /// Called with the new checked value after every toggle. The default does
     /// nothing.
     pub on_toggle: func (bool) = (v: bool): end
@@ -79,6 +85,7 @@ pub struct Checkbox:
     state: bool = false
 
     @en "focusable"
+    @fa "تمرکز‌پذیر است"
     /// True when enabled and at least one cell wide, so the checkbox can take
     /// keyboard focus.
     pub func focusable(): bool:
@@ -86,6 +93,7 @@ pub struct Checkbox:
     end
 
     @en "hits"
+    @fa "اصابت‌پذیر است"
     /// True when enabled, so a click on the row lands on the checkbox. A
     /// disabled checkbox lets the click fall through to what lies under it.
     pub func hits(): bool:
@@ -93,6 +101,7 @@ pub struct Checkbox:
     end
 
     @en "handle_event"
+    @fa "پردازش رویداد"
     /// Reacts to Space and to a left press inside bounds. Either one flips the
     /// checked state, calls on_toggle with the new value, and returns true.
     /// Every other event returns false, and a disabled checkbox returns false
@@ -114,18 +123,21 @@ pub struct Checkbox:
     end
 
     @en "checked"
+    @fa "انتخاب شده است"
     /// The current checked state.
     pub func checked(): bool:
         ret this.state
     end
 
     @en "set_checked"
+    @fa "تنظیم انتخاب"
     /// Sets the checked state without calling on_toggle.
     pub func set_checked(value: bool):
         this.state = value
     end
 
     @en "preferred_size"
+    @fa "اندازه ترجیحی"
     /// The label width plus the four cells before it (the three mark cells and
     /// the spacer), one row tall, clamped to max_width when max_width > 0.
     pub func preferred_size(max_width: int): Rect:
@@ -137,6 +149,7 @@ pub struct Checkbox:
     end
 
     @en "render"
+    @fa "ترسیم"
     /// Draws one row at bounds.y: the spacer and label cells and the trailing
     /// fill in label_style, then the three mark cells in box_style. Focus
     /// (while enabled) overlays bold and disabled overlays dim and drops bold
@@ -172,6 +185,7 @@ func _overlay(s: Style, focused: bool, disabled: bool): Style:
 end
 
 @en "NewCheckbox"
+@fa "کادر انتخاب جدید"
 /// Creates a Checkbox with the given label and initial checked state, enabled,
 /// with default styles and a do-nothing on_toggle.
 pub func NewCheckbox(label: str, checked: bool): Checkbox:
