@@ -45,7 +45,7 @@
  *     button.salam   the Button widget: one-row action button with on_click
  *     checkbox.salam the Checkbox widget: one-row boolean toggle
  *     progress.salam the Progress widget: one-row buffer-drawn progress bar
- *     table.salam    the Table widget: a non-focusable grid with columns and a header
+ *     table.salam    the Table widget: a non-focusable grid; TableView: its scrollable variant
  *     separator.salam the Separator widget: one-line horizontal or vertical rule
  *     tree.salam     the widget registry (IDs, parents) and event bubbling
  *     screen.salam   Screen: terminal session, colour tier detection, input thread, event loop
