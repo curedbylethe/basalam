@@ -67,31 +67,37 @@ mut _next_memo_id := 0
 mut _last_memo_id := 0
 
 @en "Widget"
+@fa "ویجت"
 /// The interface every widget satisfies. Store widgets as `dyn Widget`.
 pub interface Widget:
     @en "render"
+    @fa "ترسیم"
     /// Draws the widget into buf. bounds is the widget's own rect (the
     /// same value bounds() returns); buf is already clipped to it, so
     /// drawing outside is harmless and simply dropped.
     func render(buf: Buffer, bounds: Rect)
 
     @en "handle_event"
+    @fa "پردازش رویداد"
     /// Reacts to an event. Returns true when the widget consumed it, which
     /// stops it from bubbling to the widget's parent; false passes it on.
     func handle_event(event: Event): bool
 
     @en "focusable"
+    @fa "تمرکز‌پذیر است"
     /// True when the widget can take keyboard focus. Only focusable widgets
     /// take part in focus navigation.
     func focusable(): bool
 
     @en "hits"
+    @fa "اصابت‌پذیر است"
     /// True when hit-testing may land on this widget. A widget may paint
     /// and still refuse hits; the screen then skips it and keeps scanning
     /// the widgets under it.
     func hits(): bool
 
     @en "visible"
+    @fa "نمایان است"
     /// True when the widget is on screen. False hides the whole subtree
     /// from focus navigation, painting, and hit testing: a widget answers
     /// only for itself, so every consumer asks every widget on the path to
@@ -99,14 +105,17 @@ pub interface Widget:
     func visible(): bool
 
     @en "bounds"
+    @fa "محدوده"
     /// The widget's rect on the screen, as last set by set_bounds.
     func bounds(): Rect
 
     @en "set_bounds"
+    @fa "تنظیم محدوده"
     /// Moves and resizes the widget. Called by whoever owns the layout.
     func set_bounds(bounds: Rect)
 
     @en "preferred_size"
+    @fa "اندازه ترجیحی"
     /// The size the widget wants at max_width, as a rect at (0, 0).
     /// max_width <= 0 means unbounded. A widget that cannot measure returns
     /// a rect with negative width and height as a sentinel; the layout
@@ -114,6 +123,7 @@ pub interface Widget:
     func preferred_size(max_width: int): Rect
 
     @en "measure"
+    @fa "اندازه‌گیری"
     /// Natural extent along axis at max_width. ok is false when this widget
     /// cannot measure; the layout engine then reads preferred_size. extent
     /// is the length in cells when ok is true. Must not call set_bounds.
@@ -121,6 +131,7 @@ pub interface Widget:
 end
 
 @en "BaseWidget"
+@fa "ویجت پایه"
 /// Default implementations of every Widget method. Embed it with
 /// `pub use basalam.BaseWidget` and override what you need. On its own it is
 /// a widget that paints nothing, is unfocusable, reports itself visible and
@@ -128,6 +139,7 @@ end
 /// placeholder.
 pub struct BaseWidget:
     @en "rect"
+    @fa "مستطیل"
     /// Storage for bounds() and set_bounds(). Embedding widgets can read it
     /// directly as this.rect.
     pub rect: Rect = Rect {}
@@ -137,6 +149,7 @@ pub struct BaseWidget:
     memo_id: int = 0
 
     @en "render"
+    @fa "ترسیم"
     /// Draws nothing.
     pub func render(buf: Buffer, bounds: Rect):
         // Salam rejects empty bodies (E061), so discard the arguments.
@@ -145,6 +158,7 @@ pub struct BaseWidget:
     end
 
     @en "handle_event"
+    @fa "پردازش رویداد"
     /// Consumes nothing: returns false so the event bubbles on.
     pub func handle_event(event: Event): bool:
         _ := event
@@ -152,12 +166,14 @@ pub struct BaseWidget:
     end
 
     @en "focusable"
+    @fa "تمرکز‌پذیر است"
     /// Returns false. Override it to return true for interactive widgets.
     pub func focusable(): bool:
         ret false
     end
 
     @en "hits"
+    @fa "اصابت‌پذیر است"
     /// Returns true. Override it to return false when the widget may paint
     /// and still refuse hits.
     pub func hits(): bool:
@@ -165,6 +181,7 @@ pub struct BaseWidget:
     end
 
     @en "visible"
+    @fa "نمایان است"
     /// Returns true: a BaseWidget is on screen even though it paints nothing.
     /// Override it to hide a whole subtree.
     pub func visible(): bool:
@@ -172,18 +189,21 @@ pub struct BaseWidget:
     end
 
     @en "bounds"
+    @fa "محدوده"
     /// Returns the rect stored by the last set_bounds call.
     pub func bounds(): Rect:
         ret this.rect
     end
 
     @en "set_bounds"
+    @fa "تنظیم محدوده"
     /// Stores the rect.
     pub func set_bounds(bounds: Rect):
         this.rect = bounds
     end
 
     @en "preferred_size"
+    @fa "اندازه ترجیحی"
     /// Cannot measure: returns the negative sentinel (width and height -1),
     /// which the layout engine maps to the available length. Override it to
     /// report a real size.
@@ -193,6 +213,7 @@ pub struct BaseWidget:
     end
 
     @en "measure"
+    @fa "اندازه‌گیری"
     /// Cannot measure: ok is false and extent is 0. The layout engine then
     /// reads preferred_size. Containers that can report a natural extent
     /// override it.

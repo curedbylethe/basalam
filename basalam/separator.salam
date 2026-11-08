@@ -38,18 +38,22 @@ import str
 import unicode
 
 @en "Orientation"
+@fa "جهت‌گیری"
 /// The direction of a Separator's rule.
 pub enum Orientation:
     @en "Horizontal"
+    @fa "افقی"
     /// A rule across row 0 of the rect, full width. The default.
     Horizontal
 
     @en "Vertical"
+    @fa "عمودی"
     /// A rule down column 0 of the rect, full height.
     Vertical
 end
 
 @en "Separator"
+@fa "جداکننده"
 /// A one-line rule that draws one rune repeated along the rect's first row
 /// (horizontal) or first column (vertical). Set the direction with
 /// set_orientation, the rune with set_ch and its style with set_style.
@@ -57,31 +61,37 @@ pub struct Separator:
     pub use BaseWidget
 
     @en "orientation"
+    @fa "جهت‌گیری"
     /// Which line is drawn. Horizontal by default.
     pub orientation: Orientation = Orientation.Horizontal
 
     @en "ch"
+    @fa "نویسه"
     /// The rune, one cell wide. Empty means the orientation's default rune.
     pub ch: str = ""
 
     @en "style"
+    @fa "ظاهر"
     /// The rule's style. Its foreground colours the rune cells. A set
     /// background fills the whole rect before the rune is drawn.
     pub style: Style = StyleDefault
 
     @en "focusable"
+    @fa "تمرکز‌پذیر است"
     /// Returns false: a separator never takes focus.
     pub func focusable(): bool:
         ret false
     end
 
     @en "hits"
+    @fa "اصابت‌پذیر است"
     /// Returns false: a click on the rule falls through to the widget beneath.
     pub func hits(): bool:
         ret false
     end
 
     @en "handle_event"
+    @fa "پردازش رویداد"
     /// Consumes nothing: returns false so the event bubbles on.
     pub func handle_event(event: Event): bool:
         _ := event
@@ -89,6 +99,7 @@ pub struct Separator:
     end
 
     @en "preferred_size"
+    @fa "اندازه ترجیحی"
     /// Horizontal: unknown width (the layout fills the available width) and
     /// one row. Vertical: one column and unknown height.
     pub func preferred_size(max_width: int): Rect:
@@ -100,6 +111,7 @@ pub struct Separator:
     end
 
     @en "measure"
+    @fa "اندازه‌گیری"
     /// Always measurable. The cross axis is one cell. The main axis takes
     /// max_width, the same fill the preferred_size sentinel asks for. A
     /// separator never reports ok = false, so the layout never falls back to
@@ -117,12 +129,14 @@ pub struct Separator:
     end
 
     @en "set_orientation"
+    @fa "تنظیم جهت‌گیری"
     /// Sets the direction of the rule.
     pub func set_orientation(o: Orientation):
         this.orientation = o
     end
 
     @en "set_ch"
+    @fa "تنظیم نویسه"
     /// Sets the rune. The rune must be exactly one cell wide, by display width.
     /// An empty string resets to the orientation's default rune. Any other
     /// string that is wide or zero-width is refused: nothing changes, the
@@ -144,12 +158,14 @@ pub struct Separator:
     end
 
     @en "set_style"
+    @fa "تنظیم ظاهر"
     /// Sets the style of the rule and its background.
     pub func set_style(s: Style):
         this.style = s
     end
 
     @en "render"
+    @fa "ترسیم"
     /// Draws the rule inside bounds. Nothing is drawn when the rect has no
     /// width or no height. A set background fills the whole rect first. The
     /// rune then repeats along row 0 (horizontal) or column 0 (vertical) of
@@ -206,6 +222,7 @@ func _rune(o: Orientation, ch: str): str:
 end
 
 @en "NewSeparator"
+@fa "جداکننده جدید"
 /// Creates a horizontal Separator with the default rune and default style.
 pub func NewSeparator(): Separator:
     ret Separator {}

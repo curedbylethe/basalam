@@ -38,6 +38,7 @@ import str
 import term
 
 @en "Progress"
+@fa "نوار پیشرفت"
 /// A one-row progress bar. It fills left to right from the value, which is a
 /// percentage of max (100 by default). Set the value with set_progress and
 /// the maximum with set_max. Style the filled cells, the empty cells and the
@@ -47,14 +48,17 @@ pub struct Progress:
     pub use BaseWidget
 
     @en "fill_style"
+    @fa "ظاهر بخش پر"
     /// Style of the filled cells. StyleDefault uses the terminal's defaults.
     pub fill_style: Style = StyleDefault
 
     @en "empty_style"
+    @fa "ظاهر بخش خالی"
     /// Style of the empty cells.
     pub empty_style: Style = StyleDefault
 
     @en "text_style"
+    @fa "ظاهر متن"
     /// Style of the five-cell percent tail.
     pub text_style: Style = StyleDefault
 
@@ -62,6 +66,7 @@ pub struct Progress:
     max: int = 100
 
     @en "hits"
+    @fa "اصابت‌پذیر است"
     /// Returns false: a click on the bar falls through to the widget painted
     /// beneath it.
     pub func hits(): bool:
@@ -69,6 +74,7 @@ pub struct Progress:
     end
 
     @en "preferred_size"
+    @fa "اندازه ترجیحی"
     /// Unknown width (the layout fills the available width) and one row.
     pub func preferred_size(max_width: int): Rect:
         _ := max_width
@@ -76,12 +82,14 @@ pub struct Progress:
     end
 
     @en "progress"
+    @fa "مقدار پیشرفت"
     /// The stored value, already clamped to 0..max.
     pub func progress(): int:
         ret this.value
     end
 
     @en "set_progress"
+    @fa "تنظیم پیشرفت"
     /// Sets the value, clamped to 0..max. Values above max show as full, and
     /// values below 0 show as empty.
     pub func set_progress(percent: int):
@@ -89,6 +97,7 @@ pub struct Progress:
     end
 
     @en "set_max"
+    @fa "تنظیم بیشینه"
     /// Sets the value that means 100%, and clamps the stored value to the new
     /// range. A maximum of 0 or less makes the bar empty.
     pub func set_max(limit: int):
@@ -97,6 +106,7 @@ pub struct Progress:
     end
 
     @en "render"
+    @fa "ترسیم"
     /// Draws one row at bounds.y, from bounds.x across bounds.width cells.
     /// The bar takes the width less the tail, when the tail is shown. Nothing
     /// is drawn when the width is zero or less. Every cell is written through
@@ -147,6 +157,7 @@ func _clamped(v: int, max: int): int:
 end
 
 @en "NewProgress"
+@fa "نوار پیشرفت جدید"
 /// Creates a Progress at 0% with the maximum at 100 and default styles.
 pub func NewProgress(): Progress:
     ret Progress {}

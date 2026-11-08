@@ -84,13 +84,16 @@ import str
 import term
 
 @en "Cell"
+@fa "سلول"
 /// One terminal cell: a single codepoint and the style it is drawn with.
 pub struct Cell:
     @en "ch"
+    @fa "نویسه"
     /// The character, exactly one codepoint. A blank cell holds " ".
     pub ch: str = " "
 
     @en "style"
+    @fa "ظاهر"
     /// The resolved style this cell is drawn with. StyleDefault asks for the
     /// terminal's default style. The buffer, not the widget, turns it into
     /// bytes.
@@ -98,18 +101,22 @@ pub struct Cell:
 end
 
 @en "Buffer"
+@fa "بافر"
 /// A grid of cells that widgets draw into. Writes outside `clip` (or
 /// outside the grid) are silently ignored, so drawing is infallible.
 pub struct Buffer:
     @en "width"
+    @fa "عرض"
     /// Number of columns.
     pub width: int = 0
 
     @en "height"
+    @fa "ارتفاع"
     /// Number of rows.
     pub height: int = 0
 
     @en "cells"
+    @fa "سلول‌ها"
     /// Row-major cell storage: the cell at (x, y) is cells[y * width + x].
     /// Prefer get and set, which bounds-check and clip. Write through
     /// `set` / `fill` / `put_str` / `clear`. Direct writes to the backing
@@ -117,23 +124,27 @@ pub struct Buffer:
     pub cells: Vector<Cell> = Vector {}
 
     @en "front"
+    @fa "بافر پیشین"
     /// The front grid: what the terminal currently shows. Same length and
     /// layout as `cells`. Widgets never write it; only commit() advances it.
     pub front: Vector<Cell> = Vector {}
 
     @en "clip"
+    @fa "محدوده برش"
     /// Writes outside this rect are dropped. NewBuffer sets it to the whole
     /// grid; the screen narrows it to each widget's bounds while that
     /// widget renders.
     pub clip: Rect = Rect {}
 
     @en "focused"
+    @fa "در تمرکز"
     /// Render context: true while the screen renders the focused widget,
     /// so the widget can draw a focus indicator. Always false outside a
     /// screen-driven render.
     pub focused: bool = false
 
     @en "tier"
+    @fa "سطح رنگ"
     /// Render context: the colour capability of the terminal this buffer is
     /// drawn for. The buffer lowers every cell's Style to this tier when it
     /// emits a frame; widgets and DrawBorder only store styles.
@@ -143,6 +154,7 @@ pub struct Buffer:
     pub tier: ColorTier = ColorTier.TrueColor
 
     @en "force_full"
+    @fa "اجبار بازترسیم کامل"
     /// True when the next diff() must serialize the whole frame instead of
     /// only the changed cells. NewBuffer and resize set it; commit() clears
     /// it once the front grid has caught up with the back grid.
@@ -168,12 +180,14 @@ pub struct Buffer:
     out_buf: str.StringBuilder = str.StringBuilder {}
 
     @en "area"
+    @fa "محدوده"
     /// The rect covering the whole grid: (0, 0, width, height).
     pub func area(): Rect:
         ret Rect { width = this.width, height = this.height }
     end
 
     @en "set"
+    @fa "تنظیم"
     /// Writes one cell. Does nothing when (x, y) is outside the grid or
     /// outside `clip`.
     pub func set(x: int, y: int, cell: Cell):
@@ -190,6 +204,7 @@ pub struct Buffer:
     end
 
     @en "get"
+    @fa "دریافت"
     /// Reads one cell. Returns a blank default Cell when (x, y) is outside
     /// the grid. Reading ignores `clip`.
     pub func get(x: int, y: int): Cell:
@@ -201,6 +216,7 @@ pub struct Buffer:
     end
 
     @en "put_str"
+    @fa "نوشتن متن"
     /// Writes text left to right starting at (x, y), one codepoint per
     /// cell, all in the same style. Text that runs past the clip or the
     /// grid is cut off; it never wraps.
@@ -220,6 +236,7 @@ pub struct Buffer:
     end
 
     @en "fill"
+    @fa "پرکردن"
     /// Sets every cell of r (clipped) to the same character and style.
     pub func fill(r: Rect, ch: str, style: Style):
         repeat r.height in dy:
@@ -230,6 +247,7 @@ pub struct Buffer:
     end
 
     @en "clear"
+    @fa "پاک‌سازی"
     /// Resets every cell of the grid to a blank default Cell, ignoring
     /// `clip`. The next diff() and commit() treat every cell as changed.
     pub func clear():
@@ -240,6 +258,7 @@ pub struct Buffer:
     end
 
     @en "row_text"
+    @fa "متن ردیف"
     /// The characters of row y joined into one string, without styles.
     /// Returns "" for a row outside the grid. Meant for tests and debugging.
     pub func row_text(y: int): str:
@@ -255,6 +274,7 @@ pub struct Buffer:
     end
 
     @en "resize"
+    @fa "تغییر اندازه"
     /// Replaces both grids with blank width x height ones and resets clip to
     /// cover them, forcing a full repaint on the next diff(). Only the owner
     /// of the original Buffer may call this: it frees the old storage that
@@ -287,6 +307,7 @@ pub struct Buffer:
     end
 
     @en "ansi"
+    @fa "خروجی کامل انسی"
     /// The whole grid as one string of terminal output: for each row, a
     /// cursor move to its first column, then its cells, switching style
     /// only where it changes, and closing with the last style turned off.
@@ -311,6 +332,7 @@ pub struct Buffer:
     end
 
     @en "diff"
+    @fa "اختلاف"
     /// The bytes flush() would write: the whole frame (see ansi) while
     /// `force_full`, otherwise only the cells that differ from the front
     /// grid, row by row. Each maximal run of changed cells is prefixed by one
@@ -363,6 +385,7 @@ pub struct Buffer:
     end
 
     @en "commit"
+    @fa "ثبت قاب"
     /// Copies every cell when `force_full` is set or clear() touched the
     /// whole grid, and only marked cells otherwise, then clears the marks
     /// and `force_full`, so a later diff() reports only subsequent changes.
@@ -400,6 +423,7 @@ pub struct Buffer:
     end
 
     @en "flush"
+    @fa "ارسال به ترمینال"
     /// Writes the changed cells (see diff) to the terminal, then commits so
     /// the front grid matches the back grid. Nothing is written when the
     /// diff is empty.
@@ -412,6 +436,7 @@ pub struct Buffer:
     end
 
     @en "free"
+    @fa "آزادسازی"
     /// Releases both grids. Call it once, on the original Buffer, when you
     /// are done with it; copies share the storage.
     pub func free():
@@ -424,6 +449,7 @@ pub struct Buffer:
 end
 
 @en "NewBuffer"
+@fa "بافر جدید"
 /// Creates a blank width x height buffer whose clip covers the whole grid and
 /// whose next diff() is a full frame. A negative size is treated as zero.
 pub func NewBuffer(width: int, height: int): Buffer:

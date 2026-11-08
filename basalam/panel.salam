@@ -17,6 +17,7 @@
 package basalam
 
 @en "Panel"
+@fa "پنل"
 /// A single-child decorator that draws a border ring around its child.
 ///
 /// The child is positioned inside the ring: Panel insets it by BorderInset
@@ -32,36 +33,43 @@ pub struct Panel:
     pub use BaseWidget
 
     @en "border"
+    @fa "کادر"
     /// The ring drawn around the child. None draws nothing and insets
     /// nothing.
     pub border: BorderStyle = BorderStyle.None
 
     @en "border_style"
+    @fa "ظاهر کادر"
     /// The frame's style. Only its foreground is used, for every ring cell
     /// and the title; attributes are ignored.
     pub border_style: Style = StyleDefault
 
     @en "title"
+    @fa "عنوان"
     /// Text on the top edge. Empty or whitespace-only means no title.
     pub title: str = ""
 
     @en "takes_focus"
+    @fa "تمرکز می‌گیرد"
     /// When true the Panel is focusable: it takes focus and passes every
     /// event to its child. The child is not focusable and gets no focus of
     /// its own. False by default, so a Panel is never a focus stop.
     pub takes_focus: bool = false
 
     @en "focus_style"
+    @fa "ظاهر تمرکز"
     /// The frame's style while the Panel has focus. StyleDefault, the
     /// default, means no focus style: the frame keeps border_style. Only the
     /// foreground is used, as for border_style.
     pub focus_style: Style = StyleDefault
 
     @en "slot"
+    @fa "جایگاه"
     /// The child, held as the one layout slot. Empty until add is called.
     pub slot: Vector<LayoutSlot> = Vector {}
 
     @en "add"
+    @fa "افزودن"
     /// Sets the child. A second call replaces the first, so a Panel has at
     /// most one child. The child is positioned in the Panel's content area
     /// on the next set_bounds.
@@ -74,6 +82,7 @@ pub struct Panel:
     end
 
     @en "set_bounds"
+    @fa "تنظیم محدوده"
     /// Stores the Panel's rect, then sets the child's rect to the Panel's
     /// rect inset by the border's cost on each side (BorderInset).
     pub func set_bounds(bounds: Rect):
@@ -89,6 +98,7 @@ pub struct Panel:
     end
 
     @en "preferred_size"
+    @fa "اندازه ترجیحی"
     /// The child's natural size plus BorderInset of `border` on each side.
     /// Each axis is measured at max_width minus that inset on both sides,
     /// floored at 1; a non-positive max_width is forwarded unchanged as
@@ -142,12 +152,14 @@ pub struct Panel:
     end
 
     @en "focusable"
+    @fa "تمرکز‌پذیر است"
     /// True only when takes_focus is set.
     pub func focusable(): bool:
         ret this.takes_focus
     end
 
     @en "handle_event"
+    @fa "پردازش رویداد"
     /// Passes the event to the child and returns what the child returns.
     /// Only a focused Panel receives events, so this is the child's key
     /// path.
@@ -159,6 +171,7 @@ pub struct Panel:
     end
 
     @en "render"
+    @fa "ترسیم"
     /// Paints the frame over the Panel's rect. While the Panel has focus
     /// and focus_style is set, the frame uses focus_style. The child paints
     /// itself: the Screen draws every widget in its tree.

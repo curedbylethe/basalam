@@ -74,6 +74,7 @@ package basalam
 import term
 
 @en "StyleDefault"
+@fa "ظاهر پیش‌فرض"
 /// The style of a cell that asks for nothing: both colors the terminal's
 /// default and all five attributes off. It is the zero value of Style and
 /// the identity of StyleMerge.
@@ -86,6 +87,7 @@ pub const StyleDefault := Style {}
 mut _sgr_builds := 0
 
 @en "BorderStyle"
+@fa "سبک کادر"
 /// The kind of border a container draws: none, or a one-cell ring drawn with
 /// light lines, double lines, or light lines and arc corners. A value only —
 /// drawing the ring (its code points, corners and titles) is CUR-220. It is
@@ -93,20 +95,25 @@ mut _sgr_builds := 0
 /// choice and is not inherited or merged.
 pub enum BorderStyle:
     @en "None"
+    @fa "بدون کادر"
     /// No border; the content area is the full area.
     None
     @en "Single"
+    @fa "تک خط"
     /// A one-cell ring of light lines with square corners.
     Single
     @en "Double"
+    @fa "دو خط"
     /// A one-cell ring of double lines.
     Double
     @en "Rounded"
+    @fa "گوشه‌گرد"
     /// A one-cell ring of light lines with arc corners.
     Rounded
 end
 
 @en "Style"
+@fa "ظاهر"
 /// How a cell is drawn: a foreground and a background color and five
 /// attributes. Colors are Color, not Option<Color> — Default already means
 /// "no color chosen" — and a false attribute is one that is off. Reverse is
@@ -115,30 +122,37 @@ end
 /// these seven: no strikethrough, blink or hidden.
 pub struct Style:
     @en "fg"
+    @fa "رنگ پیش‌زمینه"
     /// Glyph foreground; Color.Default leaves the terminal's own foreground.
     pub fg: Color = Color.Default
 
     @en "bg"
+    @fa "رنگ پس‌زمینه"
     /// Cell background; Color.Default leaves the terminal's own background.
     pub bg: Color = Color.Default
 
     @en "bold"
+    @fa "پررنگ"
     /// Bold weight only; never brightens the foreground slot.
     pub bold: bool = false
 
     @en "dim"
+    @fa "کم‌رنگ"
     /// Reduced intensity.
     pub dim: bool = false
 
     @en "italic"
+    @fa "کج"
     /// Slanted glyphs.
     pub italic: bool = false
 
     @en "underline"
+    @fa "زیرخط"
     /// A single underline.
     pub underline: bool = false
 
     @en "reverse"
+    @fa "وارونه"
     /// Swaps the foreground and background the terminal draws with.
     pub reverse: bool = false
 end
@@ -151,6 +165,7 @@ func _color_shown(c: Color, tier: ColorTier): bool:
 end
 
 @en "BorderInset"
+@fa "ضخامت کادر"
 /// The cells a border of this kind uses on each side: 0 for None, 1 for
 /// every other kind. A container shrinks its content area by this to get the
 /// area its children draw into.
@@ -159,6 +174,7 @@ pub func BorderInset(b: BorderStyle): int:
 end
 
 @en "StyleMerge"
+@fa "ادغام ظاهر"
 /// The style a child ends up with under a parent, by sentinel patch: a
 /// child's color is used unless it is Color.Default (then the parent's
 /// color is inherited), and each attribute is the OR of the two. So
@@ -181,6 +197,7 @@ pub func StyleMerge(parent: Style, child: Style): Style:
 end
 
 @en "StyleEq"
+@fa "برابری ظاهر"
 /// True when two styles are equal field by field, over the seven stored
 /// fields — colors by kind and payload, attributes directly. It needs no
 /// tier. The contract with emission: equal styles emit identical bytes for
@@ -193,6 +210,7 @@ pub func StyleEq(a: Style, b: Style): bool:
 end
 
 @en "StyleSgr"
+@fa "دنباله فعال‌سازی ظاهر"
 /// The SGR sequence that takes a terminal from its default state to `style`
 /// at `tier`: attributes first in the fixed order bold, dim, italic,
 /// underline, reverse, then the foreground, then the background. Attributes
@@ -231,6 +249,7 @@ pub func StyleSgr(style: Style, tier: ColorTier): str:
 end
 
 @en "StyleSgrOff"
+@fa "دنباله غیرفعال‌سازی ظاهر"
 /// The mirror of StyleSgr: the SGR sequence that takes a terminal from
 /// `style` back to its default state at `tier`, in the fixed order a single
 /// 22 if bold or dim is set (22 clears both together), then 23 if italic,
@@ -264,6 +283,7 @@ pub func StyleSgrOff(style: Style, tier: ColorTier): str:
 end
 
 @en "SgrBuilds"
+@fa "شمار ساخت اس‌جی‌آر"
 /// Diagnostics: how many non-empty SGR strings StyleSgr and StyleSgrOff have
 /// built this process. Nothing caches them: the buffer builds one per style
 /// change it writes, so a frame adds one per on or off sequence emitted.

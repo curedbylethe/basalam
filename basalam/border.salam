@@ -19,6 +19,7 @@ package basalam
 import str
 
 @en "BorderGlyphs"
+@fa "نویسه‌های کادر"
 /// The eight glyphs of one border ring. Edges that repeat on both sides
 /// (single and rounded share their edges) are stored once per side.
 struct _BorderGlyphs:
@@ -44,6 +45,7 @@ func _border_glyphs(b: BorderStyle): _BorderGlyphs:
 end
 
 @en "DrawBorder"
+@fa "ترسیم کادر"
 /// Paints a one-cell ring of `border` around `rect` into `buf`, every cell
 /// in one foreground color taken from `style.fg`.
 ///

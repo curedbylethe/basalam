@@ -125,6 +125,7 @@ struct KeyNode:
 end
 
 @en "Keymap"
+@fa "نگاشت کلید"
 /// A table of key and key-sequence bindings. Build it with NewKeymap,
 /// NewDefaultKeymap or NewVimKeymap (or empty with `Keymap {}`), fill it with
 /// bind and its variants, feed events to handle, and release it with free.
@@ -137,6 +138,7 @@ pub struct Keymap:
     pending: int = -1
 
     @en "pending_timeout_ms"
+    @fa "مهلت توالی به میلی‌ثانیه"
     /// How long a pending key sequence may wait for its next key, in
     /// milliseconds. 0 (the default) never expires a prefix, which is the
     /// behavior without a timeout. The timeout is evaluated lazily, on the
@@ -145,6 +147,7 @@ pub struct Keymap:
     pub pending_timeout_ms: int = 0
 
     @en "pending_since_ms"
+    @fa "آغاز انتظار توالی به میلی‌ثانیه"
     /// The clock reading, in milliseconds, when the current pending sequence
     /// started waiting; it is refreshed on every prefix step and is 0 when
     /// nothing is pending. handle maintains it; an application sets
@@ -152,6 +155,7 @@ pub struct Keymap:
     pub pending_since_ms: int = 0
 
     @en "bind"
+    @fa "پیوند کلید"
     /// Binds one key to an action in the global scope. A later bind of the
     /// same key replaces this one (last write wins).
     pub func bind(key: term.Key, action: func (Screen*, Event) bool):
@@ -159,6 +163,7 @@ pub struct Keymap:
     end
 
     @en "bind_for"
+    @fa "پیوند کلید برای ویجت"
     /// Binds one key to an action for the widget with this ID: the action
     /// runs when that widget (or one of its descendants) has the focus.
     /// NoWidget binds globally.
@@ -176,6 +181,7 @@ pub struct Keymap:
     end
 
     @en "bind_seq"
+    @fa "پیوند توالی"
     /// Binds a key sequence to an action in the global scope. seq is decoded
     /// per rune; an empty string is ignored. A later bind of the same
     /// sequence replaces this one.
@@ -184,6 +190,7 @@ pub struct Keymap:
     end
 
     @en "bind_for_seq"
+    @fa "پیوند توالی برای ویجت"
     /// Binds a key sequence to an action for the widget with this ID.
     /// NoWidget binds globally. An empty string is ignored.
     pub func bind_for_seq(widget_id: int, seq: str, action: func (Screen*, Event) bool):
@@ -196,6 +203,7 @@ pub struct Keymap:
     end
 
     @en "unbind"
+    @fa "لغو پیوند کلید"
     /// Removes the global binding for one key. A no-op when there is none.
     /// Scoped bindings are not touched (use bind_for to replace one, or
     /// unbind_for to drop one). unbind_for(NoWidget, key) does the same work.
@@ -204,6 +212,7 @@ pub struct Keymap:
     end
 
     @en "unbind_for"
+    @fa "لغو پیوند کلید برای ویجت"
     /// Removes the binding for one widget on one key: bind_for's inverse.
     /// Only that widget's override is removed, so the global binding and every
     /// other widget's override on the same key still apply, and no trie node
@@ -223,6 +232,7 @@ pub struct Keymap:
     end
 
     @en "unbind_for_seq"
+    @fa "لغو پیوند توالی برای ویجت"
     /// Removes one widget's binding for one key sequence: bind_for_seq's
     /// inverse. Only that widget's override is removed, so the global sequence
     /// and every other widget's override on the same sequence still apply. The
@@ -244,6 +254,7 @@ pub struct Keymap:
     end
 
     @en "handle"
+    @fa "پردازش کلید"
     /// Handles one event against the bindings. Only KeyEvents reach the
     /// trie; every other kind returns false and leaves `pending` untouched.
     /// Returns true when an action ran. Reads resolve the key before any
@@ -323,6 +334,7 @@ pub struct Keymap:
     end
 
     @en "free"
+    @fa "آزادسازی"
     /// Releases every node's children map and binding vector, then the node
     /// storage itself. The actions and their captured values are the
     /// caller's; only the trie is freed. Call once.
@@ -488,6 +500,7 @@ func vim_back(screen: Screen*, _event: Event): bool:
 end
 
 @en "NewKeymap"
+@fa "نگاشت کلید جدید"
 /// Creates an empty keymap. Feed it keys with bind and the bind_* variants
 /// and release it with free. The root node is created on the first bind.
 pub func NewKeymap(): Keymap:
@@ -495,6 +508,7 @@ pub func NewKeymap(): Keymap:
 end
 
 @en "NewDefaultKeymap"
+@fa "نگاشت کلید پیش‌فرض"
 /// Creates an opt-in keymap with the library's default focus bindings:
 /// exactly five rows — Tab moves the focus to the next widget, and Up, Down,
 /// Left and Right move it in those directions. Nothing installs this map on
@@ -518,6 +532,7 @@ pub func NewDefaultKeymap(): Keymap:
 end
 
 @en "NewVimKeymap"
+@fa "نگاشت کلید ویم"
 /// Creates an opt-in vim-style preset. It is a superset of NewDefaultKeymap,
 /// so Tab and the four arrows keep working, and it adds h, j, k and l for
 /// the same four directions; "gg" and "G" move to the top and the bottom of

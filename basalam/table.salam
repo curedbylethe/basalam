@@ -54,43 +54,53 @@ struct _CellAlign:
 end
 
 @en "CellOverflow"
+@fa "سرریز سلول"
 /// What happens to cell text wider than its text area.
 pub enum CellOverflow:
     @en "Clip"
+    @fa "برش"
     /// Text past the edge is cut off (the default).
     Clip
     @en "Ellipsis"
+    @fa "سه‌نقطه"
     /// The last visible cell is replaced by the ellipsis character.
     Ellipsis
 end
 
 @en "TableColumn"
+@fa "ستون جدول"
 /// One column of a Table. width is read as a LayoutSize; min and max are read
 /// only when width is Pref. max = -1 means unbounded. When min and max
 /// conflict, min wins.
 pub struct TableColumn:
     @en "width"
+    @fa "عرض"
     /// Fixed exact cells, Pref the content width, Fill a star share.
     pub width: LayoutSize = LayoutSize {}
 
     @en "min"
+    @fa "کمینه"
     /// Lower bound for a Pref column, in cells.
     pub min: int = 0
 
     @en "max"
+    @fa "بیشینه"
     /// Upper bound for a Pref column, in cells. -1 means unbounded.
     pub max: int = -1
 
     @en "align"
+    @fa "تراز"
     /// Default alignment of this column's cells and header.
     pub align: Alignment = Alignment.Left
 
     @en "overflow"
+    @fa "سرریز"
     /// How text wider than the column is shown.
     pub overflow: CellOverflow = CellOverflow.Clip
 end
 
 @en "Table"
+@fa "جدول"
 /// A non-focusable grid of single-line rows. Add columns and rows, then
 /// render it. When header is on, row 0 is the header: it is painted in
 /// header_style and each cell takes its column's alignment. rule draws a
@@ -100,48 +110,58 @@ pub struct Table:
     pub use BaseWidget
 
     @en "columns"
+    @fa "ستون‌ها"
     /// The column definitions, left to right.
     pub columns: Vector<TableColumn> = Vector {}
 
     @en "rows"
+    @fa "ردیف‌ها"
     /// The cell text by row, then column. Row 0 is the header when header is on.
     pub rows: Vector<Vector<str>> = Vector {}
 
     @en "header"
+    @fa "سرآیند"
     /// When true, row 0 is the header.
     pub header: bool = false
 
     @en "rule"
+    @fa "خط‌کشی"
     /// Draws a rule under the header. Only meaningful when header is on.
     pub rule: bool = true
 
     @en "pad_x"
+    @fa "فاصله درونی افقی"
     /// Blank cells on each side of every cell's text.
     pub pad_x: int = 1
 
     @en "style"
+    @fa "ظاهر"
     /// Style of the data rows.
     pub style: Style = StyleDefault
 
     @en "header_style"
+    @fa "ظاهر سرآیند"
     /// Style of the header row. It replaces style there, rather than merging.
     pub header_style: Style = Style { bold = true }
 
     cell_aligns: Vector<_CellAlign> = Vector {}
 
     @en "focusable"
+    @fa "تمرکز‌پذیر است"
     /// Returns false: a table takes no keyboard focus.
     pub func focusable(): bool:
         ret false
     end
 
     @en "hits"
+    @fa "اصابت‌پذیر است"
     /// Returns false: a click on the table falls through to whatever is beneath.
     pub func hits(): bool:
         ret false
     end
 
     @en "handle_event"
+    @fa "پردازش رویداد"
     /// Consumes nothing and changes nothing.
     pub func handle_event(event: Event): bool:
         _ := event
@@ -149,6 +169,7 @@ pub struct Table:
     end
 
     @en "add_column"
+    @fa "افزودن ستون"
     /// Appends a column and returns its index.
     pub func add_column(col: TableColumn): int:
         this.columns.push(col)
@@ -156,6 +177,7 @@ pub struct Table:
     end
 
     @en "add_row"
+    @fa "افزودن ردیف"
     /// Appends a row and returns its index. Missing cells read as blank.
     pub func add_row(cells: Vector<str>): int:
         this.rows.push(cells)
@@ -163,6 +185,7 @@ pub struct Table:
     end
 
     @en "set_column_width"
+    @fa "تنظیم عرض ستون"
     /// Sets a column's width rule. An index out of range does nothing.
     pub func set_column_width(i: int, w: LayoutSize):
         if i < 0 or i >= this.columns.len():
@@ -174,6 +197,7 @@ pub struct Table:
     end
 
     @en "set_column_align"
+    @fa "تنظیم تراز ستون"
     /// Sets a column's default alignment. An index out of range does nothing.
     pub func set_column_align(i: int, a: Alignment):
         if i < 0 or i >= this.columns.len():
@@ -185,6 +209,7 @@ pub struct Table:
     end
 
     @en "set_column_overflow"
+    @fa "تنظیم سرریز ستون"
     /// Sets a column's overflow. An index out of range does nothing.
     pub func set_column_overflow(i: int, o: CellOverflow):
         if i < 0 or i >= this.columns.len():
@@ -196,6 +221,7 @@ pub struct Table:
     end
 
     @en "set_cell_align"
+    @fa "تنظیم تراز سلول"
     /// Overrides the alignment of one cell. It beats the column's alignment,
     /// which beats Left. Row is an index into rows, so 0 is the header when
     /// header is on.
@@ -212,12 +238,14 @@ pub struct Table:
     end
 
     @en "set_pad_x"
+    @fa "تنظیم فاصله درونی افقی"
     /// Sets the blank space on each side of a cell. A negative value counts as 0.
     pub func set_pad_x(n: int):
         this.pad_x = n
     end
 
     @en "preferred_size"
+    @fa "اندازه ترجیحی"
     /// The table's natural size: the resolved widths with star columns at 0,
     /// clamped to max_width when it is positive. The height is the header,
     /// the rule and the data rows, so a table with no rows is 0 high. A table
@@ -238,6 +266,7 @@ pub struct Table:
     end
 
     @en "measure"
+    @fa "اندازه‌گیری"
     /// Reports the preferred size along axis. ok is always true, so the
     /// layout engine reads a real answer.
     pub func measure(axis: Axis, max_width: int): Measure:
@@ -249,6 +278,7 @@ pub struct Table:
     end
 
     @en "render"
+    @fa "ترسیم"
     /// Draws the table into bounds. Rows past bounds.height are not drawn.
     /// Nothing is drawn for an empty table or an empty rect.
     pub func render(buf: Buffer, bounds: Rect):
@@ -552,6 +582,7 @@ func _clip(s: str, n: int): str:
 end
 
 @en "NewTable"
+@fa "جدول جدید"
 /// Creates an empty Table: no columns, no rows, no header, a rule, pad_x 1.
 pub func NewTable(): Table:
     ret Table {}

@@ -43,6 +43,7 @@ import str
 import term
 
 @en "Button"
+@fa "دکمه"
 /// A one-row action button drawn as "[ label ]". Enter and Space call
 /// on_click while the button has the focus, and a left click inside its bounds
 /// calls on_click whether or not it has the focus. A disabled button draws
@@ -51,29 +52,35 @@ pub struct Button:
     pub use BaseWidget
 
     @en "label"
+    @fa "برچسب"
     /// The text drawn between the brackets. Clipped to the width, never
     /// ellipsised.
     pub label: str = ""
 
     @en "style"
+    @fa "ظاهر"
     /// The base style of every cell in the button.
     pub style: Style = StyleDefault
 
     @en "focus_style"
+    @fa "ظاهر تمرکز"
     /// The style used instead of style while the button is focused and
     /// enabled. StyleDefault, the default, means bold on every cell.
     pub focus_style: Style = StyleDefault
 
     @en "disabled"
+    @fa "غیرفعال"
     /// When true the button draws dim, does not take focus or hits, and
     /// ignores every event.
     pub disabled: bool = false
 
     @en "on_click"
+    @fa "هنگام کلیک"
     /// Called when the button is activated. The default does nothing.
     pub on_click: func () = (): end
 
     @en "focusable"
+    @fa "تمرکز‌پذیر است"
     /// True when the button is enabled and has a width, so keyboard focus
     /// can reach it. A button added before it has bounds is not focusable.
     pub func focusable(): bool:
@@ -81,6 +88,7 @@ pub struct Button:
     end
 
     @en "hits"
+    @fa "اصابت‌پذیر است"
     /// True when the button is enabled, so a click on it lands here. A
     /// disabled button lets the click fall through to what is painted under
     /// it.
@@ -89,6 +97,7 @@ pub struct Button:
     end
 
     @en "preferred_size"
+    @fa "اندازه ترجیحی"
     /// The label width plus the two brackets, on one row, clamped to
     /// max_width when max_width > 0.
     pub func preferred_size(max_width: int): Rect:
@@ -100,6 +109,7 @@ pub struct Button:
     end
 
     @en "handle_event"
+    @fa "پردازش رویداد"
     /// Reacts to Enter or Space, and to a left press inside the bounds. A
     /// disabled button consumes nothing. Each activation calls on_click and
     /// returns true; every other event returns false.
@@ -119,6 +129,7 @@ pub struct Button:
     end
 
     @en "render"
+    @fa "ترسیم"
     /// Draws the button into the first row of bounds: the row is filled with
     /// the effective style, "[" goes in the first column and "]" in the last
     /// (when the width allows), and the label is centred between them,
@@ -160,6 +171,7 @@ pub struct Button:
 end
 
 @en "NewButton"
+@fa "دکمه جدید"
 /// Creates an enabled Button with the given label, default styles, and a
 /// no-op on_click.
 pub func NewButton(label: str): Button:

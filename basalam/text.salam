@@ -60,32 +60,40 @@ import str
 import term
 
 @en "Alignment"
+@fa "تراز"
 /// Where each rendered line sits horizontally inside the widget's box.
 pub enum Alignment:
     @en "Left"
+    @fa "چپ"
     /// Lines start at the box's left edge (the default).
     Left
     @en "Center"
+    @fa "مرکز"
     /// Lines are centred; when the slack is odd the extra cell is on the
     /// right.
     Center
     @en "Right"
+    @fa "راست"
     /// Lines end at the box's right edge.
     Right
 end
 
 @en "WrapMode"
+@fa "حالت شکست خط"
 /// How Text turns its content into lines at render time.
 pub enum WrapMode:
     @en "Word"
+    @fa "بر پایه واژه"
     /// Greedy word-boundary wrapping at the box width (the default).
     Word
     @en "None"
+    @fa "بدون شکست"
     /// Each explicit line is drawn as-is; the box edge clips it.
     None
 end
 
 @en "Text"
+@fa "متن"
 /// A widget that draws a string: set once or updated later, aligned left,
 /// centre, or right, wrapped to its box (or clipped), in one style. Its
 /// preferred size comes from the content. Embed it or construct it with
@@ -94,14 +102,17 @@ pub struct Text:
     pub use BaseWidget
 
     @en "content"
+    @fa "محتوا"
     /// The text to draw. An explicit "\n" starts a new line (see WrapText).
     pub content: str = ""
 
     @en "align"
+    @fa "تراز"
     /// Horizontal placement of each line. Defaults to Alignment.Left.
     pub align: Alignment = Alignment.Left
 
     @en "style"
+    @fa "ظاهر"
     /// How the content is drawn. The background fills the whole box; the
     /// foreground and attributes apply to the glyph cells only, interior
     /// spaces included, so an underline stays continuous. StyleDefault draws
@@ -109,35 +120,41 @@ pub struct Text:
     pub style: Style = StyleDefault
 
     @en "wrap"
+    @fa "شکست خط"
     /// How the content becomes lines at render time. Defaults to
     /// WrapMode.Word.
     pub wrap: WrapMode = WrapMode.Word
 
     @en "set_text"
+    @fa "تنظیم متن"
     /// Replaces the content; the next render draws it.
     pub func set_text(content: str):
         this.content = content
     end
 
     @en "set_align"
+    @fa "تنظیم تراز"
     /// Sets the horizontal alignment.
     pub func set_align(align: Alignment):
         this.align = align
     end
 
     @en "set_style"
+    @fa "تنظیم ظاهر"
     /// Sets the style the content is drawn with.
     pub func set_style(style: Style):
         this.style = style
     end
 
     @en "set_wrap"
+    @fa "تنظیم شکست خط"
     /// Sets the wrap mode.
     pub func set_wrap(wrap: WrapMode):
         this.wrap = wrap
     end
 
     @en "preferred_size"
+    @fa "اندازه ترجیحی"
     /// The size the content wants at max_width, as a rect at (0, 0): width is
     /// the longest wrapped line in cells, height the number of wrapped lines.
     /// max_width <= 0 means unbounded, so the explicit lines are measured.
@@ -146,6 +163,7 @@ pub struct Text:
     end
 
     @en "preferred_width"
+    @fa "عرض ترجیحی"
     /// The longest explicit line of the content, in cells (the unbounded
     /// width).
     pub func preferred_width(): int:
@@ -153,6 +171,7 @@ pub struct Text:
     end
 
     @en "render"
+    @fa "ترسیم"
     /// Draws the content into bounds. The box is first filled with the pad
     /// style — the widget style's background only — so a background colour
     /// reads full-bleed while nothing else reaches the padding. Each line is
@@ -263,6 +282,7 @@ func _splitWord(word: str, width: int): Vector<str>:
 end
 
 @en "WrapText"
+@fa "شکستن خطوط متن"
 /// Splits text into display lines of at most width cells, top to bottom. An
 /// explicit "\n" starts a new paragraph, each wrapped on its own; the space
 /// at a break is consumed. A word longer than width is cut on the character
@@ -279,6 +299,7 @@ pub func WrapText(text: str, width: int): Vector<str>:
 end
 
 @en "MeasureText"
+@fa "اندازه‌گیری متن"
 /// The preferred size of text wrapped at max_width, as a rect at (0, 0):
 /// width is the longest wrapped line in cells, height the number of wrapped
 /// lines. max_width <= 0 means unbounded, so width is the longest explicit
@@ -298,6 +319,7 @@ pub func MeasureText(text: str, max_width: int): Rect:
 end
 
 @en "NewText"
+@fa "متن جدید"
 /// Creates a Text widget with the given content: left-aligned, unstyled, and
 /// word-wrapped.
 pub func NewText(content: str): Text:
