@@ -173,17 +173,17 @@ pub func StyleSgrOff(style: Style, tier: ColorTier): str
 
 ### Between two cells
 
-The conversion holds no state, so the buffer owns the transition. A frame starts from the terminal's default style; when the next cell's style is not `StyleEq` to the one the terminal is in, `Buffer.ansi` and `Buffer.diff` emit `StyleSgrOff(previous, tier)` then `StyleSgr(next, tier)`. The frame ends with `StyleSgrOff(last, tier)`, which is `""` when the last style is `StyleDefault`. The buffer never emits a reset inside a frame; [`Screen.start` and `Screen.close`](/reference/screen) reset for terminal setup and teardown. See [Buffer and Cell](/reference/buffer#style-transitions).
+The conversion holds no state, so the buffer owns the transition. A frame starts from the terminal's default style; when the next cell's style is not `StyleEq` to the one the terminal is in, `Buffer.ansi` and `Buffer.diff` append the pieces of `StyleSgrOff(previous, tier)` then `StyleSgr(next, tier)` to the frame builder. The frame ends by appending the off pieces for the last style; a default style adds nothing. The buffer never emits a reset inside a frame; [`Screen.start` and `Screen.close`](/reference/screen) reset for terminal setup and teardown. See [Buffer and Cell](/reference/buffer#style-transitions).
 
 ## Build counter
 
-`SgrBuilds` reports how many non-empty SGR strings `StyleSgr` and `StyleSgrOff` have built in the current process.
+`SgrBuilds` reports how many non-empty SGR sequences `StyleSgr` and `StyleSgrOff` have emitted in the current process.
 
 ```salam
 pub func SgrBuilds(): int
 ```
 
-Widgets resolve a `Style` and hand it to the buffer; the buffer builds the string at emission, once per style change it writes. So one frame adds one build per on or off sequence it actually emitted, and a frame with no style changes adds none. Nothing caches SGR strings: a redraw rebuilds only what it writes.
+Widgets resolve a `Style` and hand it to the buffer; the buffer appends each sequence's pieces at emission, once per style change it writes. So one frame adds one count per on or off sequence it actually emitted, and a frame with no style changes adds none. Nothing caches SGR strings: a redraw rebuilds only what it writes.
 
 It is a read-only diagnostic for tests and profiling, not configuration: nothing in the library reads it, and it only ever grows.
 
