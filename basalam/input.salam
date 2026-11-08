@@ -18,23 +18,26 @@
  *
  * Input holds a value, a caret index into that value, and three styles. It is
  * focusable, so the screen routes keyboard events to it; its handle_event
- * appends printable characters and spaces, drops the codepoint before the
- * caret on backspace, and consumes enter without changing anything
- * (submitting belongs to the host, which reads value()).
+ * inserts printable characters and spaces at the caret, moves the caret with
+ * Left/Right/Home/End, deletes with Backspace (before the caret) and Delete
+ * (at the caret), and consumes enter without changing anything (submitting
+ * belongs to the host, which reads value()).
  *
  * Cells, not bytes. The value and the caret are counted in codepoints, using
  * str.Chars/CharCount/CharSubstr, so a multibyte glyph is one cell and one
  * caret step.
  *
- * Rendering is tail-anchored and stateless: each frame it shows the last
- * cells that fit, reserving the final cell for the cursor while focused, and
- * recomputes that window from scratch. There is no stored scroll offset. The
+ * Rendering is stateful. The widget stores the index of the first visible
+ * codepoint (window_start) between frames; each render shows the full width
+ * and moves the window the minimum needed to keep the caret inside it, so the
+ * caret column is always 0..width-1 and no cell is reserved for it. The
  * cursor is drawn as one reverse-video cell over whatever glyph the row
- * already has at the caret column, and only while the buffer reports focus.
- * An empty value shows the placeholder, styled dim, whether focused or not.
+ * already has at the caret column (a blank past the last glyph), and only
+ * while the buffer reports focus. An empty value shows the placeholder,
+ * styled dim, whether focused or not.
  *
- * This file deliberately has no layout measurement, no arrows/Home/End, no
- * selection or paste, no submit callback, and no Buffer cursor API. The
+ * This file deliberately has no layout measurement, no selection or paste,
+ * no submit callback, and no Buffer cursor API. The
  * fields are complete Style values: StyleDefault on `style` asks for the
  * terminal's default, and StyleDefault on `cursor_style` or
  * `placeholder_style` adds nothing. The cursor and placeholder compose over
@@ -83,6 +86,7 @@ pub struct Input:
 
     content: str = ""
     caret: int = 0
+    window_start: int = 0
 
     @en "focusable"
     @fa "تمرکز‌پذیر است"
@@ -94,30 +98,58 @@ pub struct Input:
 
     @en "handle_event"
     @fa "پردازش رویداد"
-    /// Reacts to a key press. A printable character or space is appended at
-    /// the caret; backspace drops the codepoint before the caret (nothing
-    /// when it is at the start); enter is consumed without changing
-    /// anything. Other events and keys are not consumed, so they bubble on.
+    /// Reacts to a key press. A printable character or space is inserted at
+    /// the caret; Left, Right, Home and End move it (all consumed, even when
+    /// it cannot move); backspace drops the codepoint before the caret and
+    /// delete the one at it (nothing at the start or end); enter is consumed
+    /// without changing anything. Other events and keys are not consumed, so
+    /// they bubble on.
     pub func handle_event(event: Event): bool:
         if event.kind != KeyEvent:
             ret false
         end
         code := event.key.code
+        total := str.CharCount(this.content)
         if code == term.KeyChar and not event.key.ctrl and not event.key.alt:
-            this.content = this.content + event.key.ch
+            this.content = str.CharSubstr(this.content, 0, this.caret) + event.key.ch + str.CharSubstr(this.content, this.caret, total - this.caret)
             this.caret = this.caret + 1
             ret true
         end
         if code == term.KeySpace:
-            this.content = this.content + " "
+            this.content = str.CharSubstr(this.content, 0, this.caret) + " " + str.CharSubstr(this.content, this.caret, total - this.caret)
             this.caret = this.caret + 1
+            ret true
+        end
+        if code == term.KeyLeft:
+            if this.caret > 0:
+                this.caret = this.caret - 1
+            end
+            ret true
+        end
+        if code == term.KeyRight:
+            if this.caret < total:
+                this.caret = this.caret + 1
+            end
+            ret true
+        end
+        if code == term.KeyHome:
+            this.caret = 0
+            ret true
+        end
+        if code == term.KeyEnd:
+            this.caret = total
             ret true
         end
         if code == term.KeyBackspace:
             if this.caret > 0:
-                total := str.CharCount(this.content)
                 this.content = str.CharSubstr(this.content, 0, this.caret - 1) + str.CharSubstr(this.content, this.caret, total - this.caret)
                 this.caret = this.caret - 1
+            end
+            ret true
+        end
+        if code == term.KeyDelete:
+            if this.caret < total:
+                this.content = str.CharSubstr(this.content, 0, this.caret) + str.CharSubstr(this.content, this.caret + 1, total - this.caret - 1)
             end
             ret true
         end
@@ -152,10 +184,11 @@ pub struct Input:
     @en "render"
     @fa "ترسیم"
     /// Draws the value into bounds: the box is painted with `style`, the
-    /// last cells that fit are written (the placeholder, dim, when the value
-    /// is empty), and — while the buffer reports focus — one reverse-video
-    /// cell marks the caret column. A degenerate box draws nothing and never
-    /// panics.
+    /// window of cells that holds the caret is written (the placeholder,
+    /// dim, when the value is empty), and — while the buffer reports focus —
+    /// one reverse-video cell marks the caret column. The window start is
+    /// kept between frames and moves only when the caret leaves it. A
+    /// degenerate box draws nothing and never panics.
     pub func render(buf: Buffer, bounds: Rect):
         if bounds.is_empty():
             ret
@@ -163,23 +196,24 @@ pub struct Input:
         buf.fill(bounds, " ", this.style)
         w := bounds.width
         count := str.CharCount(this.content)
-        mut f := 0
-        if buf.focused:
-            f = 1
+        if this.caret < this.window_start:
+            this.window_start = this.caret
+        else this.caret > this.window_start + w - 1:
+            this.window_start = this.caret - w + 1
         end
-        avail := w - f
-        mut start := 0
-        if count > avail:
-            start = count - avail
-        end
+        start := this.window_start
         if count == 0 and this.placeholder != "":
             ps := StyleMerge(this.style, this.placeholder_style)
             buf.put_str(bounds.x, bounds.y, str.CharSubstr(this.placeholder, 0, w), ps)
         else:
-            buf.put_str(bounds.x, bounds.y, str.CharSubstr(this.content, start, count - start), this.style)
+            mut shown := count - start
+            if shown > w:
+                shown = w
+            end
+            buf.put_str(bounds.x, bounds.y, str.CharSubstr(this.content, start, shown), this.style)
         end
         if buf.focused:
-            col := count - start
+            col := this.caret - start
             c := buf.get(bounds.x + col, bounds.y)
             buf.set(bounds.x + col, bounds.y, Cell { ch = c.ch, style = StyleMerge(this.style, this.cursor_style) })
         end
