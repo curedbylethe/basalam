@@ -125,6 +125,9 @@ func test_editing_unhandled_keys_bubble():
     testing.AssertFalse(e.handle_event(key("\x1b[2~")))
     testing.AssertFalse(e.handle_event(key("\x1bOP")))
     testing.AssertFalse(e.handle_event(key("\x01")))
+    testing.AssertFalse(e.handle_event(key("\x1b[1;5D")))
+    testing.AssertFalse(e.handle_event(key("\x1b[3;5~")))
+    testing.AssertFalse(e.handle_event(key("\x1b[3;3~")))
     testing.AssertFalse(e.handle_event(basalam.Event { kind = basalam.MouseEvent }))
     testing.AssertEqStr(e.value(), "")
 end
@@ -519,6 +522,31 @@ func test_render_scroll_starts_at_boundary():
     e.set_value("abcdefghi")
     e.render(b, rect(0, 0, 8, 1))
     testing.AssertEqStr(b.row_text(0), "cdefghi ")
+end
+
+func test_render_window_follows_shrinking_value():
+    mut e := basalam.NewInput()
+    mut b := basalam.NewBuffer(8, 1)
+    defer b.free()
+    e.set_value("abcdefghij")
+    e.render(b, rect(0, 0, 8, 1))
+    e.set_value("ab")
+    e.render(b, rect(0, 0, 8, 1))
+    testing.AssertEqStr(b.row_text(0), "ab      ")
+    // Backspace down from the long value keeps the text visible.
+    e.set_value("abcdefghij")
+    e.render(b, rect(0, 0, 8, 1))
+    bs := special(term.KeyBackspace)
+    e.handle_event(bs)
+    e.handle_event(bs)
+    e.handle_event(bs)
+    e.handle_event(bs)
+    e.handle_event(bs)
+    e.handle_event(bs)
+    e.handle_event(bs)
+    e.handle_event(bs)
+    e.render(b, rect(0, 0, 8, 1))
+    testing.AssertEqStr(b.row_text(0), "ab      ")
 end
 
 func test_render_width5_focused():
@@ -946,6 +974,7 @@ func main:
     test_cursor_tracks_value_and_backspace()
     test_render_overflow_wide_value()
     test_render_scroll_starts_at_boundary()
+    test_render_window_follows_shrinking_value()
     test_render_width5_focused()
     test_render_width1()
     test_render_width0_draws_nothing()
