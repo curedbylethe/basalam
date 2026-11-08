@@ -530,7 +530,11 @@ pub struct Table:
         if total > bounds.width:
             total = bounds.width
         end
-        buf.fill(Rect { x = bounds.x, y = bounds.y + y, width = total, height = 1 }, "─", style)
+        mut glyph := "─"
+        if buf.glyphs == GlyphPolicy.ASCII:
+            glyph = "-"
+        end
+        buf.fill(Rect { x = bounds.x, y = bounds.y + y, width = total, height = 1 }, glyph, style)
     end
 end
 
@@ -637,12 +641,12 @@ pub struct TableView:
     /// no row is marked when the selection lies outside the window. The
     /// scrollbar uses │ and █, or | and # under the ASCII glyph policy.
     pub func render(buf: Buffer, bounds: Rect):
-        if bounds.is_empty() or this.columns.len() == 0 or this.rows.len() == 0:
-            ret
-        end
         n := this._body_count()
         h := this._body_height(bounds.height)
         this._clamp(h)
+        if bounds.is_empty() or this.columns.len() == 0 or this.rows.len() == 0:
+            ret
+        end
         mut bar := 0
         if n > h and h > 0:
             bar = 1

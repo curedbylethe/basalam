@@ -116,6 +116,22 @@ func test_tb02_header_and_rule():
     testing.AssertEqStr(frame(t, 11, 4), "Name" + sp(4) + "Qty|" + dash(11) + "|apple" + sp(5) + "3|kiwi" + sp(5) + "12")
 end
 
+func test_ascii_rule_is_ascii():
+    mut t := basalam.NewTable()
+    t.pad_x = 0
+    t.header = true
+    t.add_column(fixed_col(5, basalam.Alignment.Left))
+    t.add_row(row1("H"))
+    t.add_row(row1("a"))
+    mut b := basalam.NewBuffer(5, 3)
+    b.glyphs = basalam.GlyphPolicy.ASCII
+    t.render(b, rect(0, 0, 5, 3))
+    testing.AssertEqStr(b.row_text(1), "-----")
+    // Multi-byte text would be longer than its 5 cells.
+    testing.AssertEqInt(str.Len(b.row_text(1)), 5)
+    b.free()
+end
+
 func test_tb03_mixed_alignment_pad1():
     mut t := basalam.NewTable()
     t.header = true
@@ -595,6 +611,34 @@ func test_tv_cursor_scrolls_up_minimally():
     testing.AssertEqInt(t.offset, 5)
 end
 
+func test_tv_ascii_rule_is_ascii():
+    t := tv(2, 4, true)
+    mut b := basalam.NewBuffer(5, 3)
+    b.glyphs = basalam.GlyphPolicy.ASCII
+    mut tt := t
+    tt.set_bounds(rect(0, 0, 5, 3))
+    tt.render(b, rect(0, 0, 5, 3))
+    testing.AssertEqStr(b.row_text(1), "---- ")
+    testing.AssertEqInt(str.Len(b.row_text(1)), 5)
+    b.free()
+end
+
+func test_tv_selected_after_render_without_rows():
+    mut t := basalam.NewTableView()
+    t.add_column(fixed_col(4, basalam.Alignment.Left))
+    mut b := basalam.NewBuffer(5, 3)
+    t.set_bounds(rect(0, 0, 5, 3))
+    t.render(b, rect(0, 0, 5, 3))
+    testing.AssertEqInt(t.selected, -1)
+    mut t2 := tv(10, 4, false)
+    t2.selected = 5
+    t2.rows = Vector {} as Vector<Vector<str>>
+    t2.set_bounds(rect(0, 0, 5, 3))
+    t2.render(b, rect(0, 0, 5, 3))
+    testing.AssertEqInt(t2.selected, -1)
+    b.free()
+end
+
 func test_tv_pinned_header_and_rule():
     mut t := tv(6, 4, true)
     t.offset = 2
@@ -693,6 +737,7 @@ end
 func main:
     test_tb01_no_header_fixed_columns()
     test_tb02_header_and_rule()
+    test_ascii_rule_is_ascii()
     test_tb03_mixed_alignment_pad1()
     test_tb04_clip()
     test_tb05_ellipsis()
@@ -727,6 +772,8 @@ func main:
     test_tv_ascii_bar()
     test_tv_key_trace()
     test_tv_cursor_scrolls_up_minimally()
+    test_tv_ascii_rule_is_ascii()
+    test_tv_selected_after_render_without_rows()
     test_tv_pinned_header_and_rule()
     test_tv_selected_outside_window_paints_no_reverse()
     test_tv_focused_reverse_unfocused_bold()
