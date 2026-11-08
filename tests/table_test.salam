@@ -26,6 +26,11 @@ import term
 
 include "../basalam/basalam.salam"
 
+// ---- TableView -----------------------------------------------------------
+
+mut tv_calls := 0
+mut tv_last := -1
+
 func rect(x: int, y: int, w: int, h: int): basalam.Rect:
     ret basalam.Rect { x = x, y = y, width = w, height = h }
 end
@@ -418,6 +423,273 @@ func test_rows_past_height_are_not_painted():
     testing.AssertEqStr(out, "r0|r1|r2|xx|xx")
 end
 
+// A one-column TableView: column cw cells wide, no padding, rows r0..r(n-1),
+// with a header and rule when header is on (they are not data rows).
+func tv(n: int, cw: int, header: bool): basalam.TableView:
+    mut t := basalam.NewTableView()
+    t.pad_x = 0
+    t.header = header
+    t.add_column(fixed_col(cw, basalam.Alignment.Left))
+    if header:
+        t.add_row(row1("H"))
+    end
+    repeat n in i:
+        t.add_row(row1("r" + str.FromInt(i)))
+    end
+    ret t
+end
+
+// Renders t into a fresh w x h buffer and returns its rows joined by "|".
+func tv_frame(t: basalam.TableView, w: int, h: int): str:
+    b := basalam.NewBuffer(w, h)
+    mut tt := t
+    tt.set_bounds(rect(0, 0, w, h))
+    tt.render(b, rect(0, 0, w, h))
+    mut out := ""
+    repeat h in y:
+        if y > 0:
+            out = out + "|"
+        end
+        out = out + b.row_text(y)
+    end
+    b.free()
+    ret out
+end
+
+// Row of the scrollbar thumb run: first and last thumb row of column x.
+func thumb_rows(b: basalam.Buffer, x: int, y0: int, h: int): str:
+    mut out := ""
+    repeat h in r:
+        if b.get(x, y0 + r).ch == "█" or b.get(x, y0 + r).ch == "#":
+            out = out + str.FromInt(r)
+        end
+    end
+    ret out
+end
+
+// Checks the window invariants and returns the painted body rows.
+func tv_check(t: basalam.TableView, n: int, h: int):
+    if n == 0:
+        testing.AssertEqInt(t.selected, -1)
+        testing.AssertEqInt(t.offset, 0)
+        ret
+    end
+    testing.AssertTrue(t.selected >= 0 and t.selected < n)
+    mut max_off := 0
+    if n > h:
+        max_off = n - h
+    end
+    testing.AssertTrue(t.offset >= 0 and t.offset <= max_off)
+end
+
+func test_tv_surface():
+    t := basalam.NewTableView()
+    testing.AssertTrue(t.focusable())
+    testing.AssertTrue(t.hits())
+    testing.AssertEqInt(t.offset, 0)
+    testing.AssertEqInt(t.selected, 0)
+    testing.AssertFalse(t.activate(0))
+    // Table itself stays inert.
+    tb := basalam.NewTable()
+    testing.AssertFalse(tb.focusable())
+    testing.AssertFalse(tb.hits())
+end
+
+func test_tv_fits_exactly_has_no_bar():
+    t := tv(4, 4, false)
+    testing.AssertEqStr(tv_frame(t, 5, 4), "r0   |r1   |r2   |r3   ")
+end
+
+func test_tv_one_row_over_reserves_bar():
+    t := tv(5, 4, false)
+    testing.AssertEqStr(tv_frame(t, 5, 4), "r0  █|r1  █|r2  █|r3  │")
+end
+
+func test_tv_mid_list_window_and_thumb():
+    mut t := tv(10, 4, false)
+    t.offset = 3
+    testing.AssertEqStr(tv_frame(t, 5, 4), "r3  │|r4  █|r5  │|r6  │")
+end
+
+func test_tv_thumb_table():
+    // n, h, offset -> thumb rows
+    mut b := basalam.NewBuffer(5, 10)
+    mut t := tv(5, 4, false)
+    t.offset = 1
+    t.set_bounds(rect(0, 0, 5, 4))
+    t.render(b, rect(0, 0, 5, 4))
+    testing.AssertEqStr(thumb_rows(b, 4, 0, 4), "123")
+    b.free()
+    mut t2 := tv(10, 4, false)
+    t2.offset = 6
+    b = basalam.NewBuffer(5, 10)
+    t2.render(b, rect(0, 0, 5, 4))
+    testing.AssertEqStr(thumb_rows(b, 4, 0, 4), "3")
+    b.free()
+    mut t3 := tv(100, 4, false)
+    t3.offset = 96
+    b = basalam.NewBuffer(5, 10)
+    t3.render(b, rect(0, 0, 5, 4))
+    testing.AssertEqStr(thumb_rows(b, 4, 0, 4), "3")
+    b.free()
+    mut t4 := tv(100, 10, false)
+    t4.offset = 45
+    b = basalam.NewBuffer(5, 10)
+    t4.render(b, rect(0, 0, 5, 10))
+    testing.AssertEqStr(thumb_rows(b, 4, 0, 10), "4")
+    b.free()
+end
+
+func test_tv_ascii_bar():
+    mut t := tv(5, 4, false)
+    mut b := basalam.NewBuffer(5, 4)
+    b.glyphs = basalam.GlyphPolicy.ASCII
+    t.render(b, rect(0, 0, 5, 4))
+    testing.AssertEqStr(b.row_text(0), "r0  #")
+    testing.AssertEqStr(b.row_text(3), "r3  |")
+    b.free()
+end
+
+func test_tv_key_trace():
+    mut t := tv(10, 4, false)
+    t.set_bounds(rect(0, 0, 5, 4))
+    repeat 4:
+        testing.AssertTrue(t.handle_event(key("\x1b[B")))
+        tv_check(t, 10, 4)
+    end
+    testing.AssertEqInt(t.offset, 1)
+    testing.AssertEqInt(t.selected, 4)
+    testing.AssertTrue(t.handle_event(key("\x1b[6~")))
+    testing.AssertEqInt(t.offset, 5)
+    testing.AssertEqInt(t.selected, 8)
+    testing.AssertTrue(t.handle_event(key("\x1b[6~")))
+    testing.AssertEqInt(t.offset, 6)
+    testing.AssertEqInt(t.selected, 9)
+    testing.AssertTrue(t.handle_event(key("\x1b[B")))
+    testing.AssertEqInt(t.selected, 9)
+    testing.AssertTrue(t.handle_event(key("\x1b[5~")))
+    testing.AssertEqInt(t.offset, 2)
+    testing.AssertEqInt(t.selected, 5)
+    tv_check(t, 10, 4)
+    testing.AssertTrue(t.handle_event(key("\x1b[H")))
+    testing.AssertEqInt(t.offset, 0)
+    testing.AssertEqInt(t.selected, 0)
+    testing.AssertTrue(t.handle_event(key("\x1b[A")))
+    testing.AssertEqInt(t.selected, 0)
+    testing.AssertTrue(t.handle_event(key("\x1b[F")))
+    testing.AssertEqInt(t.offset, 6)
+    testing.AssertEqInt(t.selected, 9)
+    tv_check(t, 10, 4)
+    testing.AssertFalse(t.handle_event(key("x")))
+    testing.AssertFalse(t.handle_event(key("\t")))
+end
+
+func test_tv_cursor_scrolls_up_minimally():
+    mut t := tv(10, 4, false)
+    t.set_bounds(rect(0, 0, 5, 4))
+    t.handle_event(key("\x1b[F"))
+    repeat 4:
+        t.handle_event(key("\x1b[A"))
+    end
+    testing.AssertEqInt(t.selected, 5)
+    testing.AssertEqInt(t.offset, 5)
+end
+
+func test_tv_pinned_header_and_rule():
+    mut t := tv(6, 4, true)
+    t.offset = 2
+    // H = 5: header, rule, 3 body rows of 6 -> bar.
+    testing.AssertEqStr(tv_frame(t, 5, 5), "H    |" + dash(4) + " |r2  │|r3  █|r4  │")
+end
+
+func test_tv_selected_outside_window_paints_no_reverse():
+    mut t := tv(10, 4, false)
+    t.offset = 5
+    mut b := basalam.NewBuffer(5, 4)
+    b.focused = true
+    t.render(b, rect(0, 0, 5, 4))
+    repeat 4 in y:
+        repeat 5 in x:
+            testing.AssertFalse(b.get(x, y).style.reverse)
+            testing.AssertFalse(b.get(x, y).style.bold)
+        end
+    end
+    testing.AssertEqInt(t.selected, 0)
+    b.free()
+end
+
+func test_tv_focused_reverse_unfocused_bold():
+    mut t := tv(5, 4, true)
+    t.selected = 1
+    t.set_bounds(rect(0, 0, 5, 6))
+    mut b := basalam.NewBuffer(5, 6)
+    b.focused = true
+    t.render(b, rect(0, 0, 5, 6))
+    // selected body row 1 sits on frame row 3 (header, rule, r0, r1).
+    repeat 4 in x:
+        testing.AssertTrue(b.get(x, 3).style.reverse)
+        testing.AssertFalse(b.get(x, 2).style.reverse)
+        testing.AssertFalse(b.get(x, 0).style.reverse)
+    end
+    testing.AssertFalse(b.get(4, 3).style.reverse)
+    b.free()
+    b = basalam.NewBuffer(5, 6)
+    t.render(b, rect(0, 0, 5, 6))
+    repeat 4 in x:
+        testing.AssertFalse(b.get(x, 3).style.reverse)
+        testing.AssertTrue(b.get(x, 3).style.bold)
+        testing.AssertFalse(b.get(x, 2).style.bold)
+    end
+    b.free()
+end
+
+func test_tv_overflow_uses_column_width():
+    mut t := tv(0, 4, false)
+    t.set_column_overflow(0, basalam.CellOverflow.Ellipsis)
+    t.add_row(row1("abcdefgh"))
+    t.add_row(row1("x"))
+    testing.AssertEqStr(tv_frame(t, 5, 1), "abc…█")
+    mut c := tv(0, 4, false)
+    c.add_row(row1("abcdefgh"))
+    c.add_row(row1("x"))
+    testing.AssertEqStr(tv_frame(c, 5, 1), "abcd█")
+end
+
+func test_tv_paints_nothing_past_the_rect():
+    mut t := tv(10, 4, false)
+    mut b := basalam.NewBuffer(5, 6)
+    b.fill(rect(0, 0, 5, 6), "x", basalam.StyleDefault)
+    t.render(b, rect(0, 0, 5, 4))
+    testing.AssertEqStr(b.row_text(4), "xxxxx")
+    testing.AssertEqStr(b.row_text(5), "xxxxx")
+    b.free()
+end
+
+func test_tv_activate():
+    mut t := tv(3, 4, false)
+    t.set_bounds(rect(0, 0, 5, 3))
+    testing.AssertFalse(t.handle_event(key("\r")))
+    t.activate = (row: int):
+        tv_calls = tv_calls + 1
+        tv_last = row
+        ret true
+    end
+    t.handle_event(key("\x1b[B"))
+    testing.AssertTrue(t.handle_event(key("\r")))
+    testing.AssertEqInt(tv_calls, 1)
+    testing.AssertEqInt(tv_last, 1)
+    mut e := tv(0, 4, true)
+    e.activate = (row: int):
+        tv_calls = tv_calls + 1
+        ret true
+    end
+    testing.AssertFalse(e.handle_event(key("\r")))
+    testing.AssertEqInt(tv_calls, 1)
+    testing.AssertTrue(e.handle_event(key("\x1b[B")))
+    testing.AssertEqInt(e.selected, -1)
+    testing.AssertEqInt(e.offset, 0)
+end
+
 func main:
     test_tb01_no_header_fixed_columns()
     test_tb02_header_and_rule()
@@ -447,5 +719,19 @@ func main:
     test_not_focusable_not_hit_not_consuming()
     test_bounds_survive_set_bounds()
     test_rows_past_height_are_not_painted()
+    test_tv_surface()
+    test_tv_fits_exactly_has_no_bar()
+    test_tv_one_row_over_reserves_bar()
+    test_tv_mid_list_window_and_thumb()
+    test_tv_thumb_table()
+    test_tv_ascii_bar()
+    test_tv_key_trace()
+    test_tv_cursor_scrolls_up_minimally()
+    test_tv_pinned_header_and_rule()
+    test_tv_selected_outside_window_paints_no_reverse()
+    test_tv_focused_reverse_unfocused_bold()
+    test_tv_overflow_uses_column_width()
+    test_tv_paints_nothing_past_the_rect()
+    test_tv_activate()
     ret testing.Summary()
 end
