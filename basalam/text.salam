@@ -23,12 +23,10 @@
  * and, later, the layout engine both consume the same two functions, so the
  * arithmetic exists once.
  *
- * Cell model. A cell is one codepoint, so every character counts as one
- * column; the count always comes from term.Width, the package's single
- * cell-counting function (ANSI-aware, because it skips escape sequences), and
- * never from str.Len or a counter of our own. Wide (CJK), combining, and
- * zero-width characters are deliberately out of scope: they render as
- * ordinary one-cell glyphs here.
+ * Cell model. A display cell is two columns for an East Asian wide or
+ * fullwidth codepoint, zero for a control, mark or format codepoint, and one
+ * otherwise. Text measures plain strings with the shared rule in width.salam;
+ * it does not parse ANSI escapes or segment grapheme clusters.
  *
  * Wrap policy. Greedy word-boundary wrapping: walk the words of a paragraph
  * and, when the next word would cross the width, start a new line and drop
@@ -43,9 +41,9 @@
  * wraps independently. A width of zero or less means unbounded (the
  * artifact's M = infinity): every paragraph is returned unwrapped.
  *
- * This file deliberately has no notion of display width beyond one codepoint
- * per cell and no layout pass: placement in the parent's box belongs to the
- * layout engine. The style is a basalam.Style value (style.salam), not a raw
+ * This file delegates display width to width.salam and has no layout pass:
+ * placement in the parent's box belongs to the layout engine. The style is a
+ * basalam.Style value (style.salam), not a raw
  * SGR string: render paints the box's padding with the style's background
  * only and the glyph runs with the full style, and the buffer turns each into
  * bytes at emission, at `buf.tier`. The screen detects the terminal once when
@@ -57,7 +55,6 @@
 package basalam
 
 import str
-import term
 
 @en "Alignment"
 @fa "تراز"
@@ -125,11 +122,41 @@ pub struct Text:
     /// WrapMode.Word.
     pub wrap: WrapMode = WrapMode.Word
 
+    source: func () str = (): ret "" end
+    source_set: bool = false
+
+    func _content(): str:
+        if this.source_set:
+            ret this.source()
+        end
+        ret this.content
+    end
+
     @en "set_text"
     @fa "تنظیم متن"
-    /// Replaces the content; the next render draws it.
+    /// Replaces the content and clears the source; the last setter wins.
     pub func set_text(content: str):
         this.content = content
+        this.source_set = false
+    end
+
+    @en "set_source"
+    @fa "تنظیم منبع"
+    /// Reads `src` at render and measure time; the last setter wins. Keep its
+    /// value stable within a frame. Closures capture by value, so read module
+    /// state or a shared holder. Set the source before Screen.add, which copies
+    /// the widget. Changes do not repaint or relayout automatically: call
+    /// invalidate(id), register a tick, or call set_bounds again.
+    pub func set_source(src: func () str):
+        this.source = src
+        this.source_set = true
+    end
+
+    @en "clear_source"
+    @fa "پاک‌سازی منبع"
+    /// Clears the source and returns to the last pushed content.
+    pub func clear_source():
+        this.source_set = false
     end
 
     @en "set_align"
@@ -159,7 +186,11 @@ pub struct Text:
     /// the longest wrapped line in cells, height the number of wrapped lines.
     /// max_width <= 0 means unbounded, so the explicit lines are measured.
     pub func preferred_size(max_width: int): Rect:
-        ret MeasureText(this.content, max_width)
+        content := this._content()
+        if this.source_set and content == "":
+            ret Rect {}
+        end
+        ret MeasureText(content, max_width)
     end
 
     @en "preferred_width"
@@ -167,7 +198,7 @@ pub struct Text:
     /// The longest explicit line of the content, in cells (the unbounded
     /// width).
     pub func preferred_width(): int:
-        ret MeasureText(this.content, 0).width
+        ret MeasureText(this._content(), 0).width
     end
 
     @en "render"
@@ -185,9 +216,9 @@ pub struct Text:
         buf.fill(bounds, " ", pad)
         mut lines := Vector {} as Vector<str>
         if this.wrap == WrapMode.None:
-            lines = WrapText(this.content, 0)
+            lines = WrapText(this._content(), 0)
         else:
-            lines = WrapText(this.content, bounds.width)
+            lines = WrapText(this._content(), bounds.width)
         end
         defer lines.free()
         mut n := lines.len()
@@ -199,7 +230,7 @@ pub struct Text:
         end
         repeat n in i:
             line := lines.get(i)
-            mut slack := bounds.width - term.Width(line)
+            mut slack := bounds.width - _text_width(line)
             // The artifact: a line at least as wide as the box shows its
             // first cells for every alignment (len >= W puts offset = 0), so
             // right and center never reveal the tail of an over-long line.
@@ -229,8 +260,8 @@ func _wrapInto(para: str, width: int, out &: Vector<str>):
     mut line := ""
     repeat words.len() in i:
         w := words.get(i)
-        if term.Width(w) > width:
-            if term.Width(line) > 0:
+        if _text_width(w) > width:
+            if _text_width(line) > 0:
                 out.push(line)
                 line = ""
             end
@@ -244,11 +275,11 @@ func _wrapInto(para: str, width: int, out &: Vector<str>):
             end
             chunks.free()
         else:
-            if term.Width(line) == 0:
+            if _text_width(line) == 0:
                 line = w
             else:
                 candidate := line + " " + w
-                if term.Width(candidate) <= width:
+                if _text_width(candidate) <= width:
                     line = candidate
                 else:
                     out.push(line)
@@ -267,15 +298,25 @@ func _splitWord(word: str, width: int): Vector<str>:
     mut chars := str.Chars(word)
     defer chars.free()
     mut chunk := ""
+    mut chunk_width := 0
     repeat chars.len() in i:
         ch := chars.get(i)
-        if term.Width(chunk) > 0 and term.Width(chunk) + term.Width(ch) > width:
+        ch_width := _char_width(ch)
+        if chunk_width > 0 and chunk_width + ch_width > width:
             out.push(chunk)
             chunk = ""
+            chunk_width = 0
         end
-        chunk = chunk + ch
+        if chunk_width == 0 and ch_width > width:
+            // shortcut: a 2-cell glyph can overflow a 1-cell line; the buffer blanks it at paint time. Upgrade if Text grows ellipsis.
+            out.push(chunk + ch)
+            chunk = ""
+        else:
+            chunk = chunk + ch
+            chunk_width = chunk_width + ch_width
+        end
     end
-    if term.Width(chunk) > 0:
+    if chunk_width > 0:
         out.push(chunk)
     end
     ret out
@@ -286,8 +327,8 @@ end
 /// Splits text into display lines of at most width cells, top to bottom. An
 /// explicit "\n" starts a new paragraph, each wrapped on its own; the space
 /// at a break is consumed. A word longer than width is cut on the character
-/// grid. width <= 0 means unbounded, so each paragraph is returned
-/// unwrapped. No line is wider than width when width > 0.
+/// grid. A two-cell glyph can exceed a width of one. width <= 0 means
+/// unbounded, so each paragraph is returned unwrapped.
 pub func WrapText(text: str, width: int): Vector<str>:
     out := Vector {} as Vector<str>
     paras := str.Split(text, "\n")
@@ -303,14 +344,13 @@ end
 /// The preferred size of text wrapped at max_width, as a rect at (0, 0):
 /// width is the longest wrapped line in cells, height the number of wrapped
 /// lines. max_width <= 0 means unbounded, so width is the longest explicit
-/// line and height is the explicit line count. Cells are counted with
-/// term.Width (see the module comment).
+/// line and height is the explicit line count. Widths count display cells.
 pub func MeasureText(text: str, max_width: int): Rect:
     mut lines := WrapText(text, max_width)
     defer lines.free()
     mut w := 0
     repeat lines.len() in i:
-        lw := term.Width(lines.get(i))
+        lw := _text_width(lines.get(i))
         if lw > w:
             w = lw
         end

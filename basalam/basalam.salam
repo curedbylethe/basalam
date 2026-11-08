@@ -39,6 +39,7 @@
  *     modal.salam    the Modal overlay: a dialog over a dim scrim, with focus and Esc
  *     widget.salam   the Widget interface and BaseWidget defaults
  *     layout.salam   the Row, Column, Grid and Stack containers
+ *     width.salam    the one cell-width rule: codepoint width, string width, cell clipping
  *     text.salam     the Text widget and the pure line rules it draws through
  *     input.salam    the Input widget: single-line text entry with a caret
  *     list.salam     the List widget: single-selection scrollable list

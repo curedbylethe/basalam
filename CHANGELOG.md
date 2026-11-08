@@ -28,6 +28,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `Input.on_submit`; its return value decides whether Enter bubbles to the
   parent.
 
+- A pull-style content source on `Text`: `set_source(func () str)` is read at render
+  and measure time, and `clear_source()` returns to the last pushed text. A later
+  `set_text` clears the source. (CUR-366)
+
+### Changed
+
+- **Breaking:** `Text`, `Table`, the `Buffer` and the block widgets measure display
+  cells instead of codepoints: an East Asian wide or fullwidth character takes two
+  columns, a combining mark or zero-width character takes none. `MeasureText` and
+  `WrapText` report cell counts, and a frame containing a wide glyph draws different
+  bytes than before. ASCII-only output is unchanged. (CUR-366)
+
 ## [0.4.1] - 2026-10-31
 
 ### Fixed

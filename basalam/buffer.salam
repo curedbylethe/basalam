@@ -16,7 +16,8 @@
 /*
  * Buffer: the drawing surface widgets render into.
  *
- * Two grids of width x height Cells, each cell one codepoint plus a style:
+ * Two grids of width x height display cells: a wide glyph owns two adjacent
+ * cells, and a row's display width is always `width`:
  * `cells` is the back grid widgets draw into; `front` is the front grid,
  * what the terminal currently shows. Widgets never write the front grid;
  * only commit() advances it.
@@ -41,9 +42,8 @@
  *             last commit.
  *
  *   still absent: rectangle repaint (touched-cell tracking exists; writes
- *             go through set/fill/put_str/clear); wide characters (a cell
- *             holds one codepoint and is assumed to be one column wide) and
- *             cursor placement for text input (epic 2 follow-ups).
+ *             go through set/fill/put_str/clear) and cursor placement for
+ *             text input (epic 2 follow-ups).
  *
  * Style transitions. A cell stores a Style; the buffer turns it into bytes at
  * emission, so the tier is applied once, here, and widgets never build SGR.
@@ -104,11 +104,13 @@ end
 
 @en "Cell"
 @fa "سلول"
-/// One terminal cell: a single codepoint and the style it is drawn with.
+/// One display cell and the style it is drawn with.
 pub struct Cell:
     @en "ch"
     @fa "نویسه"
-    /// The character, exactly one codepoint. A blank cell holds " ".
+    /// A one-cell-wide glyph, or `""` for the continuation of the wide glyph
+    /// in the cell to its left. A blank cell holds " ". `put_str` writes wide
+    /// glyphs; `set` blanks any `ch` that is not one cell wide.
     pub ch: str = " "
 
     @en "style"
@@ -215,18 +217,44 @@ pub struct Buffer:
     @en "set"
     @fa "تنظیم"
     /// Writes one cell. Does nothing when (x, y) is outside the grid or
-    /// outside `clip`.
+    /// outside `clip`. A non-empty `ch` that is not one cell wide becomes
+    /// blank; `""` is accepted only after a wide glyph.
     pub func set(x: int, y: int, cell: Cell):
-        p := Point { x = x, y = y }
-        if not this.area().contains(p) or not this.clip.contains(p):
+        mut ch := cell.ch
+        if ch == "" and (x <= 0 or _char_width(this.get(x - 1, y).ch) != 2):
+            ch = " "
+        else if ch != "" and _char_width(ch) != 1:
+            ch = " "
+        end
+        this._write(x, y, Cell { ch = ch, style = cell.style })
+    end
+
+    func _write(x: int, y: int, cell: Cell):
+        if not this._writable(x, y):
             ret
         end
+        i := y * this.width + x
+        old := this.cells.get(i)
+        if old.ch == "" and cell.ch != "" and x > 0:
+            this._store(x - 1, y, Cell { ch = " ", style = cell.style })
+        else if old.ch != "" and _char_width(old.ch) == 2 and cell.ch != old.ch and x + 1 < this.width and this.cells.get(i + 1).ch == "":
+            this._store(x + 1, y, Cell { ch = " ", style = cell.style })
+        end
+        this._store(x, y, cell)
+    end
+
+    func _store(x: int, y: int, cell: Cell):
         i := y * this.width + x
         this.cells.set(i, cell)
         if not this.all_touched:
             this.touched.set(i, true)
             this.row_touched.set(y, true)
         end
+    end
+
+    func _writable(x: int, y: int): bool:
+        p := Point { x = x, y = y }
+        ret this.area().contains(p) and this.clip.contains(p)
     end
 
     @en "get"
@@ -243,9 +271,10 @@ pub struct Buffer:
 
     @en "put_str"
     @fa "نوشتن متن"
-    /// Writes text left to right starting at (x, y), one codepoint per
-    /// cell, all in the same style. Text that runs past the clip or the
-    /// grid is cut off; it never wraps.
+    /// Writes text left to right, advancing one column per narrow codepoint
+    /// and two per wide one. A wide glyph that cannot fit both its columns
+    /// inside the grid and the clip writes a blank. Zero-width codepoints are
+    /// dropped. Text is cut off at the clip; it never wraps.
     pub func put_str(x: int, y: int, text: str, style: Style):
         mut i := 0
         mut col := 0
@@ -255,15 +284,39 @@ pub struct Buffer:
             if ch == "":
                 break
             end
-            this.set(x + col, y, Cell { ch = ch, style = style })
-            col += 1
-            i += ch.len()
+            width := _char_width(ch)
+            if width == 0:
+                i += ch.len()
+            else if width == 1:
+                this.set(x + col, y, Cell { ch = ch, style = style })
+                col += 1
+                i += ch.len()
+            else:
+                left := this._writable(x + col, y)
+                right := this._writable(x + col + 1, y)
+                if left and right:
+                    this.set(x + col, y, Cell { ch = " ", style = style })
+                    this.set(x + col + 1, y, Cell { ch = " ", style = style })
+                    this._store(x + col, y, Cell { ch = ch, style = style })
+                    this._store(x + col + 1, y, Cell { ch = "", style = style })
+                else:
+                    if left:
+                        this.set(x + col, y, Cell { ch = " ", style = style })
+                    end
+                    if right:
+                        this.set(x + col + 1, y, Cell { ch = " ", style = style })
+                    end
+                end
+                col += 2
+                i += ch.len()
+            end
         end
     end
 
     @en "fill"
     @fa "پرکردن"
-    /// Sets every cell of r (clipped) to the same character and style.
+    /// Sets every cell of r (clipped) to the same character and style. A
+    /// multi-cell or zero-width `ch` becomes blank through `set`.
     pub func fill(r: Rect, ch: str, style: Style):
         repeat r.height in dy:
             repeat r.width in dx:
@@ -285,7 +338,8 @@ pub struct Buffer:
 
     @en "row_text"
     @fa "متن ردیف"
-    /// The characters of row y joined into one string, without styles.
+    /// The glyphs of row y joined into one string, without styles. Continuation
+    /// cells contribute nothing, so display width equals the buffer width.
     /// Returns "" for a row outside the grid. Meant for tests and debugging.
     pub func row_text(y: int): str:
         if y < 0 or y >= this.height:
@@ -294,7 +348,10 @@ pub struct Buffer:
         mut b := str.NewBuilder()
         defer str.BufFree(b)
         repeat this.width in x:
-            str.BufAppend(b, this.cells.get(y * this.width + x).ch)
+            ch := this.cells.get(y * this.width + x).ch
+            if ch != "":
+                str.BufAppend(b, ch)
+            end
         end
         ret str.BufStr(b)
     end
@@ -350,6 +407,7 @@ pub struct Buffer:
                     str.BufAppend(this.out_buf, StyleSgr(c.style, this.tier))
                     style = c.style
                 end
+                // Empty continuation cells emit no bytes; the glyph owns both columns.
                 str.BufAppend(this.out_buf, c.ch)
             end
         end
@@ -395,6 +453,7 @@ pub struct Buffer:
                                 str.BufAppend(this.out_buf, StyleSgr(c.style, this.tier))
                                 style = c.style
                             end
+                            // Empty continuation cells emit no bytes; the glyph owns both columns.
                             str.BufAppend(this.out_buf, c.ch)
                             i += 1
                         end

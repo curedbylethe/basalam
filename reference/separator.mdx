@@ -103,14 +103,14 @@ The separator leaves its main axis open, so a layout fills it, and it asks for o
 
 ## Runes
 
-`set_ch` accepts a rune only when it is exactly one codepoint and exactly one cell wide. The cell width comes from a built-in table of the common East Asian wide and fullwidth blocks, and treats controls, combining marks and format characters as zero-width. A rune that fails either test is refused:
+`set_ch` accepts a rune only when it is exactly one codepoint and exactly one cell wide. Width comes from the library's shared display-cell table, also used by `Text`, `Table`, `Buffer`, and the block widgets. It treats controls, combining marks and format characters as zero-width. A rune that fails either test is refused:
 
 - A wide rune, such as `中` (two cells), returns `false`, and the old rune stays.
 - A zero-width rune, such as a control or a combining mark, returns `false`, and the old rune stays.
 - A string with more than one codepoint returns `false`, and the old rune stays.
 - An empty string returns `true` and resets the rune to the orientation's default: `─` (U+2500) for a horizontal separator and `│` (U+2502) for a vertical one.
 
-A refused rune never reaches the screen, so the rule never draws wrong silently. The table is the common blocks only, not the full East Asian Width data, so a rare rune outside those blocks may pass as one cell wide when it is two.
+A refused rune never reaches the screen, so the rule never draws wrong silently. The shared table covers common wide and fullwidth blocks, not the full East Asian Width data, so a rare rune outside those blocks may pass as one cell wide when it is two.
 
 ```salam
 rule := basalam.NewSeparator()

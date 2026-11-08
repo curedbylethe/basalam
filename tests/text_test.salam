@@ -23,6 +23,8 @@ import term
 
 include "../basalam/basalam.salam"
 
+mut live_text := "initial"
+
 // ---- WrapText ---------------------------------------------------------
 
 func test_wrap_word_boundary():
@@ -136,6 +138,34 @@ func test_measure_unbounded():
     testing.AssertEqInt(neg.height, 2)
 end
 
+func test_measure_and_wrap_display_cells():
+    testing.AssertEqInt(basalam.MeasureText("中文", 0).width, 4)
+    testing.AssertEqInt(basalam.MeasureText("e\u0301", 0).width, 1)
+    testing.AssertEqInt(basalam.MeasureText("a\u200Bb", 0).width, 2)
+
+    mut pair := basalam.WrapText("中文", 4)
+    defer pair.free()
+    testing.AssertEqInt(pair.len(), 1)
+
+    mut split := basalam.WrapText("中文字", 4)
+    defer split.free()
+    testing.AssertEqInt(split.len(), 2)
+    testing.AssertEqStr(split.get(0), "中文")
+    testing.AssertEqStr(split.get(1), "字")
+
+    mut mixed := basalam.WrapText("a中b", 2)
+    defer mixed.free()
+    testing.AssertEqInt(mixed.len(), 3)
+    testing.AssertEqStr(mixed.get(0), "a")
+    testing.AssertEqStr(mixed.get(1), "中")
+    testing.AssertEqStr(mixed.get(2), "b")
+
+    mut narrow := basalam.WrapText("中", 1)
+    defer narrow.free()
+    testing.AssertEqInt(narrow.len(), 1)
+    testing.AssertEqStr(narrow.get(0), "中")
+end
+
 // ---- Text widget ------------------------------------------------------
 
 func test_text_render_row():
@@ -169,6 +199,34 @@ func test_text_alignment():
     t.set_align(basalam.Alignment.Center)
     t.render(b, rect(0, 0, 9, 1))
     testing.AssertEqStr(b.row_text(0), "   abc   ")
+end
+
+func test_text_wide_render_alignment():
+    mut b := basalam.NewBuffer(6, 1)
+    defer b.free()
+    mut t := basalam.NewText("中文")
+    t.render(b, rect(0, 0, 6, 1))
+    testing.AssertEqStr(b.row_text(0), "中文  ")
+    t.set_align(basalam.Alignment.Center)
+    t.render(b, rect(0, 0, 6, 1))
+    testing.AssertEqStr(b.row_text(0), " 中文 ")
+end
+
+func test_table_and_text_share_display_cells():
+    mut table := basalam.NewTable()
+    table.pad_x = 0
+    table.add_column(basalam.TableColumn { width = basalam.LayoutSize { kind = basalam.SizeKind.Fixed, cells = 4 } })
+    mut row := Vector {} as Vector<str>
+    row.push("中")
+    table.add_row(row)
+
+    mut b := basalam.NewBuffer(8, 1)
+    defer b.free()
+    mut rendered_table := table
+    rendered_table.render(b, rect(0, 0, 4, 1))
+    mut t := basalam.NewText("中")
+    t.render(b, rect(4, 0, 4, 1))
+    testing.AssertEqStr(b.row_text(0), "中  中  ")
 end
 
 func test_text_center_odd_slack_goes_right():
@@ -227,6 +285,8 @@ func test_text_preferred_size_and_width():
     t.set_text("ab")
     testing.AssertEqInt(t.preferred_width(), 2)
     testing.AssertEqInt(t.preferred_size(0).height, 1)
+    mut wide := basalam.NewText("中文")
+    testing.AssertEqInt(wide.preferred_size(10).width, 4)
 end
 
 func test_text_degenerate_bounds_do_not_panic():
@@ -237,6 +297,58 @@ func test_text_degenerate_bounds_do_not_panic():
     t.render(b, rect(0, 0, -3, -1))
     testing.AssertEqStr(b.row_text(0), "    ")
     testing.AssertFalse(t.focusable())
+end
+
+func test_text_source_renders_live_value():
+    mut t := basalam.NewText("")
+    t.set_source((): ret live_text end)
+
+    mut first := basalam.NewBuffer(8, 1)
+    defer first.free()
+    t.render(first, rect(0, 0, 8, 1))
+    testing.AssertEqStr(first.row_text(0), "initial ")
+
+    live_text = "changed"
+    mut second := basalam.NewBuffer(8, 1)
+    defer second.free()
+    t.render(second, rect(0, 0, 8, 1))
+    testing.AssertEqStr(second.row_text(0), "changed ")
+end
+
+func test_text_source_measure_and_precedence():
+    mut t := basalam.NewText("pushed")
+    t.set_source((): ret "中文" end)
+    testing.AssertEqInt(t.preferred_size(10).width, 4)
+    testing.AssertEqInt(t.preferred_width(), 4)
+
+    t.set_text("x")
+    mut b := basalam.NewBuffer(4, 1)
+    defer b.free()
+    t.render(b, rect(0, 0, 4, 1))
+    testing.AssertEqStr(b.row_text(0), "x   ")
+
+    t.set_text("pushed")
+    live_text = "pulled"
+    t.set_source((): ret live_text end)
+    t.render(b, rect(0, 0, 4, 1))
+    testing.AssertEqStr(b.row_text(0), "pull")
+end
+
+func test_text_clear_source_and_empty_source():
+    mut t := basalam.NewText("kept")
+    t.set_source((): ret "other" end)
+    t.clear_source()
+    mut b := basalam.NewBuffer(6, 1)
+    defer b.free()
+    t.render(b, rect(0, 0, 6, 1))
+    testing.AssertEqStr(b.row_text(0), "kept  ")
+
+    t.set_source((): ret "" end)
+    size := t.preferred_size(10)
+    testing.AssertEqInt(size.width, 0)
+    testing.AssertEqInt(size.height, 0)
+    t.render(b, rect(0, 0, 6, 1))
+    testing.AssertEqStr(b.row_text(0), "      ")
 end
 
 // ---- AC1: static and dynamic text ------------------------------------
@@ -521,15 +633,21 @@ func main:
     test_measure_wrapped_longest_line()
     test_measure_explicit_newlines()
     test_measure_unbounded()
+    test_measure_and_wrap_display_cells()
     test_text_render_row()
     test_text_set_text_rerenders()
     test_text_alignment()
+    test_text_wide_render_alignment()
+    test_table_and_text_share_display_cells()
     test_text_center_odd_slack_goes_right()
     test_text_style_covers_box()
     test_text_wrap_none_clips_at_edge()
     test_text_clips_lines_taller_than_box()
     test_text_preferred_size_and_width()
     test_text_degenerate_bounds_do_not_panic()
+    test_text_source_renders_live_value()
+    test_text_source_measure_and_precedence()
+    test_text_clear_source_and_empty_source()
     test_text_dynamic_counter_sequence()
     test_text_align_center_odd_slack_13_in_20()
     test_text_align_center_even_slack_12_in_20()

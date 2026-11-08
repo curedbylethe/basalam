@@ -25,7 +25,7 @@
  * The selection is the state; the window is derived. Each frame render
  * computes the minimal scroll window that keeps the selected row visible
  * (_reveal), then draws one item per row, clipping each to the width with
- * str.CharSubstr, so rows never wrap and never carry an ellipsis. The
+ * cell-aware prefix clipping, so rows never wrap and never carry an ellipsis.
  * selected row is painted full width in the selection style: reverse video
  * while the buffer reports focus, a bright-black background while it does
  * not. The selection style replaces the base style for that row, rather than
@@ -171,7 +171,7 @@ pub struct List:
             row := Rect { x = bounds.x, y = bounds.y + y, width = bounds.width, height = 1 }
             buf.fill(row, " ", rowStyle)
             if idx < n:
-                buf.put_str(bounds.x, bounds.y + y, str.CharSubstr(this.items.get(idx), 0, bounds.width), rowStyle)
+                buf.put_str(bounds.x, bounds.y + y, _take_cells(this.items.get(idx), bounds.width), rowStyle)
             end
         end
     end

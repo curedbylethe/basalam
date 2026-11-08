@@ -253,7 +253,7 @@ func test_nav_k22_k23_single_item():
     picks.clear()
     mut v := Vector {} as Vector<str>
     v.push("only")
-    mut l := basalam.NewList(v)
+    l := basalam.NewList(v)
     l.set_bounds(rect(0, 0, 10, 3))
     l.on_select = (i: int): picks.push(i) end
     testing.AssertTrue(l.handle_event(key("j")))
@@ -720,7 +720,7 @@ func test_unicode_codepoint_clip():
     mut v := Vector {} as Vector<str>
     v.push("éééx")
     v.push("asdf")
-    mut l := basalam.NewList(v)
+    l := basalam.NewList(v)
     testing.AssertTrue(l.focusable())
     // W3: the first three whole codepoints.
     mut b3 := frame(l, 3, 1, true)
@@ -732,6 +732,19 @@ func test_unicode_codepoint_clip():
     mut b2 := frame(l, 2, 1, true)
     defer b2.free()
     testing.AssertEqStr(b2.row_text(0), "éé")
+end
+
+func test_unicode_cell_clip():
+    mut v := Vector {} as Vector<str>
+    v.push("中文字")
+    l := basalam.NewList(v)
+    mut b := frame(l, 4, 1, true)
+    defer b.free()
+    testing.AssertEqStr(b.row_text(0), "中文")
+    testing.AssertEqStr(b.get(0, 0).ch, "中")
+    testing.AssertEqStr(b.get(1, 0).ch, "")
+    testing.AssertEqStr(b.get(2, 0).ch, "文")
+    testing.AssertEqStr(b.get(3, 0).ch, "")
 end
 
 // ---- CUR-455 probe ----------------------------------------------------
@@ -817,6 +830,7 @@ func main:
     test_screen_focused_list_receives_j()
     test_screen_unfocused_list_does_not_consume()
     test_unicode_codepoint_clip()
+    test_unicode_cell_clip()
     picks.free()
     ret testing.Summary()
 end

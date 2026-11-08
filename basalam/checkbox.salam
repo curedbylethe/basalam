@@ -172,7 +172,7 @@ pub struct Checkbox:
         end
         buf.put_str(bounds.x, bounds.y, str.CharSubstr("[" + tick + "]", 0, w), gb)
         if w > 4:
-            buf.put_str(bounds.x + 4, bounds.y, str.CharSubstr(this.label, 0, w - 4), gl)
+            buf.put_str(bounds.x + 4, bounds.y, _take_cells(this.label, w - 4), gl)
         end
     end
 end

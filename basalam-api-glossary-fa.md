@@ -2,7 +2,7 @@
 
 > Source: [`curedbylethe/basalam`](https://github.com/curedbylethe/basalam), default branch `main`, version **0.4.1** (inventory inspected 2026-11-08).
 
-This file is the naming standard and the complete name inventory for basalam. Every declaration carries an English `@en` name and a Persian `@fa` alias; the inventory lists **531 entries** across **23 source modules**, all applied in the source and compiled by `make build`.
+This file is the naming standard and the complete name inventory for basalam. Every declaration carries an English `@en` name and a Persian `@fa` alias; the inventory lists **533 entries** across **23 source modules**, all applied in the source and compiled by `make build`.
 
 ## What `@fa` is
 
@@ -506,7 +506,7 @@ end
 | Method | `List.render` | Draw list items and selection | ترسیم |
 | Constructor | `NewList` | Create list from string items | فهرست جدید |
 
-## `text.salam` (22 entries)
+## `text.salam` (24 entries)
 
 [Source file](https://github.com/curedbylethe/basalam/blob/main/basalam/text.salam)
 
@@ -525,6 +525,8 @@ end
 | Field | `Text.style` | Text style | ظاهر |
 | Field | `Text.wrap` | Line-wrapping mode | شکست خط |
 | Method | `Text.set_text` | Replace displayed text | تنظیم متن |
+| Method | `Text.set_source` | Read displayed text from a source function | تنظیم منبع |
+| Method | `Text.clear_source` | Return to the last pushed text | پاک‌سازی منبع |
 | Method | `Text.set_align` | Change text alignment | تنظیم تراز |
 | Method | `Text.set_style` | Change text style | تنظیم ظاهر |
 | Method | `Text.set_wrap` | Change wrapping policy | تنظیم شکست خط |

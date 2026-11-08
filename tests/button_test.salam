@@ -203,6 +203,16 @@ func test_render_label_and_brackets():
     check_row(ok, 1, false, "[", basalam.StyleDefault)
 end
 
+func test_render_wide_label():
+    mut buf := paint(basalam.NewButton("中文"), 6, 1, false)
+    defer buf.free()
+    testing.AssertEqStr(buf.row_text(0), "[中文]")
+    testing.AssertEqInt(buf.width, 6)
+    testing.AssertEqStr(buf.get(1, 0).ch, "中")
+    testing.AssertEqStr(buf.get(2, 0).ch, "")
+    testing.AssertEqStr(buf.get(3, 0).ch, "文")
+end
+
 // BT09: a width of zero draws nothing, even when focused.
 func test_render_zero_width():
     mut buf := basalam.NewBuffer(10, 1)
@@ -399,6 +409,7 @@ func main:
     test_clicks()
     test_mouse_gates()
     test_render_label_and_brackets()
+    test_render_wide_label()
     test_render_zero_width()
     test_render_keeps_colours()
     test_render_disabled_beats_focus()

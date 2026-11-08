@@ -22,9 +22,9 @@
  * Left/Right/Home/End, deletes with Backspace (before the caret) and Delete
  * (at the caret), and calls on_submit on enter.
  *
- * Cells, not bytes. The value and the caret are counted in codepoints, using
- * str.Chars/CharCount/CharSubstr, so a multibyte glyph is one cell and one
- * caret step.
+ * The value and caret index use codepoints. Rendering uses display cells: a
+ * wide glyph takes two columns, and the caret column is the display width of
+ * the visible prefix. A combining mark remains a separate caret position.
  *
  * Rendering is stateful. The widget stores the index of the first visible
  * codepoint (window_start) between frames; each render shows the full width
@@ -269,42 +269,53 @@ pub struct Input:
         buf.fill(bounds, " ", this.style)
         w := bounds.width
         count := str.CharCount(this.content)
-        if this.caret < this.window_start:
-            this.window_start = this.caret
-        else this.caret > this.window_start + w - 1:
-            this.window_start = this.caret - w + 1
+        mut start := this.window_start
+        if start < 0:
+            start = 0
         end
-        // A shorter value pulls the window back so it never scrolls past the text.
-        if this.window_start > count - w:
-            this.window_start = count - w + 1
-            if this.window_start < 0:
-                this.window_start = 0
-            end
+        if start > count:
+            start = 0
         end
-        start := this.window_start
+        mut chars := str.Chars(this.content)
+        defer chars.free()
+        if this.caret < start:
+            start = this.caret
+        end
+        mut col := 0
+        if start < this.caret:
+            col = _text_width(str.CharSubstr(this.content, start, this.caret - start))
+        end
+        until col >= w and start < this.caret:
+            col -= _char_width(chars.get(start))
+            start += 1
+        end
+        this.window_start = start
         if count == 0 and this.placeholder != "":
             ps := StyleMerge(this.style, this.placeholder_style)
-            buf.put_str(bounds.x, bounds.y, str.CharSubstr(this.placeholder, 0, w), ps)
+            buf.put_str(bounds.x, bounds.y, _take_cells(this.placeholder, w), ps)
         else:
-            mut shown := count - start
-            if shown > w:
-                shown = w
+            mut text := ""
+            if start < count:
+                text = _take_cells(str.CharSubstr(this.content, start, count - start), w)
             end
-            mut text := str.CharSubstr(this.content, start, shown)
             if this.masked:
-                mut mg := str.CharSubstr(this.mask_glyph, 0, 1)
+                mut mg := _take_cells(this.mask_glyph, 1)
                 // A non-ASCII codepoint is more than one byte.
                 if mg == "" or (buf.glyphs == GlyphPolicy.ASCII and mg.len() > 1):
                     mg = "*"
                 end
-                text = str.Repeat(mg, shown)
+                text = _take_cells(str.Repeat(mg, str.CharCount(text)), w)
             end
             buf.put_str(bounds.x, bounds.y, text, this.style)
         end
         if buf.focused:
-            col := this.caret - start
             c := buf.get(bounds.x + col, bounds.y)
-            buf.set(bounds.x + col, bounds.y, Cell { ch = c.ch, style = StyleMerge(this.style, this.cursor_style) })
+            cursor_style := StyleMerge(this.style, this.cursor_style)
+            if _char_width(c.ch) == 2:
+                buf.put_str(bounds.x + col, bounds.y, c.ch, cursor_style)
+            else:
+                buf.set(bounds.x + col, bounds.y, Cell { ch = c.ch, style = cursor_style })
+            end
         end
     end
 end

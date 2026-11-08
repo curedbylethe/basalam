@@ -214,7 +214,7 @@ Widths are resolved on every call by one resolver, so `measure` reports what `pr
 
 Only the first line of a cell's text is shown, since a cell is single-line. A wide glyph that would be split at the edge leaves a blank cell instead of half a glyph.
 
-Table counts display cells per codepoint, with East Asian wide glyphs at 2 cells and zero-width characters at 0. This is not the same as [Text](/reference/text), which counts each codepoint as one cell, so a `Table` and a `Text` that share a row can disagree about wide glyphs.
+`Table` measures display cells, as do [Text](/reference/text), the [Buffer](/reference/buffer), and the block widgets. A `Table` and a `Text` that share a row therefore agree about wide glyphs.
 
 ## Alignment
 
