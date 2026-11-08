@@ -12,6 +12,7 @@
 !/tests/run.sh
 !/tests/doc-examples.sh
 !/tests/release-check.sh
+!/tests/fa-aliases.sh
 
 # Compiler temporaries: --keep-temp / --emit-c output, objects, LLVM IR,
 # generated API docs and timing traces.
