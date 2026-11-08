@@ -37,14 +37,21 @@
  * not painted, so it stays transparent over whatever lies beneath it.
  *
  * Deliberate omissions: no scrolling in either direction, no row selection
- * or keyboard handling, no sorting, no column resize, no borders or column
+ * or keyboard handling (TableView, below, adds both), no sorting, no column resize, no borders or column
  * dividers, and no per-cell styles. Table is never a focus or click target:
  * it does not take focus, does not hit-test, and does not consume events.
+ *
+ * TableView lives in this file to reuse Table's private width and row
+ * helpers. It adds vertical scrolling only: a pinned header, a window that
+ * starts at offset, a selection cursor, a scrollbar, and an activate callback.
+ * Horizontal scrolling, click-to-select and the mouse wheel are not
+ * implemented (std/term drops the wheel bit). Table itself is unchanged.
  */
 
 package basalam
 
 import str
+import term
 
 // A per-cell alignment override. Private: set only through set_cell_align.
 struct _CellAlign:
@@ -311,9 +318,12 @@ pub struct Table:
         end
     end
 
-    // Column widths for a rect w cells wide. w < 0 means no width is given:
-    // star columns resolve to 0 and nothing shrinks. That is the preferred size.
-    func _resolve_widths(w: int): Vector<int>:
+    @en "_resolve_widths"
+    @fa "محاسبه عرض‌ها"
+    /// Column widths for a rect w cells wide. w < 0 means no width is given:
+    /// star columns resolve to 0 and nothing shrinks. That is the preferred
+    /// size. Public only so TableView can reach it; not for application code.
+    pub func _resolve_widths(w: int): Vector<int>:
         n := this.columns.len()
         pad := this._pad()
         mut out := Vector {} as Vector<int>
@@ -465,7 +475,11 @@ pub struct Table:
         ret Alignment.Left
     end
 
-    func _paint_row(buf: Buffer, bounds: Rect, ws: Vector<int>, r: int, y: int, style: Style):
+    @en "_paint_row"
+    @fa "رسم ردیف"
+    /// Paints data or header row r at row y of bounds, one cell per column.
+    /// Public only so TableView can reach it; not for application code.
+    pub func _paint_row(buf: Buffer, bounds: Rect, ws: Vector<int>, r: int, y: int, style: Style):
         pad := this._pad()
         mut x := 0
         repeat this.columns.len() in c:
@@ -504,7 +518,11 @@ pub struct Table:
         end
     end
 
-    func _paint_rule(buf: Buffer, bounds: Rect, ws: Vector<int>, y: int, style: Style):
+    @en "_paint_rule"
+    @fa "رسم خط"
+    /// Paints the rule under the header at row y of bounds. Public only so
+    /// TableView can reach it; not for application code.
+    pub func _paint_rule(buf: Buffer, bounds: Rect, ws: Vector<int>, y: int, style: Style):
         mut total := 0
         repeat ws.len() in i:
             total = total + ws.get(i)
@@ -512,7 +530,258 @@ pub struct Table:
         if total > bounds.width:
             total = bounds.width
         end
-        buf.fill(Rect { x = bounds.x, y = bounds.y + y, width = total, height = 1 }, "─", style)
+        mut glyph := "─"
+        if buf.glyphs == GlyphPolicy.ASCII:
+            glyph = "-"
+        end
+        buf.fill(Rect { x = bounds.x, y = bounds.y + y, width = total, height = 1 }, glyph, style)
+    end
+end
+
+@en "TableView"
+@fa "نمای جدول"
+/// A focusable, vertically scrollable Table. It embeds Table, so columns,
+/// rows, header, rule, styles and every setter are Table's. The header and
+/// rule stay pinned; the data rows scroll under them in a window that starts
+/// at offset. selected is the cursor row, an index into the data rows, or -1
+/// when there are none. Place a TableView in a Fill slot: preferred_size is
+/// Table's full height, so any other slot shows every row and never scrolls.
+/// Up, Down, PageUp, PageDown, Home and End move the cursor and are always
+/// consumed; Enter calls activate. When rows outnumber the window, the last
+/// column of cells holds a scrollbar.
+pub struct TableView:
+    pub use Table
+
+    @en "offset"
+    @fa "جابه‌جایی"
+    /// Index of the first visible data row.
+    pub offset: int = 0
+
+    @en "selected"
+    @fa "انتخاب‌شده"
+    /// The selected data row, or -1 when there are no data rows.
+    pub selected: int = 0
+
+    @en "activate"
+    @fa "فعال‌سازی"
+    /// Called with the selected row when Enter is pressed on a non-empty
+    /// table. Its result is the consumed flag: the default returns false, so
+    /// Enter bubbles on.
+    pub activate: func (int) bool = (row: int): ret false end
+
+    @en "focusable"
+    @fa "تمرکز‌پذیر است"
+    /// Returns true: the screen routes keys to a TableView while it has focus.
+    pub func focusable(): bool:
+        ret true
+    end
+
+    @en "hits"
+    @fa "اصابت‌پذیر است"
+    /// Returns true. A click does not focus the table; the wheel is not
+    /// decoded by std/term yet, so nothing scrolls by mouse.
+    pub func hits(): bool:
+        ret true
+    end
+
+    @en "handle_event"
+    @fa "پردازش رویداد"
+    /// Up and Down move the cursor by one row, PageUp and PageDown by the
+    /// window height, Home and End to the first and last row. The window
+    /// scrolls by the least amount that keeps the cursor visible, and a page
+    /// key moves the window by a page. All six are consumed, even with no
+    /// rows. Enter returns activate(selected), and is not consumed when there
+    /// are no rows. Everything else returns false.
+    pub func handle_event(event: Event): bool:
+        if event.kind != KeyEvent:
+            ret false
+        end
+        n := this._body_count()
+        h := this._body_height(this.bounds().height)
+        this._clamp(h)
+        if event.is_key(term.KeyEnter):
+            if n == 0:
+                ret false
+            end
+            ret this.activate(this.selected)
+        end
+        mut step := h
+        if step < 1:
+            step = 1
+        end
+        if event.is_key(term.KeyUp):
+            this.selected = this.selected - 1
+        else event.is_key(term.KeyDown):
+            this.selected = this.selected + 1
+        else event.is_key(term.KeyPageUp):
+            this.selected = this.selected - step
+            this.offset = this.offset - step
+        else event.is_key(term.KeyPageDown):
+            this.selected = this.selected + step
+            this.offset = this.offset + step
+        else event.is_key(term.KeyHome):
+            this.selected = 0
+            this.offset = 0
+        else event.is_key(term.KeyEnd):
+            this.selected = n - 1
+            this.offset = this._max_offset(h)
+        else:
+            ret false
+        end
+        this._clamp(h)
+        this._ensure_visible(h)
+        ret true
+    end
+
+    @en "render"
+    @fa "ترسیم"
+    /// Draws the pinned header and rule, then data rows offset up to
+    /// offset + window height, each painted only inside bounds. The selected
+    /// row is reversed while the buffer is focused and bold while it is not;
+    /// no row is marked when the selection lies outside the window. The
+    /// scrollbar uses │ and █, or | and # under the ASCII glyph policy.
+    pub func render(buf: Buffer, bounds: Rect):
+        n := this._body_count()
+        h := this._body_height(bounds.height)
+        this._clamp(h)
+        if bounds.is_empty() or this.columns.len() == 0 or this.rows.len() == 0:
+            ret
+        end
+        mut bar := 0
+        if n > h and h > 0:
+            bar = 1
+        end
+        cw := bounds.width - bar
+        inner := Rect { x = bounds.x, y = bounds.y, width = cw, height = bounds.height }
+        ws := this.Table._resolve_widths(cw)
+        hr := this._header_rows()
+        mut first := 0
+        if this.header:
+            first = 1
+            this.Table._paint_row(buf, inner, ws, 0, 0, this.header_style)
+            if bar == 1:
+                buf.fill(Rect { x = bounds.x + cw, y = bounds.y, width = 1, height = 1 }, " ", this.header_style)
+            end
+            if this.rule and bounds.height > 1:
+                this.Table._paint_rule(buf, inner, ws, 1, this.style)
+            end
+        end
+        mut shown := n - this.offset
+        if shown > h:
+            shown = h
+        end
+        mut mark := Style { bold = true }
+        if buf.focused:
+            mark = Style { reverse = true }
+        end
+        repeat shown in k:
+            i := this.offset + k
+            y := bounds.y + hr + k
+            this.Table._paint_row(buf, inner, ws, first + i, hr + k, this.style)
+            if i == this.selected:
+                repeat cw in dx:
+                    c := buf.get(bounds.x + dx, y)
+                    buf.set(bounds.x + dx, y, Cell { ch = c.ch, style = StyleMerge(c.style, mark) })
+                end
+            end
+        end
+        if bar == 1:
+            mut tl := h * h / n
+            if tl < 1:
+                tl = 1
+            end
+            pos := this.offset * (h - tl) / this._max_offset(h)
+            mut track := "│"
+            mut thumb := "█"
+            if buf.glyphs == GlyphPolicy.ASCII:
+                track = "|"
+                thumb = "#"
+            end
+            repeat h in r:
+                mut ch := track
+                if r >= pos and r < pos + tl:
+                    ch = thumb
+                end
+                buf.set(bounds.x + cw, bounds.y + hr + r, Cell { ch = ch, style = this.style })
+            end
+        end
+    end
+
+    // Rows taken by the pinned header and its rule.
+    func _header_rows(): int:
+        mut r := 0
+        if this.header:
+            r = 1
+            if this.rule:
+                r = 2
+            end
+        end
+        ret r
+    end
+
+    // Data rows: every row except the header.
+    func _body_count(): int:
+        mut n := this.rows.len()
+        if this.header:
+            n = n - 1
+        end
+        if n < 0:
+            n = 0
+        end
+        ret n
+    end
+
+    // Rows left for data under the pinned header.
+    func _body_height(total: int): int:
+        h := total - this._header_rows()
+        if h < 0:
+            ret 0
+        end
+        ret h
+    end
+
+    func _max_offset(h: int): int:
+        m := this._body_count() - h
+        if m < 0:
+            ret 0
+        end
+        ret m
+    end
+
+    // Puts selected and offset back in range. Does not scroll to the cursor.
+    func _clamp(h: int):
+        n := this._body_count()
+        if n == 0:
+            this.selected = -1
+            this.offset = 0
+            ret
+        end
+        if this.selected < 0:
+            this.selected = 0
+        end
+        if this.selected > n - 1:
+            this.selected = n - 1
+        end
+        m := this._max_offset(h)
+        if this.offset < 0:
+            this.offset = 0
+        end
+        if this.offset > m:
+            this.offset = m
+        end
+    end
+
+    // The least scroll that shows the cursor.
+    func _ensure_visible(h: int):
+        if h <= 0 or this.selected < 0:
+            ret
+        end
+        if this.selected < this.offset:
+            this.offset = this.selected
+        end
+        if this.selected >= this.offset + h:
+            this.offset = this.selected - h + 1
+        end
     end
 end
 
@@ -547,4 +816,12 @@ end
 /// Creates an empty Table: no columns, no rows, no header, a rule, pad_x 1.
 pub func NewTable(): Table:
     ret Table {}
+end
+
+@en "NewTableView"
+@fa "نمای جدول جدید"
+/// Creates an empty TableView: Table's defaults, offset 0, selected 0, and an
+/// activate that returns false.
+pub func NewTableView(): TableView:
+    ret TableView {}
 end

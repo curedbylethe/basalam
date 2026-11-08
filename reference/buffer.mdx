@@ -44,6 +44,7 @@ pub struct Buffer:
     pub clip: Rect = Rect {}
     pub focused: bool = false
     pub tier: ColorTier = ColorTier.TrueColor
+    pub glyphs: GlyphPolicy = GlyphPolicy.Unicode
     pub force_full: bool = true
 end
 ```
@@ -76,13 +77,37 @@ end
   The colour capability of the terminal this buffer is drawn for. The buffer lowers every cell's `Style` to this tier when it emits a frame, so an `Rgb` foreground becomes the nearest ANSI colour on a 16-colour terminal and no colour at all at `Off`. `Screen.start()` sets it to [`DetectTier`](/reference/color#capability-detection) once, when it takes the terminal; a buffer built by hand with `NewBuffer` keeps the default, so a headless render is always true colour. `resize` preserves it.
 </ResponseField>
 
+<ResponseField name="glyphs" type="GlyphPolicy" default="GlyphPolicy.Unicode">
+  The [glyph policy](#glyph-policy) structural glyphs follow. [`DrawBorder`](/reference/border) reads it. `Screen` seeds it on every frame copy from its own [`glyphs`](/reference/screen#fields); a buffer built by hand keeps `Unicode`. `resize` preserves it.
+</ResponseField>
+
 <ResponseField name="force_full" type="bool" default="true">
   `true` when the next `diff()` must serialize the whole frame instead of only the changed cells. `NewBuffer` and `resize` set it; `commit()` clears it once the front grid has caught up.
 </ResponseField>
 
+### Glyph policy
+
+```salam
+pub enum GlyphPolicy:
+    Unicode
+    ASCII
+end
+
+pub func DetectGlyphPolicy(): GlyphPolicy
+```
+
+`Unicode` is the zero value and draws box-drawing glyphs. `ASCII` restricts structural glyphs to codepoints up to `0x7F`, for terminals without box drawing.
+
+`DetectGlyphPolicy` reads only the environment, caches nothing, and is the only place glyph detection happens. No widget calls it; `Screen.start()` calls it once. The first match wins:
+
+1. `BASALAM_GLYPHS` set to `ascii` gives `ASCII`; set to `unicode` gives `Unicode`.
+2. `TERM` equal to `dumb` gives `ASCII`.
+3. The first non-empty of `LC_ALL`, `LC_CTYPE`, and `LANG` decides: a value that does not contain `UTF-8` or `UTF8` gives `ASCII`, otherwise `Unicode`.
+4. Otherwise `Unicode`.
+
 ### Copies share cells
 
-A `Buffer` reaches `render` by value, but both grids live in `Vector`s, and copies of a `Vector` share storage. The back grid (`cells`) and the front grid (`front`) are shared this way. A widget writing through its copy writes the screen's one back grid, and `commit()` through any copy advances the shared front grid. The scalar fields `clip`, `focused`, `tier`, and `force_full` belong to each copy, which is how the screen gives each widget its own clip without affecting the others.
+A `Buffer` reaches `render` by value, but both grids live in `Vector`s, and copies of a `Vector` share storage. The back grid (`cells`) and the front grid (`front`) are shared this way. A widget writing through its copy writes the screen's one back grid, and `commit()` through any copy advances the shared front grid. The scalar fields `clip`, `focused`, `tier`, `glyphs`, and `force_full` belong to each copy, which is how the screen gives each widget its own clip without affecting the others.
 
 Widgets write only through the back grid; nothing but `commit()` ever touches `front`. Only the owner of the original buffer may `resize`, `flush`, or `free` it, because those replace or release the storage the copies share.
 

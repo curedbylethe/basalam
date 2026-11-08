@@ -1,6 +1,6 @@
 ---
 title: "Input"
-description: "The single-line text-entry widget: value, caret, placeholder, and a reverse-video cursor cell."
+description: "The single-line text-entry widget: value, caret editing, placeholder, a submit callback, and input shaping with max length, filter, and masking."
 keywords:
   - "input"
   - "text entry"
@@ -30,6 +30,11 @@ pub struct Input:
     pub style: Style = StyleDefault
     pub cursor_style: Style = Style { reverse = true }
     pub placeholder_style: Style = Style { fg = BrightBlack }
+    pub max_length: int = 0
+    pub filter: func (str) bool = (candidate: str): ret true end
+    pub masked: bool = false
+    pub mask_glyph: str = "*"
+    pub on_submit: func (str) bool = (value: str): ret true end
 end
 ```
 
@@ -49,9 +54,29 @@ end
   Merged over `style` for the placeholder, so bright black by default.
 </ResponseField>
 
-All three are complete style values. `StyleDefault` on `style` asks for the terminal's default; on `cursor_style` or `placeholder_style` it adds nothing, which is how you ask for a plain cursor or placeholder. There is no `""` sentinel: an empty string used to mean "use the built-in default", and a zero style now means "add no styling".
+<ResponseField name="max_length" type="int" default="0">
+  Maximum value length in glyphs. `0` means unlimited. See [Shaping](#shaping).
+</ResponseField>
 
-The value and caret index are counted in codepoints. The visible window is clipped on display cells, and the caret column is the display width of the visible prefix, so the caret stays aligned after a wide glyph. The index remains codepoint-based, so a combining mark is a separate caret position.
+<ResponseField name="filter" type="func (str) bool" default="accepts everything">
+  Called with the whole candidate value after a proposed insertion. `false` rejects it.
+</ResponseField>
+
+<ResponseField name="masked" type="bool" default="false">
+  Paints every value glyph as `mask_glyph`. Display only.
+</ResponseField>
+
+<ResponseField name="mask_glyph" type="str" default='"*"'>
+  The glyph painted per value glyph while masked. `""` means `"*"`.
+</ResponseField>
+
+<ResponseField name="on_submit" type="func (str) bool" default="returns true">
+  Called on `Enter` with the real value. Its return value is the consumed flag. See [Submit](#submit).
+</ResponseField>
+
+The three style fields (`style`, `cursor_style`, `placeholder_style`) are complete style values. `StyleDefault` on `style` asks for the terminal's default; on `cursor_style` or `placeholder_style` it adds nothing, which is how you ask for a plain cursor or placeholder. There is no `""` sentinel: an empty string used to mean "use the built-in default", and a zero style now means "add no styling".
+
+The value and caret index use codepoints. Rendering uses display cells: a wide glyph takes two columns, while controls, combining marks, and format characters take none. The caret column is the display width of the visible prefix. A combining mark remains a separate caret position.
 
 ### Methods
 
@@ -66,7 +91,7 @@ pub func set_placeholder(p: str)
 | --- | --- |
 | `NewInput(): Input` | Creates an empty input with no placeholder and the default cursor and placeholder styles. |
 | `value(): str` | The current text, without styles. |
-| `set_value(v: str)` | Replaces the value; the caret moves to its end. |
+| `set_value(v: str)` | Replaces the value, cut to `max_length` glyphs when that is set, without calling `filter`. The caret moves to its end. |
 | `set_placeholder(p: str)` | Sets the text shown while the value is empty. |
 
 ## Keyboard
@@ -75,19 +100,55 @@ pub func set_placeholder(p: str)
 
 | Key | Effect | Consumed |
 | --- | --- | --- |
-| A printable character | Appended at the caret; the caret moves after it. | Yes |
-| `Space` | Appends one space at the caret. | Yes |
+| A printable character | Inserted at the caret; the caret moves after it. | Yes |
+| `Space` | Inserts one space at the caret. | Yes |
+| `Left` / `Right` | Moves the caret one codepoint. At the start or end, nothing changes. | Yes |
+| `Home` / `End` | Moves the caret to the start or the end. | Yes |
 | `Backspace` | Deletes the codepoint before the caret. At the start, nothing changes. | Yes |
-| `Enter` | Nothing changes. | Yes |
-| Anything else (`Tab`, `Escape`, arrows, `Home`, `End`) | Nothing. | No — the event bubbles to ancestors |
+| `Delete` | Deletes the codepoint at the caret. At the end, nothing changes. | Yes |
+| `Enter` | Calls `on_submit` with the value. | The callback's result (`true` by default) |
+| Anything else (`Tab`, `Escape`, `Up`, `Down`, `PageUp`, `PageDown`, `Insert`, function keys) | Nothing. | No — the event bubbles to ancestors |
 
 A character typed with `Ctrl` or `Alt` held is not a plain character, so it is not appended and bubbles like any other unhandled key. Mouse, resize, and tick events are ignored and bubble too.
 
-`Enter` is consumed without changing anything, so submitting is the host's job: run your action after dispatch and read `value()`.
+## Submit
+
+`on_submit` is called synchronously from `handle_event` when `Enter` is pressed, with the real value (never the mask, even when `masked`). Its return value decides what happens to the key:
+
+- **`true`** (the default): `Enter` is consumed.
+- **`false`**: `Enter` is not consumed and bubbles to the parent, so a form can pass it on.
+
+The callback runs only for `Enter`, never for other keys, a rejected edit, or focus loss. Input does not clear, blur, or move the caret itself. If the callback calls `set_value` or changes `max_length`, the caret and window are clamped to the new value afterwards; the callback is not called again.
+
+A keymap binding on `Enter` cannot replace `on_submit`: widgets get keys before the keymap, so a focused `Input` handles `Enter` first.
+
+```salam
+mut name := basalam.NewInput()
+name.on_submit = (v: str): ret v != "" end // an empty value lets Enter bubble
+```
+
+## Shaping
+
+`max_length`, `filter`, and `masked` shape what the value can hold and how it paints. The defaults leave the widget unchanged.
+
+- **Order.** A typed glyph is checked against `max_length` first, then passed to `filter`. If either rejects it, the key is still consumed and nothing changes: no bell, no caret move.
+- **Glyph unit.** `max_length` counts glyphs (codepoints), like the caret and `value()`, not display cells.
+- **Insertions only.** `filter` receives the whole candidate value after one proposed insertion. It is never called for `Backspace`, `Delete`, or `set_value`, so a user can always delete their way out of a bad value.
+- **Lowering `max_length`.** Lowering it does not truncate the existing value, because a field write must not delete user input. Typing is rejected until the value is shorter than the new limit.
+- **`set_value`.** A value longer than `max_length` is truncated to its first `max_length` glyphs. `filter` is not called.
+- **Masking.** With `masked`, every glyph paints as the first codepoint of `mask_glyph`. The value, caret, and window are unchanged, and `Home` and `End` work as usual. An empty value shows the placeholder, never the mask.
+- **ASCII.** When the buffer's glyph policy is `GlyphPolicy.ASCII`, a non-ASCII mask glyph paints as `*`.
+
+```salam
+mut pin := basalam.NewInput()
+pin.max_length = 4
+pin.masked = true
+pin.filter = (c: str): ret c.len() == str.CharCount(c) end // ASCII only
+```
 
 ## Cursor
 
-While the buffer reports focus, `Input` marks the caret with one reverse-video cell (`ESC[7m`). The cell covers whatever the row already has at that column — the blank after the last glyph, or the first placeholder character when the value is empty. Its style is `StyleMerge(style, cursor_style)`; the placeholder's grey is dropped from that one cell, so the cursor stays a solid reverse-video block over it.
+While the buffer reports focus, `Input` marks the caret with reverse video (`ESC[7m`). The style covers the glyph under the caret, the blank after the last glyph, or the first placeholder character when the value is empty. A wide glyph keeps both cells together under the cursor style. The style is `StyleMerge(style, cursor_style)`; the placeholder's grey is dropped from the cursor cell.
 
 This is a cell style, not the terminal's own cursor. The screen keeps the real cursor hidden, so the field draws its own. Set `cursor_style` to replace the default reverse:
 
@@ -118,18 +179,24 @@ println in.value() // "" while the field is empty
 
 ## Overflow
 
-Rendering is tail-anchored and stateless: each frame shows the longest suffix that fits the available display cells and recomputes the window from scratch, with no stored scroll offset. The suffix starts at a codepoint boundary. The caret column uses the display width of the visible prefix, while the caret index remains codepoint-based.
+The field shows the full width; no cell is reserved for the caret. `Input` stores the index of the first visible codepoint, `start`, between frames. It moves the window to keep the caret inside the field, measuring the visible prefix in display cells:
 
-The window starts at the first codepoint in the longest suffix whose display width fits `width - focused`. `width` is the field's width in cells. `focused` is `1` while the input has focus — reserving the last cell for the cursor — and `0` otherwise. The caret lands at the display width of the visible prefix. Its index remains codepoint-based, so a combining mark is a separate position.
+```text
+if caret < start:                    start = caret
+while display_width(text[start:caret]) >= width:
+    start += 1 codepoint
+```
 
-Worked example, width `8`, value `"abcdefghij"`:
+The caret column is `display_width(text[start:caret])`, always between `0` and `width - 1`. The window clips text by display cells. Focus does not change the window; an unfocused field draws the same cells without the cursor. When a value shrinks, the window moves back to show the remaining text.
+
+Worked example, width `8`, value `"abcdefghij"` with the caret at the end:
 
 | State | Shown | Cursor column |
 | --- | --- | --- |
-| Focused | `defghij` | `7` |
-| Unfocused | `cdefghij` | — |
+| Focused | `defghij` and a blank | `7` |
+| Unfocused | `defghij` and a blank | — |
 
-With ASCII input, the window starts scrolling one cell earlier while focused: the first cell scrolls when `count` reaches `width`, and, unfocused, when it reaches `width + 1`. Wide codepoints use their two-cell width when the window is chosen.
+Press `Home` and `start` becomes `0`: the row shows `abcdefgh` with the cursor on `a`.
 
 ## Example
 
