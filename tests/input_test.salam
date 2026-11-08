@@ -15,7 +15,7 @@
 
 // Tests for the Input widget: the frozen defaults, the key table
 // (printable and space insert at the caret, Left/Right/Home/End move it,
-// backspace and delete splice a codepoint, enter is consumed, everything
+// backspace and delete splice a codepoint, enter calls on_submit, everything
 // else bubbles), the value getter and setters, the
 // stateful caret-window render (value or placeholder, styled cursor cell,
 // codepoint counts), the overflow window, and the screen-level focus gating
@@ -32,6 +32,12 @@ include "../basalam/basalam.salam"
 
 // Counts filter calls; the filter closure writes it.
 mut filter_calls := 0
+
+// Submit probes: the callbacks write them; `shared` is the input a callback
+// mutates.
+mut submit_calls := 0
+mut submit_arg := "unset"
+mut shared := basalam.NewInput()
 
 // A focusable widget that consumes nothing, so it can steal the focus from
 // the input.
@@ -641,6 +647,97 @@ func test_unicode_codepoint_editing():
     testing.AssertEqStr(e.value(), "")
 end
 
+// ---- Submit -------------------------------------------------------------
+
+func rec_true(v: str): bool:
+    submit_calls = submit_calls + 1
+    submit_arg = v
+    ret true
+end
+
+func rec_false(v: str): bool:
+    submit_calls = submit_calls + 1
+    submit_arg = v
+    ret false
+end
+
+func clear_shared(): bool:
+    submit_calls = submit_calls + 1
+    shared.set_value("")
+    ret false
+end
+
+func test_submit_true():
+    submit_calls = 0
+    mut e := basalam.NewInput()
+    e.on_submit = (v: str): ret rec_true(v) end
+    e.set_value("hi")
+    testing.AssertTrue(e.handle_event(key("\r")))
+    testing.AssertEqInt(submit_calls, 1)
+    testing.AssertEqStr(submit_arg, "hi")
+    testing.AssertEqStr(e.value(), "hi")
+end
+
+func test_submit_false_bubbles():
+    submit_calls = 0
+    mut e := basalam.NewInput()
+    e.on_submit = (v: str): ret rec_false(v) end
+    e.set_value("hi")
+    testing.AssertFalse(e.handle_event(key("\r")))
+    testing.AssertEqInt(submit_calls, 1)
+    testing.AssertEqStr(e.value(), "hi")
+end
+
+func test_submit_empty_value():
+    submit_calls = 0
+    submit_arg = "unset"
+    mut e := basalam.NewInput()
+    e.on_submit = (v: str): ret rec_true(v) end
+    testing.AssertTrue(e.handle_event(key("\r")))
+    testing.AssertEqInt(submit_calls, 1)
+    testing.AssertEqStr(submit_arg, "")
+end
+
+func test_submit_only_on_enter():
+    submit_calls = 0
+    mut e := basalam.NewInput()
+    e.on_submit = (v: str): ret rec_true(v) end
+    e.filter = (c: str): ret false end
+    _ := e.handle_event(key("a"))
+    _ := e.handle_event(special(term.KeyBackspace))
+    _ := e.handle_event(special(term.KeyLeft))
+    _ := e.handle_event(special(term.KeyTab))
+    testing.AssertEqInt(submit_calls, 0)
+end
+
+func test_submit_masked_gets_real_value():
+    submit_arg = "unset"
+    mut e := basalam.NewInput()
+    e.on_submit = (v: str): ret rec_true(v) end
+    e.masked = true
+    e.set_value("secret")
+    _ := e.handle_event(key("\r"))
+    testing.AssertEqStr(submit_arg, "secret")
+end
+
+func test_submit_clears_value_reclamps():
+    submit_calls = 0
+    shared = basalam.NewInput()
+    shared.on_submit = (_v: str): ret clear_shared() end
+    shared.set_value("abcdefghij")
+    mut buf := basalam.NewBuffer(4, 1)
+    defer buf.free()
+    buf.focused = true
+    shared.render(buf, rect(0, 0, 4, 1))
+    testing.AssertFalse(shared.handle_event(key("\r")))
+    testing.AssertEqInt(submit_calls, 1)
+    testing.AssertEqStr(shared.value(), "")
+    shared.render(buf, rect(0, 0, 4, 1))
+    testing.AssertEqInt(cursor_col(buf, 4), 0)
+    testing.AssertTrue(shared.handle_event(key("x")))
+    testing.AssertEqStr(shared.value(), "x")
+end
+
 // ---- Shaping (max length, filter, mask) -------------------------------
 
 func bump(): bool:
@@ -855,6 +952,12 @@ func main:
     test_screen_dispatch_reaches_focused_input()
     test_screen_unfocused_input_does_not_consume()
     test_unicode_codepoint_editing()
+    test_submit_true()
+    test_submit_false_bubbles()
+    test_submit_empty_value()
+    test_submit_only_on_enter()
+    test_submit_masked_gets_real_value()
+    test_submit_clears_value_reclamps()
     test_shaping_defaults()
     test_max_length_rejects_and_consumes()
     test_max_length_counts_glyphs()
