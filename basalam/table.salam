@@ -525,19 +525,6 @@ func _first_line(s: str): str:
     ret s
 end
 
-// Display cells of s.
-// ponytail: _cell_width is shared with separator.salam (same package). Move it
-// to a shared module when a third widget needs it.
-func _text_width(s: str): int:
-    cps := str.CodePoints(s)
-    defer cps.free()
-    mut w := 0
-    repeat cps.len() in i:
-        w = w + _cell_width(cps.get(i))
-    end
-    ret w
-end
-
 // Text fitted to exactly n cells when it is cut: clipped, or clipped to n - 1
 // cells and followed by the ellipsis. Text that already fits is returned as is.
 // A wide glyph that would be split at the edge leaves a blank cell instead.
@@ -550,35 +537,9 @@ func _fit(s: str, w: int, n: int, overflow: CellOverflow): str:
         ret s
     end
     if overflow == CellOverflow.Ellipsis:
-        ret _clip(s, n - 1) + "…"
+        ret _clip_cells(s, n - 1) + "…"
     end
-    ret _clip(s, n)
-end
-
-// The longest prefix of s that fits in n cells, padded with blanks to n.
-func _clip(s: str, n: int): str:
-    cps := str.CodePoints(s)
-    defer cps.free()
-    mut b := str.NewBuilder()
-    defer str.BufFree(b)
-    mut used := 0
-    mut stop := false
-    repeat cps.len() in i:
-        cp := cps.get(i)
-        cw := _cell_width(cp)
-        if not stop:
-            if used + cw <= n:
-                str.BufAppendCp(b, cp)
-                used = used + cw
-            else:
-                stop = true
-            end
-        end
-    end
-    if used < n:
-        str.BufAppend(b, str.Repeat(" ", n - used))
-    end
-    ret str.BufStr(b)
+    ret _clip_cells(s, n)
 end
 
 @en "NewTable"

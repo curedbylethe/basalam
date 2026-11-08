@@ -1,0 +1,76 @@
+/*
+ * basalam - a terminal user interface library for Salam (2026)
+ *
+ *   +-------------------+
+ *   |   B A S A L A M   |
+ *   +-------------------+
+ *
+ * Built on the Salam standard library's std/term package
+ * Salam: https://github.com/SalamLang/Salam
+ *
+ * Repository: https://github.com/curedbylethe/basalam
+ * License: GPL-3.0-or-later
+ *
+ */
+
+/*
+ * The one display-cell width rule. A codepoint occupies two cells when it is
+ * East Asian wide or fullwidth, zero for controls, marks and format characters,
+ * and one otherwise. Buffer writes cells; Text and Table measure strings;
+ * Separator validates its rune with this rule.
+ *
+ * This module does not parse ANSI escapes because callers measure plain text.
+ * It does not segment grapheme clusters or carry full East Asian Width data.
+ */
+
+package basalam
+
+import str
+import unicode
+
+// ponytail: rare wide codepoints outside this table can misalign Text/Buffer; upgrade with generated EastAsianWidth data when needed.
+func _cell_width(cp: int): int:
+    if unicode.IsControl(cp) or unicode.IsMark(cp) or unicode.IsFormat(cp):
+        ret 0
+    end
+    if (cp >= 0x1100 and cp <= 0x115F) or (cp >= 0x2E80 and cp <= 0x303E) or (cp >= 0x3041 and cp <= 0x33FF) or (cp >= 0x3400 and cp <= 0x4DBF) or (cp >= 0x4E00 and cp <= 0x9FFF) or (cp >= 0xA000 and cp <= 0xA4CF) or (cp >= 0xAC00 and cp <= 0xD7A3) or (cp >= 0xF900 and cp <= 0xFAFF) or (cp >= 0xFE30 and cp <= 0xFE4F) or (cp >= 0xFF00 and cp <= 0xFF60) or (cp >= 0xFFE0 and cp <= 0xFFE6) or (cp >= 0x1F300 and cp <= 0x1F64F) or (cp >= 0x1F900 and cp <= 0x1F9FF) or (cp >= 0x20000 and cp <= 0x3FFFD):
+        ret 2
+    end
+    ret 1
+end
+
+func _text_width(s: str): int:
+    cps := str.CodePoints(s)
+    defer cps.free()
+    mut w := 0
+    repeat cps.len() in i:
+        w = w + _cell_width(cps.get(i))
+    end
+    ret w
+end
+
+// The longest prefix that fits in n cells, padded with blanks to n.
+func _clip_cells(s: str, n: int): str:
+    cps := str.CodePoints(s)
+    defer cps.free()
+    mut b := str.NewBuilder()
+    defer str.BufFree(b)
+    mut used := 0
+    mut stop := false
+    repeat cps.len() in i:
+        cp := cps.get(i)
+        cw := _cell_width(cp)
+        if not stop:
+            if used + cw <= n:
+                str.BufAppendCp(b, cp)
+                used = used + cw
+            else:
+                stop = true
+            end
+        end
+    end
+    if used < n:
+        str.BufAppend(b, str.Repeat(" ", n - used))
+    end
+    ret str.BufStr(b)
+end
