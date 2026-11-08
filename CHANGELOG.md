@@ -34,6 +34,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `Buffer.ansi()` and `Buffer.diff()` append each SGR piece directly into the
+  frame builder instead of building an intermediate style string and copying
+  it. Rendered bytes and `SgrBuilds()` counts are unchanged; a style transition
+  now allocates only its SGR pieces. (CUR-616)
 - **Breaking:** `Text`, `Table`, the `Buffer` and the block widgets measure display
   cells instead of codepoints: an East Asian wide or fullwidth character takes two
   columns, a combining mark or zero-width character takes none. `MeasureText` and
