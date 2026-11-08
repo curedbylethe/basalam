@@ -13,7 +13,8 @@
  *
  */
 
-// Benchmark, not a newcomer program. Headless 200x60 frame timing.
+// Benchmark, not a newcomer program. Raw serializer growth and headless
+// 200x60 frame timing.
 // Never calls start(), loop(), or next_event(). present() flushes only
 // when attached; this process never attaches, so the run is silent.
 // A frame mutates, marks that change, then does what flush() does minus
@@ -118,6 +119,81 @@ func report(mode: str, ms: f64, bytes: int):
         println "peak_bytes " + mem.PeakBytes()
     end
 end
+func fill_serializer_runs(buf &: basalam.Buffer, swap: bool):
+    if swap:
+        buf.fill(basalam.Rect { x = 0, y = 0, width = 80, height = 12 }, "x", basalam.Style { reverse = true })
+        buf.fill(basalam.Rect { x = 0, y = 12, width = 80, height = 12 }, "x", basalam.Style { bold = true })
+    else:
+        buf.fill(basalam.Rect { x = 0, y = 0, width = 80, height = 12 }, "x", basalam.Style { bold = true })
+        buf.fill(basalam.Rect { x = 0, y = 12, width = 80, height = 12 }, "x", basalam.Style { reverse = true })
+    end
+end
+func report_serializer(mode: str, ms: f64, bytes: int, sgr_delta: int, allocs_delta: i64, frees_delta: i64, live_bytes_delta: i64, peak_bytes: i64):
+    println "mode " + mode
+    println "frames " + Measured
+    println "total_ms " + conv.FormatFloatPrec(ms, 3)
+    println "ms_per_frame " + conv.FormatFloatPrec(ms / (Measured as f64), 4)
+    println "bytes_per_frame " + (bytes / Measured)
+    println "sgr_builds_delta " + sgr_delta
+    println "sgr_builds_per_frame " + (sgr_delta / Measured)
+    if mem.IsMemDebug():
+        println "allocs_delta " + allocs_delta
+        println "frees_delta " + frees_delta
+        println "live_bytes_delta " + live_bytes_delta
+        println "peak_bytes " + peak_bytes
+    end
+end
+func serializer_frame(buf &: basalam.Buffer, diff: bool, swap: bool): int:
+    if diff:
+        buf.clear()
+        fill_serializer_runs(buf, swap)
+        out := buf.diff()
+        buf.commit()
+        ret out.len()
+    end
+    ret buf.ansi().len()
+end
+func probe_serializer(mode: str, diff: bool):
+    mut buf := basalam.NewBuffer(80, 24)
+    if not diff:
+        fill_serializer_runs(buf, false)
+    end
+    mut swap := false
+    repeat Warmup:
+        _ := serializer_frame(buf, diff, swap)
+        swap = not swap
+    end
+
+    sgr_before := basalam.SgrBuilds()
+    mut allocs_before := 0 as i64
+    mut frees_before := 0 as i64
+    mut live_bytes_before := 0 as i64
+    if mem.IsMemDebug():
+        allocs_before = mem.AllocCount()
+        frees_before = mem.FreeCount()
+        live_bytes_before = mem.LiveBytes()
+    end
+    mut bytes := 0
+    t0 := time.NowNanos()
+    repeat Measured:
+        bytes = bytes + serializer_frame(buf, diff, swap)
+        swap = not swap
+    end
+    ms := time.ElapsedMs(t0, time.NowNanos())
+    sgr_delta := basalam.SgrBuilds() - sgr_before
+    mut allocs_delta := 0 as i64
+    mut frees_delta := 0 as i64
+    mut live_bytes_delta := 0 as i64
+    mut peak_bytes := 0 as i64
+    if mem.IsMemDebug():
+        allocs_delta = mem.AllocCount() - allocs_before
+        frees_delta = mem.FreeCount() - frees_before
+        live_bytes_delta = mem.LiveBytes() - live_bytes_before
+        peak_bytes = mem.PeakBytes()
+    end
+    report_serializer(mode, ms, bytes, sgr_delta, allocs_delta, frees_delta, live_bytes_delta, peak_bytes)
+    buf.free()
+end
 func run_mode(screen &: basalam.Screen, mode: str, small: bool):
     repeat Warmup in i:
         _ := frame(screen, i, small)
@@ -135,6 +211,9 @@ func add_child(root &: basalam.Column, kids &: Vector<dyn basalam.Widget>, w: dy
     kids.push(w)
 end
 func main:
+    probe_serializer("serializer-ansi-80x24", false)
+    probe_serializer("serializer-diff-80x24", true)
+    println ""
     texts.push(heap("0 text-header ......................"))
     texts.push(heap("0 text-body ........................"))
     texts.push(heap("0 text-mid ........................."))
