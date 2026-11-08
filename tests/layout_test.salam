@@ -1812,6 +1812,56 @@ func test_panel_none_border_pref():
     checkRect(p.slot.get(0).child.bounds(), 0, 0, 4, 2)
 end
 
+func test_panel_nested_row_measured_pref():
+    // Two rings, each insetting once: natural width 4 + 2 + 2 = 8, height
+    // 2 + 2 + 2 = 6. Stretch fills the 6-tall row.
+    mut inner := basalam.Panel { border = basalam.BorderStyle.Single }
+    inner.add(sizer(4, 2))
+    mut outer := basalam.Panel { border = basalam.BorderStyle.Single }
+    outer.add(inner)
+    row := basalam.NewRow()
+    od := outer as dyn basalam.Widget
+    i := row.add(od)
+    row.set_width(i, prefSize())
+    row.set_bounds(rect(0, 0, 20, 6))
+    checkRect(od.bounds(), 0, 0, 8, 6)
+    ib := outer.slot.get(0).child
+    checkRect(ib.bounds(), 1, 1, 6, 4)
+    checkRect(inner.slot.get(0).child.bounds(), 2, 2, 4, 2)
+end
+
+func test_panel_nested_measure_budget():
+    // preferred_size(5): the inner Panel is asked for 5 - 2 = 3, the leaf for
+    // 3 - 2 = 1. The leaf's 1 plus two rings gives back 5.
+    calls := mem.AllocateZeroed((9 as u64) * sizeof(int)) as int*
+    mut inner := basalam.Panel { border = basalam.BorderStyle.Single }
+    inner.add(CountSizer { w = 1, h = 1, calls = calls } as dyn basalam.Widget)
+    mut outer := basalam.Panel { border = basalam.BorderStyle.Single }
+    outer.add(inner)
+    got := outer.preferred_size(5)
+    testing.AssertEqInt(got.width, 5)
+    testing.AssertTrue(calls[0] >= 1)
+    testing.AssertEqInt(calls[1], 1)
+end
+
+func test_panel_nested_outer_none():
+    // The outer None adds no ring: the inner Panel takes the outer's whole
+    // rect and only the inner ring insets the leaf, once.
+    mut inner := basalam.Panel { border = basalam.BorderStyle.Single }
+    inner.add(sizer(4, 2))
+    mut outer := basalam.Panel { border = basalam.BorderStyle.None }
+    outer.add(inner)
+    row := basalam.NewRow()
+    od := outer as dyn basalam.Widget
+    i := row.add(od)
+    row.set_width(i, prefSize())
+    row.set_align(i, basalam.CrossAlign.Stretch, basalam.CrossAlign.Start)
+    row.set_bounds(rect(0, 0, 20, 6))
+    checkRect(od.bounds(), 0, 0, 6, 4)
+    checkRect(outer.slot.get(0).child.bounds(), 0, 0, 6, 4)
+    checkRect(inner.slot.get(0).child.bounds(), 1, 1, 4, 2)
+end
+
 // ---- AC6: set_bounds contract and paint smoke ----------------------------
 
 func test_normal_form_outputs():
@@ -2233,6 +2283,9 @@ func main:
     test_panel_container_child_measured_pref()
     test_panel_unmeasurable_pref_is_fill()
     test_panel_none_border_pref()
+    test_panel_nested_row_measured_pref()
+    test_panel_nested_measure_budget()
+    test_panel_nested_outer_none()
     test_normal_form_outputs()
     test_draw_containers_smoke()
     test_row_gap_four_fill()
