@@ -121,11 +121,11 @@ func report(mode: str, ms: f64, bytes: int):
 end
 func fill_serializer_runs(buf &: basalam.Buffer, swap: bool):
     if swap:
-        buf.fill(basalam.Rect { x = 0, y = 0, width = 80, height = 12 }, "x", basalam.Style { reverse = true })
-        buf.fill(basalam.Rect { x = 0, y = 12, width = 80, height = 12 }, "x", basalam.Style { bold = true })
+        buf.fill(basalam.Rect { x = 0, y = 0, width = 80, height = 12 }, "x", basalam.Style { reverse = true, underline = true })
+        buf.fill(basalam.Rect { x = 0, y = 12, width = 80, height = 12 }, "x", basalam.Style { bold = true, italic = true })
     else:
-        buf.fill(basalam.Rect { x = 0, y = 0, width = 80, height = 12 }, "x", basalam.Style { bold = true })
-        buf.fill(basalam.Rect { x = 0, y = 12, width = 80, height = 12 }, "x", basalam.Style { reverse = true })
+        buf.fill(basalam.Rect { x = 0, y = 0, width = 80, height = 12 }, "x", basalam.Style { bold = true, italic = true })
+        buf.fill(basalam.Rect { x = 0, y = 12, width = 80, height = 12 }, "x", basalam.Style { reverse = true, underline = true })
     end
 end
 func report_serializer(mode: str, ms: f64, bytes: int, sgr_delta: int, allocs_delta: i64, frees_delta: i64, live_bytes_delta: i64, peak_bytes: i64):
