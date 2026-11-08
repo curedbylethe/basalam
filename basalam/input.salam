@@ -20,8 +20,7 @@
  * focusable, so the screen routes keyboard events to it; its handle_event
  * inserts printable characters and spaces at the caret, moves the caret with
  * Left/Right/Home/End, deletes with Backspace (before the caret) and Delete
- * (at the caret), and consumes enter without changing anything (submitting
- * belongs to the host, which reads value()).
+ * (at the caret), and calls on_submit on enter.
  *
  * Cells, not bytes. The value and the caret are counted in codepoints, using
  * str.Chars/CharCount/CharSubstr, so a multibyte glyph is one cell and one
@@ -38,8 +37,12 @@
  *
  * Shaping: max_length (glyphs), an insertion filter and display-only masking.
  *
+ * Submit: on_submit gets the real value on enter and its bool is the consumed
+ * flag; false lets enter bubble. It is a field because the screen gives
+ * widgets keys before the keymap, so a keymap binding on enter never fires.
+ *
  * This file deliberately has no layout measurement, no selection or paste,
- * no submit callback, and no Buffer cursor API. The
+ * and no Buffer cursor API. The
  * fields are complete Style values: StyleDefault on `style` asks for the
  * terminal's default, and StyleDefault on `cursor_style` or
  * `placeholder_style` adds nothing. The cursor and placeholder compose over
@@ -114,6 +117,14 @@ pub struct Input:
     /// mask glyph paints as "*".
     pub mask_glyph: str = "*"
 
+    @en "on_submit"
+    @fa "هنگام ثبت"
+    /// Called synchronously on Enter with the real value, never the mask.
+    /// Returning true consumes the key; false lets it bubble to the parent.
+    /// The default returns true. After it returns, the caret and window are
+    /// clamped to the value, in case it changed the value.
+    pub on_submit: func (str) bool = (value: str): ret true end
+
     content: str = ""
     caret: int = 0
     window_start: int = 0
@@ -131,8 +142,8 @@ pub struct Input:
     /// Reacts to a key press. A printable character or space is inserted at
     /// the caret; Left, Right, Home and End move it (all consumed, even when
     /// it cannot move); backspace drops the codepoint before the caret and
-    /// delete the one at it (nothing at the start or end); enter is consumed
-    /// without changing anything. Other events and keys are not consumed, so
+    /// delete the one at it (nothing at the start or end); enter calls on_submit
+    /// and returns its result. Other events and keys are not consumed, so
     /// they bubble on.
     pub func handle_event(event: Event): bool:
         if event.kind != KeyEvent:
@@ -182,7 +193,16 @@ pub struct Input:
             ret true
         end
         if code == term.KeyEnter:
-            ret true
+            consumed := this.on_submit(this.content)
+            // The callback may have replaced the value.
+            n := str.CharCount(this.content)
+            if this.caret > n:
+                this.caret = n
+            end
+            if this.window_start > this.caret:
+                this.window_start = this.caret
+            end
+            ret consumed
         end
         ret false
     end

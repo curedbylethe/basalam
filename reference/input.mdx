@@ -34,6 +34,7 @@ pub struct Input:
     pub filter: func (str) bool = (candidate: str): ret true end
     pub masked: bool = false
     pub mask_glyph: str = "*"
+    pub on_submit: func (str) bool = (value: str): ret true end
 end
 ```
 
@@ -69,6 +70,10 @@ end
   The glyph painted per value glyph while masked. `""` means `"*"`.
 </ResponseField>
 
+<ResponseField name="on_submit" type="func (str) bool" default="returns true">
+  Called on `Enter` with the real value. Its return value is the consumed flag. See [Submit](#submit).
+</ResponseField>
+
 The first three are complete style values. `StyleDefault` on `style` asks for the terminal's default; on `cursor_style` or `placeholder_style` it adds nothing, which is how you ask for a plain cursor or placeholder. There is no `""` sentinel: an empty string used to mean "use the built-in default", and a zero style now means "add no styling".
 
 The value and the caret are counted in codepoints, so a multibyte glyph is one cell and one caret step. The caret is always an index between `0` and the value's length. It moves with the arrow keys, `Home`, and `End`, and edits happen at it.
@@ -101,12 +106,26 @@ pub func set_placeholder(p: str)
 | `Home` / `End` | Moves the caret to the start or the end. | Yes |
 | `Backspace` | Deletes the codepoint before the caret. At the start, nothing changes. | Yes |
 | `Delete` | Deletes the codepoint at the caret. At the end, nothing changes. | Yes |
-| `Enter` | Nothing changes. | Yes |
+| `Enter` | Calls `on_submit` with the value. | The callback's result (`true` by default) |
 | Anything else (`Tab`, `Escape`, `Up`, `Down`, `PageUp`, `PageDown`, `Insert`, function keys) | Nothing. | No — the event bubbles to ancestors |
 
 A character typed with `Ctrl` or `Alt` held is not a plain character, so it is not appended and bubbles like any other unhandled key. Mouse, resize, and tick events are ignored and bubble too.
 
-`Enter` is consumed without changing anything, so submitting is the host's job: run your action after dispatch and read `value()`.
+## Submit
+
+`on_submit` is called synchronously from `handle_event` when `Enter` is pressed, with the real value (never the mask, even when `masked`). Its return value decides what happens to the key:
+
+- **`true`** (the default): `Enter` is consumed.
+- **`false`**: `Enter` is not consumed and bubbles to the parent, so a form can pass it on.
+
+The callback runs only for `Enter`, never for other keys, a rejected edit, or focus loss. Input does not clear, blur, or move the caret itself. If the callback calls `set_value` or changes `max_length`, the caret and window are clamped to the new value afterwards; the callback is not called again.
+
+A keymap binding on `Enter` cannot replace `on_submit`: widgets get keys before the keymap, so a focused `Input` handles `Enter` first.
+
+```salam
+mut name := basalam.NewInput()
+name.on_submit = (v: str): ret v == "" end // an empty value lets Enter bubble
+```
 
 ## Shaping
 
