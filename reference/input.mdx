@@ -30,6 +30,10 @@ pub struct Input:
     pub style: Style = StyleDefault
     pub cursor_style: Style = Style { reverse = true }
     pub placeholder_style: Style = Style { fg = BrightBlack }
+    pub max_length: int = 0
+    pub filter: func (str) bool = (candidate: str): ret true end
+    pub masked: bool = false
+    pub mask_glyph: str = "*"
 end
 ```
 
@@ -49,7 +53,23 @@ end
   Merged over `style` for the placeholder, so bright black by default.
 </ResponseField>
 
-All three are complete style values. `StyleDefault` on `style` asks for the terminal's default; on `cursor_style` or `placeholder_style` it adds nothing, which is how you ask for a plain cursor or placeholder. There is no `""` sentinel: an empty string used to mean "use the built-in default", and a zero style now means "add no styling".
+<ResponseField name="max_length" type="int" default="0">
+  Maximum value length in glyphs. `0` means unlimited. See [Shaping](#shaping).
+</ResponseField>
+
+<ResponseField name="filter" type="func (str) bool" default="accepts everything">
+  Called with the whole candidate value after a proposed insertion. `false` rejects it.
+</ResponseField>
+
+<ResponseField name="masked" type="bool" default="false">
+  Paints every value glyph as `mask_glyph`. Display only.
+</ResponseField>
+
+<ResponseField name="mask_glyph" type="str" default='"*"'>
+  The glyph painted per value glyph while masked. `""` means `"*"`.
+</ResponseField>
+
+The first three are complete style values. `StyleDefault` on `style` asks for the terminal's default; on `cursor_style` or `placeholder_style` it adds nothing, which is how you ask for a plain cursor or placeholder. There is no `""` sentinel: an empty string used to mean "use the built-in default", and a zero style now means "add no styling".
 
 The value and the caret are counted in codepoints, so a multibyte glyph is one cell and one caret step. The caret is always an index between `0` and the value's length. It moves with the arrow keys, `Home`, and `End`, and edits happen at it.
 
@@ -66,7 +86,7 @@ pub func set_placeholder(p: str)
 | --- | --- |
 | `NewInput(): Input` | Creates an empty input with no placeholder and the default cursor and placeholder styles. |
 | `value(): str` | The current text, without styles. |
-| `set_value(v: str)` | Replaces the value; the caret moves to its end. |
+| `set_value(v: str)` | Replaces the value, cut to `max_length` glyphs when that is set, without calling `filter`. The caret moves to its end. |
 | `set_placeholder(p: str)` | Sets the text shown while the value is empty. |
 
 ## Keyboard
@@ -87,6 +107,24 @@ pub func set_placeholder(p: str)
 A character typed with `Ctrl` or `Alt` held is not a plain character, so it is not appended and bubbles like any other unhandled key. Mouse, resize, and tick events are ignored and bubble too.
 
 `Enter` is consumed without changing anything, so submitting is the host's job: run your action after dispatch and read `value()`.
+
+## Shaping
+
+`max_length`, `filter`, and `masked` shape what the value can hold and how it paints. The defaults leave the widget unchanged.
+
+- **Order.** A typed glyph is checked against `max_length` first, then passed to `filter`. If either rejects it, the key is still consumed and nothing changes: no bell, no caret move.
+- **Glyph unit.** `max_length` counts glyphs (codepoints), like the caret and `value()`, not display cells.
+- **Insertions only.** `filter` receives the whole candidate value after one proposed insertion. It is never called for `Backspace`, `Delete`, or `set_value`, so a user can always delete their way out of a bad value.
+- **`set_value`.** A value longer than `max_length` is truncated to its first `max_length` glyphs. `filter` is not called.
+- **Masking.** With `masked`, every glyph paints as the first codepoint of `mask_glyph`. The value, caret, and window are unchanged, and `Home` and `End` work as usual. An empty value shows the placeholder, never the mask.
+- **ASCII.** When the buffer's glyph policy is `GlyphPolicy.ASCII`, a non-ASCII mask glyph paints as `*`.
+
+```salam
+mut pin := basalam.NewInput()
+pin.max_length = 4
+pin.masked = true
+pin.filter = (c: str): ret c.len() == str.CharCount(c) end // ASCII only
+```
 
 ## Cursor
 
