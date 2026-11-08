@@ -22,9 +22,8 @@
  * caret on backspace, and consumes enter without changing anything
  * (submitting belongs to the host, which reads value()).
  *
- * Cells, not bytes. The value and the caret are counted in codepoints, using
- * str.Chars/CharCount/CharSubstr, so a multibyte glyph is one cell and one
- * caret step.
+ * The value and caret index use codepoints. Rendering uses display cells: a
+ * wide glyph takes two columns, and the caret remains one codepoint step.
  *
  * Rendering is tail-anchored and stateless: each frame it shows the last
  * cells that fit, reserving the final cell for the cursor while focused, and
@@ -139,6 +138,7 @@ pub struct Input:
     /// Replaces the value; the caret moves to its end.
     pub func set_value(v: str):
         this.content = v
+        // shortcut: caret index is codepoint-based; combining marks are separate positions. Upgrade with CUR-448's editing model.
         this.caret = str.CharCount(v)
     end
 
@@ -168,18 +168,26 @@ pub struct Input:
             f = 1
         end
         avail := w - f
-        mut start := 0
-        if count > avail:
-            start = count - avail
+        chars := str.Chars(this.content)
+        defer chars.free()
+        mut start := count
+        mut used := 0
+        until 0 < start:
+            cw := _char_width(chars.get(start - 1))
+            if used + cw > avail:
+                break
+            end
+            used = used + cw
+            start -= 1
         end
         if count == 0 and this.placeholder != "":
             ps := StyleMerge(this.style, this.placeholder_style)
-            buf.put_str(bounds.x, bounds.y, str.CharSubstr(this.placeholder, 0, w), ps)
+            buf.put_str(bounds.x, bounds.y, _take_cells(this.placeholder, w), ps)
         else:
             buf.put_str(bounds.x, bounds.y, str.CharSubstr(this.content, start, count - start), this.style)
         end
         if buf.focused:
-            col := count - start
+            col := _text_width(str.CharSubstr(this.content, start, this.caret - start))
             c := buf.get(bounds.x + col, bounds.y)
             buf.set(bounds.x + col, bounds.y, Cell { ch = c.ch, style = StyleMerge(this.style, this.cursor_style) })
         end

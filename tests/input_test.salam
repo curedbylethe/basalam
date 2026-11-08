@@ -316,6 +316,20 @@ func test_render_scroll_starts_at_boundary():
     testing.AssertEqStr(b.row_text(0), "bcdefghi")
 end
 
+func test_render_wide_value_and_caret():
+    mut e := basalam.NewInput()
+    e.set_value("中文ab")
+    mut b := basalam.NewBuffer(6, 1)
+    defer b.free()
+    b.focused = true
+    e.render(b, rect(0, 0, 6, 1))
+    testing.AssertEqStr(b.row_text(0), "文ab  ")
+    testing.AssertEqStr(b.get(0, 0).ch, "文")
+    testing.AssertEqStr(b.get(1, 0).ch, "")
+    testing.AssertEqStr(b.get(4, 0).ch, " ")
+    testing.AssertTrue(basalam.StyleEq(b.get(4, 0).style, basalam.Style { reverse = true }))
+end
+
 func test_render_width5_focused():
     mut e := basalam.NewInput()
     e.set_value("hello")
@@ -447,6 +461,7 @@ func main:
     test_cursor_tracks_value_and_backspace()
     test_render_overflow_wide_value()
     test_render_scroll_starts_at_boundary()
+    test_render_wide_value_and_caret()
     test_render_width5_focused()
     test_render_width1()
     test_render_width0_draws_nothing()

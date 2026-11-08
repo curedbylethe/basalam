@@ -97,6 +97,15 @@ func test_title_truncates_long_name():
     b.free()
 end
 
+func test_title_clips_on_cells():
+    mut b := basalam.NewBuffer(10, 2)
+    defer b.free()
+    basalam.DrawBorder(b, basalam.Rect { x = 0, y = 0, width = 10, height = 2 }, basalam.BorderStyle.Single, basalam.Style {}, "标题长")
+    testing.AssertEqStr(b.row_text(0), "┌─ 标题 ─┐")
+    testing.AssertEqInt(b.width, 10)
+    testing.AssertEqStr(b.get(9, 0).ch, "┐")
+end
+
 func test_title_one_char_at_minimum_width():
     mut b := basalam.NewBuffer(6, 2)
     basalam.DrawBorder(b, basalam.Rect { x = 0, y = 0, width = 6, height = 2 }, basalam.BorderStyle.Single, basalam.Style {}, "Files")
@@ -277,6 +286,7 @@ func main:
     test_title_exact_fit()
     test_title_truncates_right()
     test_title_truncates_long_name()
+    test_title_clips_on_cells()
     test_title_one_char_at_minimum_width()
     test_title_dropped_below_minimum_width()
     test_title_blank_is_absent()

@@ -39,7 +39,6 @@
 
 package basalam
 
-import str
 import term
 
 @en "Button"
@@ -159,13 +158,13 @@ pub struct Button:
             buf.put_str(bounds.x + w - 1, bounds.y, "]", st)
         end
         avail := w - 2
-        mut pad := (avail - str.CharCount(this.label)) / 2
+        mut pad := (avail - _text_width(this.label)) / 2
         if pad < 0:
             pad = 0
         end
         room := avail - pad
         if room > 0:
-            buf.put_str(bounds.x + 1 + pad, bounds.y, str.CharSubstr(this.label, 0, room), st)
+            buf.put_str(bounds.x + 1 + pad, bounds.y, _take_cells(this.label, room), st)
         end
     end
 end

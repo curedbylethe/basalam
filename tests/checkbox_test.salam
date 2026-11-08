@@ -151,6 +151,17 @@ func test_render_cb10_empty_label():
     testing.AssertEqStr(row_of(e, 5, 5, false), "[x]  ")
 end
 
+func test_render_wide_label():
+    mut e := basalam.NewCheckbox("中文字", true)
+    mut b := basalam.NewBuffer(6, 1)
+    defer b.free()
+    e.render(b, rect(0, 0, 6, 1))
+    testing.AssertEqStr(b.row_text(0), "[x] 中")
+    testing.AssertEqStr(b.get(0, 0).ch, "[")
+    testing.AssertEqStr(b.get(4, 0).ch, "中")
+    testing.AssertEqStr(b.get(5, 0).ch, "")
+end
+
 // ---- Render: styled rows (CB02-CB04) ----------------------------------
 
 func test_render_cb02_checked_focused_bold():
@@ -387,6 +398,7 @@ func main:
     test_render_cb08_one_cell()
     test_render_cb09_zero_width()
     test_render_cb10_empty_label()
+    test_render_wide_label()
     test_render_cb02_checked_focused_bold()
     test_render_cb03_checked_disabled_dim()
     test_render_disabled_drops_caller_bold()
