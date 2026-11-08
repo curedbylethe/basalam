@@ -846,6 +846,7 @@ pub struct Screen:
     pub func set_glyphs(policy: GlyphPolicy):
         this.glyphs = policy
         this.glyphs_explicit = true
+        this.dirty = true
     end
 
     @en "start"

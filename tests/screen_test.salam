@@ -35,6 +35,9 @@ mut ticks := 0
 // row text is that order: each widget writes its mark and steps the column.
 mut paint_at := 0
 
+// Glyph policy GlyphProbe last saw.
+mut seen_glyphs := basalam.GlyphPolicy.Unicode
+
 // Draws one mark at paint_at. Used to read Screen paint order off the buffer.
 struct ZBox:
     pub use basalam.BaseWidget
@@ -53,6 +56,15 @@ struct ZBox:
     pub func render(buf: basalam.Buffer, bounds: basalam.Rect):
         buf.put_str(paint_at, bounds.y, this.mark, basalam.StyleDefault)
         paint_at = paint_at + 1
+    end
+end
+
+// Records the glyph policy its render buffer carries.
+struct GlyphProbe:
+    pub use basalam.BaseWidget
+
+    pub func render(buf: basalam.Buffer, _bounds: basalam.Rect):
+        seen_glyphs = buf.glyphs
     end
 end
 
@@ -844,6 +856,24 @@ func test_raise_subtree_ignores_unknown_ids():
     testing.AssertEqInt(s.focused_id(), 1)
 end
 
+// Screen seeds the glyph policy into the render buffer on both the full and
+// the region draw path. set_glyphs after the first draw forces a repaint.
+func test_set_glyphs_reaches_render():
+    mut s := basalam.NewScreen(basalam.BaseWidget {}, 4, 1)
+    defer s.close()
+    id := s.add(basalam.RootId, GlyphProbe {})
+    s.widget(id).set_bounds(rect(0, 0, 1, 1))
+    s.present()
+    testing.AssertTrue(seen_glyphs == basalam.GlyphPolicy.Unicode)
+    s.set_glyphs(basalam.GlyphPolicy.ASCII)
+    s.present()
+    testing.AssertTrue(seen_glyphs == basalam.GlyphPolicy.ASCII)
+    seen_glyphs = basalam.GlyphPolicy.Unicode
+    s.invalidate(id)
+    s.present()
+    testing.AssertTrue(seen_glyphs == basalam.GlyphPolicy.ASCII)
+end
+
 func main:
     test_new_screen_fits_root()
     test_events_flow_through_channel()
@@ -871,5 +901,6 @@ func main:
     test_focus_change_repaints_old_and_new_only()
     test_too_many_regions_repaint_everything()
     test_wide_regions_repaint_everything()
+    test_set_glyphs_reaches_render()
     ret testing.Summary()
 end
