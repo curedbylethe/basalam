@@ -1831,17 +1831,18 @@ func test_panel_nested_row_measured_pref():
 end
 
 func test_panel_nested_measure_budget():
-    // preferred_size(5): the inner Panel is asked for 5 - 2 = 3, the leaf for
-    // 3 - 2 = 1. The leaf's 1 plus two rings gives back 5.
+    // preferred_size(6): the inner Panel is asked for 6 - 2 = 4, the leaf for
+    // 4 - 2 = 2. A double inset would give the leaf 1. The leaf's width 1
+    // plus two rings gives back 5. calls[0] is the count, calls[1] the budget.
     calls := mem.AllocateZeroed((9 as u64) * sizeof(int)) as int*
     mut inner := basalam.Panel { border = basalam.BorderStyle.Single }
     inner.add(CountSizer { w = 1, h = 1, calls = calls } as dyn basalam.Widget)
     mut outer := basalam.Panel { border = basalam.BorderStyle.Single }
     outer.add(inner)
-    got := outer.preferred_size(5)
+    got := outer.preferred_size(6)
+    testing.AssertEqInt(calls[0], 1)
+    testing.AssertEqInt(calls[1], 2)
     testing.AssertEqInt(got.width, 5)
-    testing.AssertTrue(calls[0] >= 1)
-    testing.AssertEqInt(calls[1], 1)
 end
 
 func test_panel_nested_outer_none():
