@@ -1,0 +1,40 @@
+---
+title: "Persian API names"
+description: "Every name has a Persian alias for generated documentation. Learn the annotation order, what @fa does not do, and where the naming standard lives."
+keywords:
+  - "persian"
+  - "farsi"
+  - "localization"
+  - "naming"
+  - "annotations"
+---
+
+Every declaration in basalam carries two names: an English `@en` name and a Persian `@fa` alias. `salam doc --lang=fa` uses the alias to generate a Persian API reference.
+
+## Annotation order
+
+Put `@fa` directly under `@en`, and the doc comment under both. The order matters, because `salam doc` reads the annotation pair above the declaration and the doc comment below it.
+
+```salam
+@en "Rect"
+@fa "مستطیل"
+/// An axis-aligned, half-open rectangle of terminal cells.
+pub struct Rect:
+```
+
+## What an alias does not do
+
+`@en` and `@fa` are documentation metadata. They do not create identifiers. This program does not compile:
+
+```salam
+r.width = 3   // correct
+r.عرض = 3     // error[E016]: no field 'عرض' in struct 'Rect'
+```
+
+Write English names in code and let the generated docs show the Persian name.
+
+## Naming standard
+
+The [Persian API names inventory](https://github.com/curedbylethe/basalam/blob/main/basalam-api-glossary-fa.md) holds the naming standard, the canonical terms, the steps for adding a name, and the complete list of every alias.
+
+`make fa-aliases` runs as part of `make check` and needs no compiler. It rejects a missing alias, a blank alias, an orphan `@fa`, and a glossary whose row count no longer matches the source.

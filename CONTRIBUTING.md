@@ -28,7 +28,8 @@ commit. By taking part you agree to follow the
 | `make docs-examples`     | Type-checks every complete example in the documentation                                                         |
 | `make run`               | Builds and runs the demo example                                                                                |
 | `make format`            | Formats all Salam sources in place                                                                              |
-| `make check`             | Format check, strict build and examples, tests, doc examples; CI adds `test-llvm` and the docs job               |
+| `make fa-aliases`        | Fails when a name has no Persian alias; no compiler needed                                                      |
+| `make check`             | Format check, Persian names, strict build and examples, tests, doc examples; CI adds `test-llvm` and the docs job |
 | `make release-check`     | Checks `Version`, `salam.toml`, changelog headings, and links against [RELEASING.md](RELEASING.md)              |
 | `make docs`              | Previews the documentation site (`npm i -g mint@4.2.988` first)                                                 |
 | `make docs-check`        | Validates the documentation site and its links                                                                  |
@@ -112,12 +113,25 @@ A change is not finished until it is documented:
 - Every file starts with the project header comment block, followed by a
   module comment that explains why the file exists, how it fits with its
   neighbors, and what it deliberately does not do.
-- Every `pub` declaration carries an `@en "Name"` annotation (the English
-  name alias the Salam language packs use) followed by a `///` doc comment.
-  The doc comment must come **after** the annotation so `salam doc` picks it
-  up.
-- English only for now. Do not add `@fa` annotations unless a Persian
-  speaker has reviewed them; they can be added later without code changes.
+- Every declaration carries an `@en "Name"` annotation followed directly by
+  a `@fa "Persian"` alias, then by a `///` doc comment:
+
+  ```salam
+  @en "Rect"
+  @fa "مستطیل"
+  /// An axis-aligned, half-open rectangle of terminal cells.
+  pub struct Rect:
+  ```
+
+  The order matters: `salam doc` reads the annotation pair above the
+  declaration and the doc comment below it.
+- `@en` and `@fa` are documentation metadata, not identifiers. `salam doc
+  --lang=fa` renders the Persian name; `rect.عرض` is a compile error
+  (`E016`). Write the English name in code.
+- Choose new names with the [naming standard and inventory](basalam-api-glossary-fa.md),
+  and add the row there. `make fa-aliases` (part of `make check`) fails when
+  an `@en` has no `@fa`, when an alias is empty, when a `@fa` stands alone,
+  or when the glossary row count no longer matches the source.
 - Non-obvious algorithms get inline prose comments.
 - User-facing behavior changes update the Mintlify pages (`*.mdx`) and,
   for new pages, `docs.json` navigation. A new or edited page must pass

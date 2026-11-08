@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Every declaration carries a Persian `@fa` alias beside its English `@en`
+  name, so `salam doc --lang=fa` can generate a Persian API reference.
+  `make fa-aliases` joins `make check` and fails when a name has no alias,
+  when an alias is empty, when an alias stands alone, or when the glossary
+  row count drifts from the source. The names are
+  documentation metadata only: `rect.عرض` is still a compile error, and the
+  English name is what code uses. The [name inventory](basalam-api-glossary-fa.md)
+  is the contributor reference.
+
 ## [0.4.1] - 2026-10-31
 
 ### Fixed
