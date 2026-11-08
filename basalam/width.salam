@@ -39,6 +39,19 @@ func _cell_width(cp: int): int:
     ret 1
 end
 
+func _char_width(ch: str): int:
+    if ch.len() == 1:
+        b := ch[0] as int
+        ret b < 32 or b == 127 ? 0 : 1
+    end
+    cps := str.CodePoints(ch)
+    defer cps.free()
+    if cps.len() == 0:
+        ret 0
+    end
+    ret _cell_width(cps.get(0))
+end
+
 func _text_width(s: str): int:
     cps := str.CodePoints(s)
     defer cps.free()
