@@ -39,7 +39,8 @@ end
 2. Choose the Persian alias from the standard below. Reuse the canonical term when one exists.
 3. Put `@fa` directly under `@en`, and the `///` doc comment under both.
 4. Add the row to the matching module table in this file.
-5. Run `make fa-aliases` and `make build`.
+5. Update the English reference page under `reference/`, and add it to `docs.json` when it is new.
+6. Run `make fa-aliases`, `make build`, and `make docs-check`.
 
 ## Persian API naming standard
 
