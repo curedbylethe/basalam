@@ -91,13 +91,14 @@ stage or commit page edits before running it.
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md). `make check` is the library gate:
-format check, strict LLVM build and examples, tests, and the documentation's
-own examples. `make release-check` validates the release metadata: the version
-constant, the changelog headings and compare links. `make test-llvm` builds
-every test with `--backend=llvm`. `make docs-check` validates the documentation
-site and its links, and `make docs-format-check` fails when `mint format` would
-rewrite a page. CI runs the library and docs gates. The Windows resize path is
-a documented manual check; CI covers Ubuntu and macOS. This project follows the
+format check, Persian-name coverage, strict LLVM build and examples, tests,
+and the documentation's own examples. `make release-check` validates the
+release metadata: the version constant, the changelog headings and compare
+links. `make test-llvm` builds every test with `--backend=llvm`.
+`make docs-check` validates the documentation site and its links, and
+`make docs-format-check` fails when `mint format` would rewrite a page. CI runs
+the library and docs gates. The Windows resize path is a documented manual
+check; CI covers Ubuntu and macOS. This project follows the
 [Contributor Covenant](CODE_OF_CONDUCT.md).
 
 ## License
