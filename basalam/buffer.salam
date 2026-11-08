@@ -191,10 +191,13 @@ pub struct Buffer:
     @en "set"
     @fa "تنظیم"
     /// Writes one cell. Does nothing when (x, y) is outside the grid or
-    /// outside `clip`. A non-empty `ch` that is not one cell wide becomes blank.
+    /// outside `clip`. A non-empty `ch` that is not one cell wide becomes
+    /// blank; `""` is accepted only after a wide glyph.
     pub func set(x: int, y: int, cell: Cell):
         mut ch := cell.ch
-        if ch != "" and _char_width(ch) != 1:
+        if ch == "" and (x <= 0 or _char_width(this.get(x - 1, y).ch) != 2):
+            ch = " "
+        else if ch != "" and _char_width(ch) != 1:
             ch = " "
         end
         this._write(x, y, Cell { ch = ch, style = cell.style })
@@ -204,6 +207,17 @@ pub struct Buffer:
         if not this._writable(x, y):
             ret
         end
+        i := y * this.width + x
+        old := this.cells.get(i)
+        if old.ch == "" and cell.ch != "" and x > 0:
+            this._store(x - 1, y, Cell { ch = " ", style = cell.style })
+        else if old.ch != "" and _char_width(old.ch) == 2 and cell.ch != old.ch and x + 1 < this.width and this.cells.get(i + 1).ch == "":
+            this._store(x + 1, y, Cell { ch = " ", style = cell.style })
+        end
+        this._store(x, y, cell)
+    end
+
+    func _store(x: int, y: int, cell: Cell):
         i := y * this.width + x
         this.cells.set(i, cell)
         if not this.all_touched:
@@ -255,8 +269,10 @@ pub struct Buffer:
                 left := this._writable(x + col, y)
                 right := this._writable(x + col + 1, y)
                 if left and right:
-                    this._write(x + col, y, Cell { ch = ch, style = style })
-                    this._write(x + col + 1, y, Cell { ch = "", style = style })
+                    this.set(x + col, y, Cell { ch = " ", style = style })
+                    this.set(x + col + 1, y, Cell { ch = " ", style = style })
+                    this._store(x + col, y, Cell { ch = ch, style = style })
+                    this._store(x + col + 1, y, Cell { ch = "", style = style })
                 else:
                     if left:
                         this.set(x + col, y, Cell { ch = " ", style = style })

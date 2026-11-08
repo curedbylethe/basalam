@@ -298,23 +298,25 @@ func _splitWord(word: str, width: int): Vector<str>:
     mut chars := str.Chars(word)
     defer chars.free()
     mut chunk := ""
+    mut chunk_width := 0
     repeat chars.len() in i:
         ch := chars.get(i)
-        chunk_width := _text_width(chunk)
-        ch_width := _text_width(ch)
+        ch_width := _char_width(ch)
         if chunk_width > 0 and chunk_width + ch_width > width:
             out.push(chunk)
             chunk = ""
+            chunk_width = 0
         end
-        if _text_width(chunk) == 0 and ch_width > width:
+        if chunk_width == 0 and ch_width > width:
             // shortcut: a 2-cell glyph can overflow a 1-cell line; the buffer blanks it at paint time. Upgrade if Text grows ellipsis.
             out.push(chunk + ch)
             chunk = ""
         else:
             chunk = chunk + ch
+            chunk_width = chunk_width + ch_width
         end
     end
-    if _text_width(chunk) > 0:
+    if chunk_width > 0:
         out.push(chunk)
     end
     ret out

@@ -64,28 +64,11 @@ end
 
 // The longest prefix that fits in n cells, padded with blanks to n.
 func _clip_cells(s: str, n: int): str:
-    cps := str.CodePoints(s)
-    defer cps.free()
-    mut b := str.NewBuilder()
-    defer str.BufFree(b)
-    mut used := 0
-    mut stop := false
-    repeat cps.len() in i:
-        cp := cps.get(i)
-        cw := _cell_width(cp)
-        if not stop:
-            if used + cw <= n:
-                str.BufAppendCp(b, cp)
-                used = used + cw
-            else:
-                stop = true
-            end
-        end
+    if n <= 0:
+        ret ""
     end
-    if used < n:
-        str.BufAppend(b, str.Repeat(" ", n - used))
-    end
-    ret str.BufStr(b)
+    text := _take_cells(s, n)
+    ret text + str.Repeat(" ", n - _text_width(text))
 end
 
 func _take_cells(s: str, n: int): str:

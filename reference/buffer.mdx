@@ -97,7 +97,7 @@ Creates a blank grid with `clip` covering all of it. A negative size is treated 
 | Method | Description |
 | --- | --- |
 | `area(): Rect` | The rect covering the whole grid, `(0, 0, width, height)`. |
-| `set(x: int, y: int, cell: Cell)` | Writes one cell. Ignored outside the grid or the clip. A non-empty `ch` that is not one cell wide becomes blank. |
+| `set(x: int, y: int, cell: Cell)` | Writes one cell. Ignored outside the grid or the clip. A non-empty `ch` that is not one cell wide becomes blank; `""` is accepted only after a wide glyph. Replacing either half blanks the other half. |
 | `get(x: int, y: int): Cell` | Reads one cell. Returns a blank `Cell` outside the grid. Ignores the clip. |
 | `put_str(x: int, y: int, text: str, style: Style)` | Writes one column per narrow codepoint and two per wide one. A wide glyph that cannot fit both columns writes a blank in each visible half. Zero-width codepoints are dropped. Cut off at the clip; never wraps. |
 | `fill(r: Rect, ch: str, style: Style)` | Sets every cell of `r`, clipped, to `ch` in `style`. A multi-cell or zero-width `ch` becomes blank. |
