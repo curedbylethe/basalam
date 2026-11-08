@@ -204,6 +204,13 @@ pub struct Screen:
     /// The back buffer widgets draw into.
     pub buffer: Buffer = Buffer {}
 
+    @en "glyphs"
+    @fa "نویسه‌ها"
+    /// The glyph policy seeded into every frame's buffer copy. Unicode by
+    /// default; start() replaces it with DetectGlyphPolicy() unless the app
+    /// called set_glyphs.
+    pub glyphs: GlyphPolicy = GlyphPolicy.Unicode
+
     @en "running"
     @fa "در حال اجرا"
     /// True from start() (or the first run) until stop().
@@ -263,6 +270,7 @@ pub struct Screen:
     /// `focused` in sync and queue the old and new bounds.
     pub focus_stack: Vector<int> = Vector {}
 
+    glyphs_explicit: bool = false
     attached: bool = false
     closed: bool = false
     input_thread: i64 = 0
@@ -738,6 +746,7 @@ pub struct Screen:
                 mut view := this.buffer
                 view.clip = visible
                 view.focused = id == focus
+                view.glyphs = this.glyphs
                 w.render(view, b)
             end
         end
@@ -762,6 +771,7 @@ pub struct Screen:
                         mut view := this.buffer
                         view.clip = visible
                         view.focused = id == focus
+                        view.glyphs = this.glyphs
                         w.render(view, b)
                     end
                 end
@@ -829,6 +839,15 @@ pub struct Screen:
         ret true
     end
 
+    @en "set_glyphs"
+    @fa "تنظیم نویسه‌ها"
+    /// Fixes the glyph policy and marks it explicit, so start() does not
+    /// detect one from the environment. May be called before or after start().
+    pub func set_glyphs(policy: GlyphPolicy):
+        this.glyphs = policy
+        this.glyphs_explicit = true
+    end
+
     @en "start"
     @fa "آغاز"
     /// Takes over the terminal: raw mode, alternate screen, hidden cursor,
@@ -857,6 +876,9 @@ pub struct Screen:
         // Not in NewScreen: a headless screen must not depend on TERM, and
         // resize() above must not clobber the result.
         this.buffer.tier = DetectTier()
+        if not this.glyphs_explicit:
+            this.glyphs = DetectGlyphPolicy()
+        end
         if signal.WinchSupported():
             // Order matters. Give SIGWINCH a non-default disposition before
             // blocking it (a blocked signal whose disposition is still

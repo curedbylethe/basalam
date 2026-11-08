@@ -51,7 +51,7 @@ end
 
 All three are complete style values. `StyleDefault` on `style` asks for the terminal's default; on `cursor_style` or `placeholder_style` it adds nothing, which is how you ask for a plain cursor or placeholder. There is no `""` sentinel: an empty string used to mean "use the built-in default", and a zero style now means "add no styling".
 
-The value and the caret are counted in codepoints, so a multibyte glyph is one cell and one caret step. The caret is always an index between `0` and the value's length, and it stays after the last glyph.
+The value and the caret are counted in codepoints, so a multibyte glyph is one cell and one caret step. The caret is always an index between `0` and the value's length. It moves with the arrow keys, `Home`, and `End`, and edits happen at it.
 
 ### Methods
 
@@ -75,11 +75,14 @@ pub func set_placeholder(p: str)
 
 | Key | Effect | Consumed |
 | --- | --- | --- |
-| A printable character | Appended at the caret; the caret moves after it. | Yes |
-| `Space` | Appends one space at the caret. | Yes |
+| A printable character | Inserted at the caret; the caret moves after it. | Yes |
+| `Space` | Inserts one space at the caret. | Yes |
+| `Left` / `Right` | Moves the caret one codepoint. At the start or end, nothing changes. | Yes |
+| `Home` / `End` | Moves the caret to the start or the end. | Yes |
 | `Backspace` | Deletes the codepoint before the caret. At the start, nothing changes. | Yes |
+| `Delete` | Deletes the codepoint at the caret. At the end, nothing changes. | Yes |
 | `Enter` | Nothing changes. | Yes |
-| Anything else (`Tab`, `Escape`, arrows, `Home`, `End`) | Nothing. | No — the event bubbles to ancestors |
+| Anything else (`Tab`, `Escape`, `Up`, `Down`, `PageUp`, `PageDown`, `Insert`, function keys) | Nothing. | No — the event bubbles to ancestors |
 
 A character typed with `Ctrl` or `Alt` held is not a plain character, so it is not appended and bubbles like any other unhandled key. Mouse, resize, and tick events are ignored and bubble too.
 
@@ -87,7 +90,7 @@ A character typed with `Ctrl` or `Alt` held is not a plain character, so it is n
 
 ## Cursor
 
-While the buffer reports focus, `Input` marks the caret with one reverse-video cell (`ESC[7m`). The cell covers whatever the row already has at that column — the blank after the last glyph, or the first placeholder character when the value is empty. Its style is `StyleMerge(style, cursor_style)`; the placeholder's grey is dropped from that one cell, so the cursor stays a solid reverse-video block over it.
+While the buffer reports focus, `Input` marks the caret with one reverse-video cell (`ESC[7m`). The cell covers whatever the row already has at that column — the glyph under the caret, the blank after the last glyph, or the first placeholder character when the value is empty. Its style is `StyleMerge(style, cursor_style)`; the placeholder's grey is dropped from that one cell, so the cursor stays a solid reverse-video block over it.
 
 This is a cell style, not the terminal's own cursor. The screen keeps the real cursor hidden, so the field draws its own. Set `cursor_style` to replace the default reverse:
 
@@ -118,22 +121,23 @@ println in.value() // "" while the field is empty
 
 ## Overflow
 
-Rendering is tail-anchored and stateless: each frame shows the last cells that fit and recomputes the window from scratch, with no stored scroll offset. The first drawn codepoint is
+The field shows the full width; no cell is reserved for the caret. `Input` stores the index of the first visible codepoint, `start`, between frames and moves it only when the caret leaves the window:
 
 ```text
-start = max(0, count - (width - focused))
+if caret < start:                    start = caret
+else if caret > start + width - 1:   start = caret - width + 1
 ```
 
-where `count` is the value's length, `width` is the field's width in cells, and `focused` is `1` while the input has focus — reserving the last cell for the cursor — and `0` otherwise. Focused, the caret lands at column `count - start`, always inside the field.
+The caret column is `caret - start`, always between `0` and `width - 1`. The window shows the codepoints from `start` up to `min(count, start + width)`, where `count` is the value's length. Focus does not change the window; an unfocused field draws the same cells without the cursor.
 
-Worked example, width `8`, value `"abcdefghij"`:
+Worked example, width `8`, value `"abcdefghij"` with the caret at the end:
 
 | State | Shown | Cursor column |
 | --- | --- | --- |
-| Focused | `defghij` | `7` |
-| Unfocused | `cdefghij` | — |
+| Focused | `defghij` and a blank | `7` |
+| Unfocused | `defghij` and a blank | — |
 
-The window starts scrolling one cell earlier while focused: the first cell scrolls when `count` reaches `width`, and, unfocused, when it reaches `width + 1`.
+Press `Home` and `start` becomes `0`: the row shows `abcdefgh` with the cursor on `a`.
 
 ## Example
 

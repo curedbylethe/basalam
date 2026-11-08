@@ -1,6 +1,6 @@
 ---
 title: "Border"
-description: "Draw a one-cell box-drawing ring into a buffer with DrawBorder: the single, double, and rounded glyph sets, the title rules, the degenerate rectangles, and the one-foreground color rule."
+description: "Draw a one-cell ring into a buffer with DrawBorder or DrawBorderGlyphs: six glyph sets including ASCII, heavy, and mixed weight, the glyph policy, the title rules, the degenerate rectangles, and the one-foreground color rule."
 keywords:
   - "border"
   - "frame"
@@ -11,6 +11,9 @@ keywords:
   - "rounded"
   - "double"
   - "single"
+  - "glyph set"
+  - "ASCII"
+  - "heavy"
 ---
 
 `DrawBorder` paints a one-cell ring around a rectangle of a [`Buffer`](/reference/buffer). It is the shared helper that every frame in basalam uses, including the [`Panel`](/reference/panel) widget, so a custom widget that wants a frame calls it too. It draws only the ring. It does not lay out children, change geometry, or pick a color tier.
@@ -77,14 +80,70 @@ The glyphs are the same at every color tier, so a frame keeps its shape wherever
 
 `DrawBorder` replaces every cell it draws and reads or clears nothing else. The interior of the rectangle keeps whatever was drawn there before, so you can draw a frame over content. Overlapping frames are the caller's concern: the last write wins, and junctions are not resolved.
 
+## Glyph sets
+
+A glyph set is a `BorderGlyphs` value. Six are built in, each a function that returns the set:
+
+| Set | Run (`h`, `v`) | Corners (tl, tr, bl, br) | T down, up, right, left | Cross | `hw`, `vw` |
+| --- | --- | --- | --- | --- | --- |
+| `GlyphsSingle()` | `─` `│` | `┌ ┐ └ ┘` | `┬ ┴ ├ ┤` | `┼` | `Light`, `Light` |
+| `GlyphsDouble()` | `═` `║` | `╔ ╗ ╚ ╝` | `╦ ╩ ╠ ╣` | `╬` | `Double`, `Double` |
+| `GlyphsRounded()` | `─` `│` | `╭ ╮ ╰ ╯` | `┬ ┴ ├ ┤` | `┼` | `Light`, `Light` |
+| `GlyphsASCII()` | `-` `\|` | `+ + + +` | `+ + + +` | `+` | `Light`, `Light` |
+| `GlyphsHeavy()` | `━` `┃` | `┏ ┓ ┗ ┛` | `┳ ┻ ┣ ┫` | `╋` | `Heavy`, `Heavy` |
+| `GlyphsMixed()` | `━` `│` | `┍ ┑ ┕ ┙` | `┯ ┷ ┝ ┥` | `┿` | `Heavy`, `Light` |
+
+```salam
+pub enum Weight:
+    Light
+    Heavy
+    Double
+end
+
+pub struct BorderGlyphs:
+    pub h: str = ""
+    pub v: str = ""
+    pub tl: str = ""
+    pub tr: str = ""
+    pub bl: str = ""
+    pub br: str = ""
+    pub t_down: str = ""
+    pub t_up: str = ""
+    pub t_right: str = ""
+    pub t_left: str = ""
+    pub cross: str = ""
+    pub hw: Weight = Weight.Light
+    pub vw: Weight = Weight.Light
+end
+
+pub func GlyphsFor(border: BorderStyle, policy: GlyphPolicy): BorderGlyphs
+pub func DrawBorderGlyphs(buf: Buffer, rect: Rect, glyphs: BorderGlyphs, style: Style, title: str)
+```
+
+`h` draws the top and bottom edges and `v` the left and right edges. Every glyph is one codepoint. The `t_*` and `cross` fields, and `hw` and `vw`, are data for callers: `DrawBorderGlyphs` draws only the edges and corners.
+
+`GlyphsFor` maps a `BorderStyle` to a set. `None` gives the zero value with no glyphs. Under `GlyphPolicy.ASCII` every other style gives `GlyphsASCII()`. Otherwise `Single`, `Double`, and `Rounded` give the set of the same name. `DrawBorder(buf, rect, border, style, title)` is `DrawBorderGlyphs(buf, rect, GlyphsFor(border, buf.glyphs), style, title)`, so every rule on this page applies to both.
+
+`BorderStyle` keeps its four values. `GlyphsHeavy()`, `GlyphsMixed()`, and custom sets are used through `DrawBorderGlyphs`, which does not change the content inset: a ring is still one cell, and `BorderInset` is `1` for every style except `None`.
+
+```salam
+basalam.DrawBorderGlyphs(buf, bounds, basalam.GlyphsHeavy(), basalam.Style { fg = basalam.Color.Ansi(1) }, "Alert")
+```
+
+### Glyph policy precedence
+
+The ring follows the [`glyphs` policy](/reference/buffer#glyph-policy) of the buffer it draws into. Under `GlyphPolicy.ASCII`, `DrawBorderGlyphs` replaces the glyph set it receives with `GlyphsASCII()`, including a custom set, so the title cells, the corners, and the `height` 1 and `width` 1 rules all stay ASCII. The default policy is `Unicode`. `Screen.start()` detects the policy from the environment once unless you call [`set_glyphs`](/reference/screen#terminal-lifecycle) first. No widget reads the environment.
+
+## Nested rings
+
+A [`Panel`](/reference/panel) insets its child by one cell, so a `Panel` inside a `Panel` draws two rings with no gap between them. Each ring keeps its own glyph set: an outer `Single` ring and an inner `Double` ring show `┌` at the outer corner and `╔` one cell diagonally inside it.
+
 ## Out of scope
 
 These are not part of this release:
 
-- ASCII fallback glyphs for terminals without box drawing.
-- Heavy or mixed-weight glyph sets.
-- Junctions where two rings meet, and nested frames.
-- Shadows.
+- Junctions where two rings meet. The tree has no container paint phase that sees sibling border rects, and layout gives siblings disjoint rects, so there is nothing to join. The `t_*` and `cross` fields are ready for a future join pass.
+- Shadows. They need the same paint-phase contract.
 
 ## Use it in a widget
 

@@ -75,13 +75,32 @@
  * the focus. `tier` is set once when the screen takes the terminal and every
  * copy inherits the same value: it is the tier the buffer lowers styles to
  * when it writes a frame, so widgets never read the environment themselves.
+ * `glyphs` (the GlyphPolicy) is per-copy like `tier`: Screen seeds it on
+ * every frame copy, and widgets never read the environment.
  * Only the owner of the original may resize, free, or flush it.
  */
 
 package basalam
 
+import env
 import str
 import term
+
+@en "GlyphPolicy"
+@fa "سیاست نویسه‌ها"
+/// Which glyph repertoire structural glyphs (borders) may use. Unicode is
+/// the zero value and draws box-drawing glyphs; ASCII restricts them to
+/// codepoints up to 0x7F for terminals without box drawing.
+pub enum GlyphPolicy:
+    @en "Unicode"
+    @fa "یونیکد"
+    /// Box-drawing glyphs.
+    Unicode
+    @en "ASCII"
+    @fa "اسکی"
+    /// Plain ASCII glyphs only.
+    ASCII
+end
 
 @en "Cell"
 @fa "سلول"
@@ -152,6 +171,13 @@ pub struct Buffer:
     /// keeps TrueColor, so headless renders stay true colour whatever the
     /// environment says. resize() preserves it.
     pub tier: ColorTier = ColorTier.TrueColor
+
+    @en "glyphs"
+    @fa "نویسه‌ها"
+    /// Render context: the glyph policy structural glyphs follow. DrawBorder
+    /// reads it. Screen seeds it on every frame copy; a buffer built by hand
+    /// keeps Unicode. resize() preserves it.
+    pub glyphs: GlyphPolicy = GlyphPolicy.Unicode
 
     @en "force_full"
     @fa "اجبار بازترسیم کامل"
@@ -446,6 +472,42 @@ pub struct Buffer:
         this.row_touched.free()
         str.BufFree(this.out_buf)
     end
+end
+
+func _is_utf8_locale(v: str): bool:
+    u := str.Upper(v)
+    ret str.Contains(u, "UTF-8") or str.Contains(u, "UTF8")
+end
+
+@en "DetectGlyphPolicy"
+@fa "تشخیص سیاست نویسه‌ها"
+/// The glyph policy the environment advertises. Pure and uncached; the only
+/// environment reader for glyphs, called once by Screen.start. First match
+/// wins: BASALAM_GLYPHS "ascii" -> ASCII, "unicode" -> Unicode; TERM ==
+/// "dumb" -> ASCII; the first non-empty of LC_ALL, LC_CTYPE, LANG decides:
+/// not UTF-8 -> ASCII, UTF-8 -> Unicode; otherwise Unicode.
+pub func DetectGlyphPolicy(): GlyphPolicy:
+    g := str.Lower(env.Get("BASALAM_GLYPHS"))
+    if g == "ascii":
+        ret GlyphPolicy.ASCII
+    end
+    if g == "unicode":
+        ret GlyphPolicy.Unicode
+    end
+    if env.Get("TERM") == "dumb":
+        ret GlyphPolicy.ASCII
+    end
+    mut v := env.Get("LC_ALL")
+    if v.len() == 0:
+        v = env.Get("LC_CTYPE")
+    end
+    if v.len() == 0:
+        v = env.Get("LANG")
+    end
+    if v.len() > 0 and not _is_utf8_locale(v):
+        ret GlyphPolicy.ASCII
+    end
+    ret GlyphPolicy.Unicode
 end
 
 @en "NewBuffer"
