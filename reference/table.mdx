@@ -1,6 +1,6 @@
 ---
 title: "Table"
-description: "The Table widget: a non-focusable grid of single-line rows with column widths, an optional bold header and rule, cell and column alignment, and clip or ellipsis overflow."
+description: "The Table widget and its scrollable TableView: a non-focusable grid of single-line rows with column widths, an optional bold header and rule, cell and column alignment, and clip or ellipsis overflow."
 keywords:
   - "table"
   - "grid"
@@ -230,6 +230,8 @@ A cell's alignment comes from the first of three sources that is set:
 
 With `header` on, row `0` is painted in `header_style` and each of its cells takes its column's alignment. With `rule` on too, a line of `─` is drawn under the header. The rule runs the width of the table's columns, not the width of the rect. The data rows follow in `style`.
 
+Under the ASCII glyph policy the rule is drawn with `-`.
+
 The header and the rule each take one row. A table with a header, a rule and two data rows is four rows high.
 
 ## Preferred size
@@ -286,3 +288,7 @@ end
 <Note>
   A `dyn basalam.Widget` cannot be downcast back to a `Table`. Keep a concrete `Table` reference, or a shared value such as a `mut` global, to call `add_row` and the other setters after the table is in a `Screen`.
 </Note>
+
+## Internal helpers
+
+`_resolve_widths`, `_paint_row` and `_paint_rule` are public only so `TableView` can reuse them. They are not for application code and are not stable API.
