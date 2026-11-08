@@ -122,11 +122,41 @@ pub struct Text:
     /// WrapMode.Word.
     pub wrap: WrapMode = WrapMode.Word
 
+    source: func () str = (): ret "" end
+    source_set: bool = false
+
+    func _content(): str:
+        if this.source_set:
+            ret this.source()
+        end
+        ret this.content
+    end
+
     @en "set_text"
     @fa "تنظیم متن"
-    /// Replaces the content; the next render draws it.
+    /// Replaces the content and clears the source; the last setter wins.
     pub func set_text(content: str):
         this.content = content
+        this.source_set = false
+    end
+
+    @en "set_source"
+    @fa "تنظیم منبع"
+    /// Reads `src` at render and measure time; the last setter wins. Keep its
+    /// value stable within a frame. Closures capture by value, so read module
+    /// state or a shared holder. Set the source before Screen.add, which copies
+    /// the widget. Changes do not repaint or relayout automatically: call
+    /// invalidate(id), register a tick, or call set_bounds again.
+    pub func set_source(src: func () str):
+        this.source = src
+        this.source_set = true
+    end
+
+    @en "clear_source"
+    @fa "پاک‌سازی منبع"
+    /// Clears the source and returns to the last pushed content.
+    pub func clear_source():
+        this.source_set = false
     end
 
     @en "set_align"
@@ -156,7 +186,11 @@ pub struct Text:
     /// the longest wrapped line in cells, height the number of wrapped lines.
     /// max_width <= 0 means unbounded, so the explicit lines are measured.
     pub func preferred_size(max_width: int): Rect:
-        ret MeasureText(this.content, max_width)
+        content := this._content()
+        if this.source_set and content == "":
+            ret Rect {}
+        end
+        ret MeasureText(content, max_width)
     end
 
     @en "preferred_width"
@@ -164,7 +198,7 @@ pub struct Text:
     /// The longest explicit line of the content, in cells (the unbounded
     /// width).
     pub func preferred_width(): int:
-        ret MeasureText(this.content, 0).width
+        ret MeasureText(this._content(), 0).width
     end
 
     @en "render"
@@ -182,9 +216,9 @@ pub struct Text:
         buf.fill(bounds, " ", pad)
         mut lines := Vector {} as Vector<str>
         if this.wrap == WrapMode.None:
-            lines = WrapText(this.content, 0)
+            lines = WrapText(this._content(), 0)
         else:
-            lines = WrapText(this.content, bounds.width)
+            lines = WrapText(this._content(), bounds.width)
         end
         defer lines.free()
         mut n := lines.len()
