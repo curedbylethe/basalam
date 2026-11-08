@@ -2,7 +2,7 @@
 
 > Source: [`curedbylethe/basalam`](https://github.com/curedbylethe/basalam), default branch `main`, version **0.4.1** (inventory inspected 2026-11-08).
 
-This file is the naming standard and the complete name inventory for basalam. Every declaration carries an English `@en` name and a Persian `@fa` alias; the inventory lists **482 entries** across **23 source modules**, all applied in the source and compiled by `make build`.
+This file is the naming standard and the complete name inventory for basalam. Every declaration carries an English `@en` name and a Persian `@fa` alias; the inventory lists **531 entries** across **23 source modules**, all applied in the source and compiled by `make build`.
 
 ## What `@fa` is
 
@@ -65,7 +65,7 @@ end
 
 **Notation:** `Screen.focus_next` identifies a method or field; top-level functions/constants are unqualified; enum members are qualified by the enum. Some names may be identical in **different scopes** (e.g., `Row.add` and `Grid.add`); distinct declarations within the same scope have no duplicate Persian alias.
 
-**Scope:** Every `@en`-annotated declaration in `basalam/`, public or private; `_BorderGlyphs` is the only private one. Salam compiler keywords and standard-library APIs, implementation-only fields, test-only helpers, and examples are excluded. `Modal.state` is included because it is public, but its private element type makes it an implementation detail; prefer interacting with a modal through its methods.
+**Scope:** Every `@en`-annotated declaration in `basalam/`. Salam compiler keywords and standard-library APIs, implementation-only fields, test-only helpers, and examples are excluded. `Modal.state` is included because it is public, but its private element type makes it an implementation detail; prefer interacting with a modal through its methods.
 
 ## `basalam.salam` (2 entries)
 
@@ -186,7 +186,7 @@ end
 | Function | `StyleSgrOff` | Generate style-off ANSI SGR sequences | دنباله غیرفعال‌سازی ظاهر |
 | Function | `SgrBuilds` | Query SGR-building instrumentation counter | شمار ساخت اس‌جی‌آر |
 
-## `buffer.salam` (26 entries)
+## `buffer.salam` (31 entries)
 
 [Source file](https://github.com/curedbylethe/basalam/blob/main/basalam/buffer.salam)
 
@@ -204,6 +204,7 @@ end
 | Field | `Buffer.focused` | Whether buffer drawing is in focused state | در تمرکز |
 | Field | `Buffer.tier` | Terminal color capability used for emission | سطح رنگ |
 | Field | `Buffer.force_full` | Force a complete redraw rather than diff | اجبار بازترسیم کامل |
+| Field | `Buffer.glyphs` | Glyph policy that structural glyphs follow | نویسه‌ها |
 | Method | `Buffer.area` | Get the buffer area as Rect | محدوده |
 | Method | `Buffer.set` | Write one cell at coordinates | تنظیم |
 | Method | `Buffer.get` | Read one cell at coordinates | دریافت |
@@ -217,16 +218,45 @@ end
 | Method | `Buffer.commit` | Mark current frame as the front frame | ثبت قاب |
 | Method | `Buffer.flush` | Emit and commit output to terminal | ارسال به ترمینال |
 | Method | `Buffer.free` | Release buffer storage | آزادسازی |
+| Enum | `GlyphPolicy` | Glyph repertoire structural glyphs may use | سیاست نویسه‌ها |
+| Enum variant | `GlyphPolicy.Unicode` | Box-drawing glyphs | یونیکد |
+| Enum variant | `GlyphPolicy.ASCII` | Plain ASCII glyphs only | اسکی |
 | Constructor | `NewBuffer` | Create buffer with specified cell dimensions | بافر جدید |
+| Function | `DetectGlyphPolicy` | Glyph policy the environment advertises | تشخیص سیاست نویسه‌ها |
 
-## `border.salam` (2 entries)
+## `border.salam` (27 entries)
 
 [Source file](https://github.com/curedbylethe/basalam/blob/main/basalam/border.salam)
 
 | Kind | English API name | Meaning / usage | Persian alias |
 |---|---|---|---|
 | Function | `DrawBorder` | Draw a border ring with optional title into a buffer | ترسیم کادر |
-| Type | `_BorderGlyphs` | Eight box-drawing glyphs for one border ring (private) | نویسه‌های کادر |
+| Function | `DrawBorderGlyphs` | Draw a border ring from an explicit glyph set | ترسیم کادر با نویسه‌ها |
+| Enum | `Weight` | Stroke weight of a border run | ضخامت |
+| Enum variant | `Weight.Light` | Thin single line | سبک |
+| Enum variant | `Weight.Heavy` | Thick single line | سنگین |
+| Enum variant | `Weight.Double` | Double line | دوگانه |
+| Type | `BorderGlyphs` | Glyphs of one border ring: edges, corners and junctions | نویسه‌های کادر |
+| Field | `BorderGlyphs.h` | Horizontal edge glyph | افقی |
+| Field | `BorderGlyphs.v` | Vertical edge glyph | عمودی |
+| Field | `BorderGlyphs.tl` | Top-left corner glyph | گوشه بالا چپ |
+| Field | `BorderGlyphs.tr` | Top-right corner glyph | گوشه بالا راست |
+| Field | `BorderGlyphs.bl` | Bottom-left corner glyph | گوشه پایین چپ |
+| Field | `BorderGlyphs.br` | Bottom-right corner glyph | گوشه پایین راست |
+| Field | `BorderGlyphs.t_down` | T junction opening downward | سه‌راهی پایین |
+| Field | `BorderGlyphs.t_up` | T junction opening upward | سه‌راهی بالا |
+| Field | `BorderGlyphs.t_right` | T junction opening right | سه‌راهی راست |
+| Field | `BorderGlyphs.t_left` | T junction opening left | سه‌راهی چپ |
+| Field | `BorderGlyphs.cross` | Four-way junction glyph | چهارراه |
+| Field | `BorderGlyphs.hw` | Weight of the horizontal run | ضخامت افقی |
+| Field | `BorderGlyphs.vw` | Weight of the vertical run | ضخامت عمودی |
+| Function | `GlyphsSingle` | Light lines with square corners | نویسه‌های تک خط |
+| Function | `GlyphsDouble` | Double lines | نویسه‌های دو خط |
+| Function | `GlyphsRounded` | Light lines with rounded corners | نویسه‌های گرد |
+| Function | `GlyphsASCII` | Plain ASCII glyphs | نویسه‌های اسکی |
+| Function | `GlyphsHeavy` | Thick single lines | نویسه‌های سنگین |
+| Function | `GlyphsMixed` | Heavy horizontal and light vertical runs | نویسه‌های ترکیبی |
+| Function | `GlyphsFor` | Glyph set for a border style under a glyph policy | نویسه‌ها برای |
 
 ## `widget.salam` (21 entries)
 
@@ -394,7 +424,7 @@ end
 | Constructor | `NewDefaultKeymap` | Create default navigation bindings | نگاشت کلید پیش‌فرض |
 | Constructor | `NewVimKeymap` | Create Vim-style navigation bindings | نگاشت کلید ویم |
 
-## `input.salam` (12 entries)
+## `input.salam` (17 entries)
 
 [Source file](https://github.com/curedbylethe/basalam/blob/main/basalam/input.salam)
 
@@ -405,6 +435,11 @@ end
 | Field | `Input.style` | Normal input text styling | ظاهر |
 | Field | `Input.cursor_style` | Caret styling | ظاهر مکان‌نما |
 | Field | `Input.placeholder_style` | Hint text styling | ظاهر متن راهنما |
+| Field | `Input.max_length` | Maximum value length in glyphs, 0 for unlimited | حداکثر طول |
+| Field | `Input.filter` | Veto callback for each proposed insertion | پالایه |
+| Field | `Input.masked` | Whether value glyphs are painted as the mask glyph | پوشانده |
+| Field | `Input.mask_glyph` | Glyph painted for each value glyph while masked | نماد پوشش |
+| Field | `Input.on_submit` | Callback on Enter; its result is the consumed flag | هنگام ثبت |
 | Method | `Input.focusable` | Indicate keyboard focus eligibility | تمرکز‌پذیر است |
 | Method | `Input.handle_event` | Handle keyboard editing | پردازش رویداد |
 | Method | `Input.value` | Get text value | مقدار |
@@ -592,7 +627,7 @@ end
 | Method | `Separator.render` | Draw dividing rule | ترسیم |
 | Constructor | `NewSeparator` | Construct separator | جداکننده جدید |
 
-## `table.salam` (31 entries)
+## `table.salam` (43 entries)
 
 [Source file](https://github.com/curedbylethe/basalam/blob/main/basalam/table.salam)
 
@@ -628,7 +663,19 @@ end
 | Method | `Table.preferred_size` | Compute natural table dimensions | اندازه ترجیحی |
 | Method | `Table.measure` | Measure table in chosen axis | اندازه‌گیری |
 | Method | `Table.render` | Draw table | ترسیم |
+| Method | `Table._resolve_widths` | Resolve column widths for a width (public for TableView; not for application code) | محاسبه عرض‌ها |
+| Method | `Table._paint_row` | Paint one data row (public for TableView; not for application code) | رسم ردیف |
+| Method | `Table._paint_rule` | Paint a ruling line (public for TableView; not for application code) | رسم خط |
 | Constructor | `NewTable` | Construct table widget | جدول جدید |
+| Type | `TableView` | Focusable, vertically scrollable Table with selection | نمای جدول |
+| Field | `TableView.offset` | Index of the first visible data row | جابه‌جایی |
+| Field | `TableView.selected` | Selected data row, or -1 when there are none | انتخاب‌شده |
+| Field | `TableView.activate` | Callback on Enter; its result is the consumed flag | فعال‌سازی |
+| Method | `TableView.focusable` | Whether table view accepts focus (true) | تمرکز‌پذیر است |
+| Method | `TableView.hits` | Whether table view accepts pointer hits (true) | اصابت‌پذیر است |
+| Method | `TableView.handle_event` | Move the cursor with navigation keys; Enter calls activate | پردازش رویداد |
+| Method | `TableView.render` | Draw pinned header and visible rows with scrollbar | ترسیم |
+| Constructor | `NewTableView` | Construct an empty table view | نمای جدول جدید |
 
 ## `tree.salam` (13 entries)
 
@@ -650,7 +697,7 @@ end
 | Method | `Tree.free` | Release tree bookkeeping | آزادسازی |
 | Constructor | `NewTree` | Create tree with root widget | درخت جدید |
 
-## `screen.salam` (53 entries)
+## `screen.salam` (55 entries)
 
 [Source file](https://github.com/curedbylethe/basalam/blob/main/basalam/screen.salam)
 
@@ -674,6 +721,7 @@ end
 | Field | `Screen.keymap` | Optional keyboard binding map | نگاشت کلید |
 | Field | `Screen.dirty` | Whether screen requires redraw | نیازمند بازترسیم |
 | Field | `Screen.focus_stack` | Stack of focus targets to restore | پشته تمرکز |
+| Field | `Screen.glyphs` | Glyph policy seeded into every frame buffer | نویسه‌ها |
 | Method | `Screen.add` | Add widget with parent ID | افزودن |
 | Method | `Screen.raise` | Raise a group of widgets | آوردن به رو |
 | Method | `Screen.unraise` | Reverse raising a group | بازگرداندن ترتیب |
@@ -696,6 +744,7 @@ end
 | Method | `Screen.hit_test` | Locate widget at cell coordinates | آزمون برخورد |
 | Method | `Screen.dispatch` | Route event through screen hierarchy | هدایت رویداد |
 | Method | `Screen.set_keymap` | Set keyboard binding map | تنظیم نگاشت کلید |
+| Method | `Screen.set_glyphs` | Fix the glyph policy instead of detecting one | تنظیم نویسه‌ها |
 | Method | `Screen.invalidate` | Mark widget dirty | علامت‌گذاری برای بازترسیم |
 | Method | `Screen.invalidate_subtree` | Mark widget subtree dirty | علامت‌گذاری زیردرخت برای بازترسیم |
 | Method | `Screen.draw` | Render widgets to buffer | بازترسیم |
