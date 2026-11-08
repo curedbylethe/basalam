@@ -113,6 +113,72 @@ The screen calls `hits` and `render`, and the layout engine calls `measure` or `
 
 The table is read-only to the screen: it never takes focus and never consumes an event. To change what it shows, change its columns or rows and set `screen.dirty` so the next frame paints it.
 
+## TableView
+
+`TableView` is the scrollable variant of `Table`. It embeds `Table`, so it shares every field and setter, and adds a focus target, a selection cursor, a pinned header, a scrollbar, and an Enter callback. `Table` itself stays non-focusable and shows every row.
+
+```salam
+pub struct TableView:
+    pub use Table
+
+    pub offset: int = 0
+    pub selected: int = 0
+    pub activate: func (int) bool = (row: int): ret false end
+end
+```
+
+<ResponseField name="offset" type="int">
+  The index of the first visible data row. The header is not a data row. Defaults to `0`.
+</ResponseField>
+
+<ResponseField name="selected" type="int">
+  The selected data row. It is `-1` only when there are no data rows. Defaults to `0`.
+</ResponseField>
+
+<ResponseField name="activate" type="func (int) bool">
+  Called with `selected` when you press Enter on a table that has data rows. Its return value is the consumed flag. The default returns `false`, so Enter bubbles on.
+</ResponseField>
+
+`NewTableView(): TableView` creates an empty view with `Table`'s defaults. `focusable` and `hits` both return `true`. A click still does not move focus, because the screen focuses by keyboard only.
+
+### Keys
+
+The window is `bounds.height` minus the header row and the rule row. `TableView` always consumes the six movement keys, even when there are no rows.
+
+| Key | Effect |
+| --- | --- |
+| Up, Down | Move `selected` by one row, clamped at the ends. |
+| PageUp, PageDown | Move `selected` and `offset` by one window height, then clamp. |
+| Home | `selected` and `offset` become `0`. |
+| End | `selected` becomes the last row, and `offset` the largest valid offset. |
+| Enter | Returns `activate(selected)`. It is not consumed when there are no data rows. |
+| Anything else | Not consumed. |
+
+After every key, the window scrolls by the least amount that keeps `selected` visible. `offset` stays between `0` and `max(0, rows - window)`.
+
+The mouse wheel is not supported. `std/term` drops the wheel bit when it decodes a mouse event, so a wheel event cannot be told from a button press. Horizontal scrolling is also not supported: every column keeps the definite width the width rules give it.
+
+### Drawing
+
+The header and the rule stay pinned at the top. Data row `i` is painted for `offset <= i < min(rows, offset + window)`, and nothing else is painted.
+
+The selected row is reversed across the column cells while the buffer is focused. When it is not focused, the row is bold instead. The scrollbar column is never reversed, and the header is never selected. When `selected` is outside the window, which can happen if you set `offset` yourself, no row is marked.
+
+When the data rows outnumber the window, the last column of cells becomes a scrollbar and the columns resolve against the remaining width. When they fit, no column is reserved. The bar covers the data rows only, and the header cell above it is blank in `header_style`.
+
+| Part | Unicode | ASCII |
+| --- | --- | --- |
+| Track | `│` | `\|` |
+| Thumb | `█` | `#` |
+
+The thumb is `max(1, window * window / rows)` rows long and starts at `offset * (window - length) / (rows - window)`. Both glyphs use the data style. The buffer's glyph policy picks the ASCII pair.
+
+Text wider than a column is cut at the column, so `Clip` stops at the column edge and `Ellipsis` writes `…` in its last cell.
+
+<Note>
+  `preferred_size` is `Table`'s full height, so a `TableView` only scrolls when its slot is smaller than its rows. Place it in a `Fill` slot of a [Row or Column](/reference/layout).
+</Note>
+
 ## Columns and width
 
 Each column's `width` is a [`LayoutSize`](/reference/layout) with one of three kinds:

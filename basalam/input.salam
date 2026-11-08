@@ -36,6 +36,8 @@
  * while the buffer reports focus. An empty value shows the placeholder,
  * styled dim, whether focused or not.
  *
+ * Shaping: max_length (glyphs), an insertion filter and display-only masking.
+ *
  * This file deliberately has no layout measurement, no selection or paste,
  * no submit callback, and no Buffer cursor API. The
  * fields are complete Style values: StyleDefault on `style` asks for the
@@ -84,6 +86,34 @@ pub struct Input:
     /// bright-black foreground.
     pub placeholder_style: Style = Style { fg = BrightBlack }
 
+    @en "max_length"
+    @fa "حداکثر طول"
+    /// Maximum value length in glyphs (codepoints), not display cells. 0
+    /// means unlimited. Typing at the limit is consumed and changes nothing;
+    /// set_value truncates a longer value; deleting is always allowed.
+    pub max_length: int = 0
+
+    @en "filter"
+    @fa "پالایه"
+    /// Called with the whole candidate value after a proposed insertion (one
+    /// typed glyph), once the max_length check has passed. Returning false
+    /// rejects it: the key is consumed and nothing changes. Not called for
+    /// Backspace, Delete or set_value. The default accepts everything.
+    pub filter: func (str) bool = (candidate: str): ret true end
+
+    @en "masked"
+    @fa "پوشانده"
+    /// When true every value glyph is painted as mask_glyph. Display only:
+    /// value, caret and window are unchanged. The placeholder is never masked.
+    pub masked: bool = false
+
+    @en "mask_glyph"
+    @fa "نماد پوشش"
+    /// The glyph painted for each value glyph while masked. Only its first
+    /// codepoint is used; "" means "*". Under GlyphPolicy.ASCII a non-ASCII
+    /// mask glyph paints as "*".
+    pub mask_glyph: str = "*"
+
     content: str = ""
     caret: int = 0
     window_start: int = 0
@@ -111,13 +141,11 @@ pub struct Input:
         code := event.key.code
         total := str.CharCount(this.content)
         if code == term.KeyChar and not event.key.ctrl and not event.key.alt:
-            this.content = str.CharSubstr(this.content, 0, this.caret) + event.key.ch + str.CharSubstr(this.content, this.caret, total - this.caret)
-            this.caret = this.caret + 1
+            this._insert(event.key.ch)
             ret true
         end
         if code == term.KeySpace:
-            this.content = str.CharSubstr(this.content, 0, this.caret) + " " + str.CharSubstr(this.content, this.caret, total - this.caret)
-            this.caret = this.caret + 1
+            this._insert(" ")
             ret true
         end
         if code == term.KeyLeft:
@@ -159,6 +187,26 @@ pub struct Input:
         ret false
     end
 
+    // Inserts `ins` at the caret: max_length first (keeps the prefix that
+    // fits), then the filter once on the whole candidate. All or nothing.
+    func _insert(ins: str):
+        total := str.CharCount(this.content)
+        mut piece := ins
+        if this.max_length > 0:
+            room := this.max_length - total
+            if room <= 0:
+                ret
+            end
+            piece = str.CharSubstr(ins, 0, room)
+        end
+        candidate := str.CharSubstr(this.content, 0, this.caret) + piece + str.CharSubstr(this.content, this.caret, total - this.caret)
+        if not this.filter(candidate):
+            ret
+        end
+        this.content = candidate
+        this.caret = this.caret + str.CharCount(piece)
+    end
+
     @en "value"
     @fa "مقدار"
     /// The current text, without styles.
@@ -168,10 +216,15 @@ pub struct Input:
 
     @en "set_value"
     @fa "تنظیم مقدار"
-    /// Replaces the value; the caret moves to its end.
+    /// Replaces the value, cut to max_length glyphs when that is set, without
+    /// calling filter; the caret moves to its end.
     pub func set_value(v: str):
-        this.content = v
-        this.caret = str.CharCount(v)
+        mut t := v
+        if this.max_length > 0 and str.CharCount(t) > this.max_length:
+            t = str.CharSubstr(t, 0, this.max_length)
+        end
+        this.content = t
+        this.caret = str.CharCount(t)
     end
 
     @en "set_placeholder"
@@ -210,7 +263,16 @@ pub struct Input:
             if shown > w:
                 shown = w
             end
-            buf.put_str(bounds.x, bounds.y, str.CharSubstr(this.content, start, shown), this.style)
+            mut text := str.CharSubstr(this.content, start, shown)
+            if this.masked:
+                mut mg := str.CharSubstr(this.mask_glyph, 0, 1)
+                // A non-ASCII codepoint is more than one byte.
+                if mg == "" or (buf.glyphs == GlyphPolicy.ASCII and mg.len() > 1):
+                    mg = "*"
+                end
+                text = str.Repeat(mg, shown)
+            end
+            buf.put_str(bounds.x, bounds.y, text, this.style)
         end
         if buf.focused:
             col := this.caret - start
