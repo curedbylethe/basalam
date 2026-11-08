@@ -17,6 +17,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   documentation metadata only: `rect.عرض` is still a compile error, and the
   English name is what code uses. The [name inventory](basalam-api-glossary-fa.md)
   is the contributor reference.
+- `TableView`, a focusable, vertically scrollable table with a selection
+  cursor, a pinned header and a scrollbar. `Table` is unchanged.
+- ASCII, heavy and mixed-weight border rings through `BorderGlyphs`, and a
+  `GlyphPolicy` that falls back to ASCII glyphs on terminals without box
+  drawing. `Screen.set_glyphs` overrides the detected policy.
+- `Input` moves its caret and edits in the middle of the value.
+- `Input.max_length`, `Input.filter`, `Input.masked` and `Input.mask_glyph`
+  limit, veto and mask typed text.
+- `Input.on_submit`; its return value decides whether Enter bubbles to the
+  parent.
 
 ## [0.4.1] - 2026-10-31
 
