@@ -4,7 +4,7 @@
 # Every @en name must be followed directly by a non-blank @fa alias, and no
 # @fa may stand alone. The pair is documentation metadata: `make build`
 # proves the compiler parses it and `salam doc --lang=fa` renders it, but a
-# Persian name is NOT a usable identifier (Salam 0.5.9 rejects `rect.عرض`
+# Persian name is NOT a usable identifier (Salam 0.6.0 rejects `rect.عرض`
 # with E016). The inventory in basalam-api-glossary-fa.md must carry one row
 # per alias; this gate compares the counts.
 #

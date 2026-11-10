@@ -31,7 +31,7 @@ pub struct Rect:
 end
 ```
 
-**Verification.** Every alias below is applied to the source, so `make build` proves it parses and type-checks. `salam doc --lang=fa` renders aliases for the declarations in its model. Salam 0.5.9 does not include enum variants in that model, so an alias on a variant such as `ColorTier.Ansi16` does not appear in generated docs; it still compiles, and the gate enforces it. `make fa-aliases` (part of `make check`) fails when an `@en` has no following `@fa`, when an alias is empty, when a `@fa` stands alone, or when the row count below no longer matches the source. No check covers spelling or meaning: a Persian speaker reviews new names.
+**Verification.** Every alias below is applied to the source, so `make build` proves it parses and type-checks. `salam doc --lang=fa` renders aliases for the declarations in its model. Salam 0.6.0 does not include enum variants in that model, so an alias on a variant such as `ColorTier.Ansi16` does not appear in generated docs; it still compiles, and the gate enforces it. `make fa-aliases` (part of `make check`) fails when an `@en` has no following `@fa`, when an alias is empty, when a `@fa` stands alone, or when the row count below no longer matches the source. No check covers spelling or meaning: a Persian speaker reviews new names.
 
 ## Adding a name
 
