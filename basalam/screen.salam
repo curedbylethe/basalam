@@ -104,12 +104,8 @@
  * start() add none; an application installs or extends a keymap itself), no
  * vim-style modes (an application concern, built on set_keymap).
  *
- * Compiler workaround. The issue specifies `events: chan Event`. Salam
- * cannot spell chan.Chan<Event> inside the package that declares Event (the
- * type argument does not resolve), but it does resolve the type through a
- * generic parameter. Channel<T> is therefore
- * a one-field wrapper whose only job is to name chan.Chan<T>;
- * screen.events.ch is the std/chan channel itself.
+ * Salam 0.6 can spell chan.Chan<Event> inside the package that declares
+ * Event, so Screen.events uses the std/chan channel directly.
  */
 
 package basalam
@@ -144,7 +140,7 @@ const WinchRetryMs := 50
 // What the input thread needs, copied onto the heap because spawn() passes
 // exactly one pointer. The channel copy shares the screen's channel.
 struct InputContext:
-    pub events: Channel<Event>
+    pub events: chan.Chan<Event>
     pub tick_ms: int = 0
 end
 
@@ -154,29 +150,9 @@ end
 // genuinely changes size (a same-size wake emits nothing, which is the
 // behavior the polling path had).
 struct WinchContext:
-    pub events: Channel<Event>
+    pub events: chan.Chan<Event>
     pub width: int = 0
     pub height: int = 0
-end
-
-@en "Channel"
-@fa "کانال"
-/// A thin wrapper that names a std/chan channel of T (see the module
-/// comment for why it exists). Use `ch` for everything.
-pub struct Channel<T>:
-    @en "ch"
-    @fa "کانال"
-    /// The underlying std/chan channel.
-    pub ch: chan.Chan<T>
-
-    @en "Open"
-    @fa "ایجاد کانال باز"
-    /// Creates an open channel buffering up to capacity values.
-    pub static func Open(capacity: i64): Channel<T>:
-        mut c := chan.Chan {} as chan.Chan<T>
-        c.init(capacity)
-        ret Channel { ch = c }
-    end
 end
 
 @en "Screen"
@@ -187,7 +163,7 @@ pub struct Screen:
     @en "events"
     @fa "رویدادها"
     /// The channel the input thread sends events on and next_event reads.
-    pub events: Channel<Event>
+    pub events: chan.Chan<Event>
 
     @en "root"
     @fa "ریشه"
@@ -820,7 +796,7 @@ pub struct Screen:
     /// Queues an event as if the input thread had produced it. Safe from
     /// any thread. Returns false once the screen is stopped.
     pub func post(event: Event): bool:
-        ret this.events.ch.send(event)
+        ret this.events.send(event)
     end
 
     @en "next_event"
@@ -830,7 +806,7 @@ pub struct Screen:
     /// The intended loop is: until screen.next_event(ev): ... end
     pub func next_event(event &: Event): bool:
         mut ok := true
-        got := this.events.ch.recv(ok)
+        got := this.events.recv(ok)
         if not ok:
             this.running = false
             ret false
@@ -912,7 +888,7 @@ pub struct Screen:
     /// such as a tick callback.
     pub func stop():
         this.running = false
-        this.events.ch.close()
+        this.events.close()
     end
 
     @en "close"
@@ -938,7 +914,7 @@ pub struct Screen:
                 // The channel is already closed (stop above), so the watcher
                 // exits on its next is_closed() check; WakeWinch() supplies
                 // the wake it needs to get there, and join waits for it to
-                // finish. Both must happen before events.ch.free(), which
+                // finish. Both must happen before events.free(), which
                 // requires every user of the channel to be gone.
                 signal.WakeWinch()
                 join(this.winch_thread)
@@ -946,7 +922,7 @@ pub struct Screen:
             end
             this.attached = false
         end
-        this.events.ch.free()
+        this.events.free()
         this.tree.free()
         this.buffer.free()
         this.focus_stack.free()
@@ -1224,7 +1200,7 @@ func input_loop(ctx: InputContext*):
     mut size := term.Size()
     mut next_tick := sync.NowMs() + c.tick_ms
     mut reading := true
-    until not events.ch.is_closed():
+    until not events.is_closed():
         mut wait := PollMs
         if c.tick_ms > 0:
             left := (next_tick - sync.NowMs()) as int
@@ -1240,7 +1216,7 @@ func input_loop(ctx: InputContext*):
                     // then stop reading so the loop does not spin on it.
                     reading = false
                 end
-                if not events.ch.send(key_event(k)):
+                if not events.send(key_event(k)):
                     break
                 end
             end
@@ -1257,7 +1233,7 @@ func input_loop(ctx: InputContext*):
             if now.cols != size.cols or now.rows != size.rows:
                 size = now
                 resized := Event { kind = ResizeEvent, width = now.cols, height = now.rows }
-                if not events.ch.send(resized):
+                if not events.send(resized):
                     break
                 end
             end
@@ -1267,7 +1243,7 @@ func input_loop(ctx: InputContext*):
             // thread gets one late tick, not a burst of catch-up ticks.
             next_tick = sync.NowMs() + c.tick_ms
             tick := Event { kind = TickEvent }
-            if not events.ch.send(tick):
+            if not events.send(tick):
                 break
             end
         end
@@ -1291,7 +1267,7 @@ func winch_loop(ctx: WinchContext*):
     mut width := c.width
     mut height := c.height
     set := signal.NewWinchSet()
-    until not events.ch.is_closed():
+    until not events.is_closed():
         n := signal.WaitWinch(set)
         if n == 0:
             // Windows only: WaitWinch returns 0 there instead of a status,
@@ -1305,7 +1281,7 @@ func winch_loop(ctx: WinchContext*):
             sync.SleepMs(WinchRetryMs)
         else:
             // A positive return is the signal number: a wake.
-            if events.ch.is_closed():
+            if events.is_closed():
                 break
             end
             now := term.Size()
@@ -1313,7 +1289,7 @@ func winch_loop(ctx: WinchContext*):
                 width = now.cols
                 height = now.rows
                 resized := Event { kind = ResizeEvent, width = now.cols, height = now.rows }
-                if not events.ch.send(resized):
+                if not events.send(resized):
                     break
                 end
             end
@@ -1336,9 +1312,10 @@ end
 /// (ID 0, sized to the whole screen). Nothing touches the terminal until
 /// start(), which resizes the screen to the real terminal.
 pub func NewScreen(root: dyn Widget, width: int, height: int): Screen:
+    mut evch := chan.Chan {} as chan.Chan<Event>
+    evch.init(EventCapacity as i64)
     mut s := Screen {
-        events = Channel.Open(EventCapacity as i64) as Channel<Event>, root = root, focused = root,
-        tree = NewTree(root), buffer = NewBuffer(width, height)
+        events = evch, root = root, focused = root, tree = NewTree(root), buffer = NewBuffer(width, height)
     }
     s.fit_root()
     ret s

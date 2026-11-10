@@ -699,7 +699,7 @@ end
 | Method | `Tree.free` | Release tree bookkeeping | آزادسازی |
 | Constructor | `NewTree` | Create tree with root widget | درخت جدید |
 
-## `screen.salam` (55 entries)
+## `screen.salam` (52 entries)
 
 [Source file](https://github.com/curedbylethe/basalam/blob/main/basalam/screen.salam)
 
@@ -707,10 +707,7 @@ end
 |---|---|---|---|
 | Constant | `PollMs` | Terminal event polling interval in milliseconds | بازه پایش به میلی‌ثانیه |
 | Constant | `EventCapacity` | Event channel capacity | ظرفیت رویداد |
-| Type | `Channel` | Wrapper around typed Salam channel | کانال |
 | Type | `Screen` | Terminal session, widget tree, focus and rendering loop | صفحه |
-| Field | `Channel.ch` | Underlying typed channel | کانال |
-| Static method | `Channel.Open` | Construct an open buffered channel | ایجاد کانال باز |
 | Field | `Screen.events` | Incoming event channel | رویدادها |
 | Field | `Screen.root` | Root widget | ریشه |
 | Field | `Screen.focused` | Currently focused widget | ویجت متمرکز |
