@@ -29,6 +29,16 @@ tag must equal them.
 `1.0.0` is reserved for the point where the public API is declared stable. It is
 not scheduled.
 
+### Compiler compatibility
+
+| basalam release | Salam compiler | compatibility |
+|---|---|---|
+| 0.5.0 | >= 0.6.0 | Tested with 0.6.0, 0.6.1 and 0.6.2; no 0.6.1 or 0.6.2 source change was needed. |
+
+Salam 0.6.1 added the immutable-reference-argument diagnostic; basalam needs no
+additional change for it. Salam 0.6.2 adds no compatibility requirement. A later
+0.6.x patch that needs a basalam change takes a patch bump such as 0.5.1.
+
 ## Tags
 
 - The tag is annotated and named `vX.Y.Z`, for example `v0.1.0`:
