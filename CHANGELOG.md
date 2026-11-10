@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-11-10
+
 ### Added
 
 - Every declaration carries a Persian `@fa` alias beside its English `@en`
@@ -47,6 +49,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   columns, a combining mark or zero-width character takes none. `MeasureText` and
   `WrapText` report cell counts, and a frame containing a wide glyph draws different
   bytes than before. ASCII-only output is unchanged. (CUR-366)
+
+### Removed
+
+- **Breaking:** `Channel<T>`, `Channel.ch` and `Channel.Open` are gone.
+  `Screen.events` is now the `std/chan` channel itself, so `screen.events.ch`
+  becomes `screen.events`, and `NewScreen` opens the channel for you. Salam 0.6.0
+  resolves `chan.Chan<Event>` inside the package that declares `Event` (Salam
+  issue #2377), which removes the reason the wrapper existed.
 
 ## [0.4.1] - 2026-10-31
 
@@ -473,7 +483,8 @@ release builds on.
 - Project scaffolding: GPL-3.0 license, `Makefile`, golden-file test runner,
   GitHub Actions CI, and the Mintlify documentation site.
 
-[Unreleased]: https://github.com/curedbylethe/basalam/compare/v0.4.1...HEAD
+[Unreleased]: https://github.com/curedbylethe/basalam/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/curedbylethe/basalam/compare/v0.4.1...v0.5.0
 [0.4.1]: https://github.com/curedbylethe/basalam/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/curedbylethe/basalam/compare/v0.3.2...v0.4.0
 [0.3.2]: https://github.com/curedbylethe/basalam/compare/v0.3.1...v0.3.2
