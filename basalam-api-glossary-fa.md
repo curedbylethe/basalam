@@ -1,8 +1,8 @@
 # Basalam API names — English and Persian
 
-> Source: [`curedbylethe/basalam`](https://github.com/curedbylethe/basalam), default branch `main`, version **0.4.1** (inventory inspected 2026-11-08).
+> Source: [`curedbylethe/basalam`](https://github.com/curedbylethe/basalam), default branch `main`, version **0.5.0** (inventory inspected 2026-11-10).
 
-This file is the naming standard and the complete name inventory for basalam. Every declaration carries an English `@en` name and a Persian `@fa` alias; the inventory lists **533 entries** across **23 source modules**, all applied in the source and compiled by `make build`.
+This file is the naming standard and the complete name inventory for basalam. Every declaration carries an English `@en` name and a Persian `@fa` alias; the inventory lists **530 entries** across **23 source modules**, all applied in the source and compiled by `make build`.
 
 ## What `@fa` is
 
