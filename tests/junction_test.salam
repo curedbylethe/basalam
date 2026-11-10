@@ -1,0 +1,139 @@
+/*
+ * basalam - a terminal user interface library for Salam (2026)
+ *
+ * Repository: https://github.com/curedbylethe/basalam
+ * License: GPL-3.0-or-later
+ */
+
+import testing
+
+include "../basalam/basalam.salam"
+
+struct Ring:
+    pub use basalam.BaseWidget
+    pub x: int = 0
+    pub y: int = 0
+    pub w: int = 0
+    pub h: int = 0
+    pub glyphs: basalam.BorderGlyphs = basalam.BorderGlyphs {}
+    pub func render(buf: basalam.Buffer, _bounds: basalam.Rect):
+        basalam.DrawBorderGlyphs(buf, rect(this.x, this.y, this.w, this.h), this.glyphs, basalam.Style {}, "")
+    end
+end
+
+struct Rules:
+    pub use basalam.BaseWidget
+    pub x: int = 0
+    pub vertical: str = "│"
+
+    pub func render(buf: basalam.Buffer, bounds: basalam.Rect):
+        mut vertical := this.vertical
+        if buf.glyphs == basalam.GlyphPolicy.ASCII:
+            vertical = "|"
+        end
+        buf.set(bounds.x, bounds.y, basalam.Cell { ch = vertical })
+        buf.set(bounds.x, bounds.y + 8, basalam.Cell { ch = vertical })
+        buf.set(bounds.x, bounds.y + 3, basalam.Cell { ch = vertical })
+        buf.set(bounds.x, bounds.y + 5, basalam.Cell { ch = vertical })
+    end
+end
+
+struct CrossRule:
+    pub use basalam.BaseWidget
+    pub horizontal: str = "─"
+
+    pub func render(buf: basalam.Buffer, _bounds: basalam.Rect):
+        mut horizontal := this.horizontal
+        if buf.glyphs == basalam.GlyphPolicy.ASCII:
+            horizontal = "-"
+        end
+        repeat 7 in i:
+            buf.set(2 + i, 4, basalam.Cell { ch = horizontal })
+        end
+    end
+end
+
+func rect(x: int, y: int, w: int, h: int): basalam.Rect:
+    ret basalam.Rect { x = x, y = y, width = w, height = h }
+end
+
+func frame(s: basalam.Screen): str:
+    mut out := ""
+    repeat s.buffer.height in y:
+        if y > 0: out = out + "|" end
+        out = out + s.buffer.row_text(y)
+    end
+    ret out
+end
+
+func scene(ring_glyphs: basalam.BorderGlyphs, vertical: str, horizontal: str): basalam.Screen:
+    mut s := basalam.NewScreen(basalam.BaseWidget {}, 12, 9)
+    rules := s.add(basalam.RootId, Rules { vertical = vertical } as dyn basalam.Widget)
+    s.widget(rules).set_bounds(rect(5, 0, 1, 9))
+    cross := s.add(basalam.RootId, CrossRule { horizontal = horizontal } as dyn basalam.Widget)
+    s.widget(cross).set_bounds(rect(0, 0, 12, 9))
+    id := s.add(basalam.RootId, Ring { x = 1, y = 1, w = 9, h = 7, glyphs = ring_glyphs } as dyn basalam.Widget)
+    s.widget(id).set_bounds(rect(0, 0, 12, 9))
+    ret s
+end
+
+func test_weight(glyphs: basalam.BorderGlyphs, vertical: str, horizontal: str, top: str, bottom: str, cross: str):
+    mut s := scene(glyphs, vertical, horizontal)
+    defer s.close()
+    s.present()
+    testing.AssertEqStr(s.buffer.get(5, 1).ch, top)
+    testing.AssertEqStr(s.buffer.get(5, 7).ch, bottom)
+    testing.AssertEqStr(s.buffer.get(5, 4).ch, cross)
+    before := frame(s)
+    s.present()
+    testing.AssertEqStr(frame(s), before)
+    s.dirty = true
+    s.present()
+    testing.AssertEqStr(frame(s), before)
+end
+
+func test_partial_repaint():
+    mut s := scene(basalam.GlyphsSingle(), "│", "─")
+    defer s.close()
+    rules := 1
+    s.present()
+    testing.AssertEqStr(s.buffer.get(5, 1).ch, "┴")
+    s.invalidate(rules)
+    s.widget(rules).set_bounds(rect(2, 0, 1, 9))
+    s.invalidate(rules)
+    s.present()
+    testing.AssertEqStr(s.buffer.get(5, 1).ch, "─")
+end
+
+func test_mixed_weights_unchanged():
+    mut s := scene(basalam.GlyphsSingle(), "┃", "━")
+    defer s.close()
+    s.present()
+    testing.AssertEqStr(s.buffer.get(5, 1).ch, "─")
+    testing.AssertEqStr(s.buffer.get(5, 0).ch, "┃")
+end
+
+func test_standalone_and_ascii():
+    mut standalone := basalam.NewScreen(basalam.BaseWidget {}, 12, 9)
+    defer standalone.close()
+    id := standalone.add(basalam.RootId, Ring { x = 1, y = 1, w = 9, h = 7, glyphs = basalam.GlyphsSingle() } as dyn basalam.Widget)
+    standalone.widget(id).set_bounds(rect(0, 0, 12, 9))
+    standalone.present()
+    testing.AssertEqStr(frame(standalone), "            | ┌───────┐  | │       │  | │       │  | │       │  | │       │  | │       │  | └───────┘  |            ")
+
+    mut ascii := scene(basalam.GlyphsSingle(), "│", "─")
+    defer ascii.close()
+    ascii.set_glyphs(basalam.GlyphPolicy.ASCII)
+    ascii.present()
+    testing.AssertEqStr(frame(ascii), "     |      | +-------+  | |       |  | |   |   |  | |-------|  | |   |   |  | |       |  | +-------+  |     |      ")
+end
+
+func main():
+    test_weight(basalam.GlyphsSingle(), "│", "─", "┴", "┬", "┼")
+    test_weight(basalam.GlyphsHeavy(), "┃", "━", "┻", "┳", "╋")
+    test_weight(basalam.GlyphsDouble(), "║", "═", "╩", "╦", "╬")
+    test_partial_repaint()
+    test_mixed_weights_unchanged()
+    test_standalone_and_ascii()
+    ret testing.Summary()
+end
