@@ -133,7 +133,7 @@ func test_partial_repaint_inner_rule():
     testing.AssertEqStr(s.buffer.get(2, 1).ch, "┬")
 end
 
-func test_mixed_weights_unchanged():
+func test_heavy_rule_light_ring():
     mut s := scene(basalam.GlyphsSingle(), "┃", "━")
     defer s.close()
     s.present()
@@ -183,7 +183,7 @@ func main():
     test_weight(basalam.GlyphsDouble(), "║", "═", "╩", "╦", "╬")
     test_partial_repaint()
     test_partial_repaint_inner_rule()
-    test_mixed_weights_unchanged()
+    test_heavy_rule_light_ring()
     test_mixed_families()
     test_no_mixed_glyph()
     test_standalone_and_ascii()
