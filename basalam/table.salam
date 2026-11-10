@@ -567,7 +567,7 @@ pub struct TableView:
     /// Called with the selected row when Enter is pressed on a non-empty
     /// table. Its result is the consumed flag: the default returns false, so
     /// Enter bubbles on.
-    pub activate: func (int) bool = (row: int): ret false end
+    pub activate: func (int) bool = (_row: int): ret false end
 
     @en "focusable"
     @fa "تمرکز‌پذیر است"

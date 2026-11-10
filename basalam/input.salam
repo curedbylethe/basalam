@@ -102,7 +102,7 @@ pub struct Input:
     /// typed glyph), once the max_length check has passed. Returning false
     /// rejects it: the key is consumed and nothing changes. Not called for
     /// Backspace, Delete or set_value. The default accepts everything.
-    pub filter: func (str) bool = (candidate: str): ret true end
+    pub filter: func (str) bool = (_candidate: str): ret true end
 
     @en "masked"
     @fa "پوشانده"
@@ -123,7 +123,7 @@ pub struct Input:
     /// Returning true consumes the key; false lets it bubble to the parent.
     /// The default returns true. After it returns, the caret and window are
     /// clamped to the value, in case it changed the value.
-    pub on_submit: func (str) bool = (value: str): ret true end
+    pub on_submit: func (str) bool = (_value: str): ret true end
 
     content: str = ""
     caret: int = 0

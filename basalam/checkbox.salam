@@ -80,7 +80,7 @@ pub struct Checkbox:
     @fa "هنگام تغییر انتخاب"
     /// Called with the new checked value after every toggle. The default does
     /// nothing.
-    pub on_toggle: func (bool) = (v: bool): end
+    pub on_toggle: func (bool) = (_v: bool): end
 
     state: bool = false
 
