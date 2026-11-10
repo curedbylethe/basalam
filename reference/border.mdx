@@ -78,7 +78,7 @@ The glyphs are the same at every color tier, so a frame keeps its shape wherever
 
 ## Writes and overlap
 
-`DrawBorder` replaces every cell it draws and reads or clears nothing else. The interior of the rectangle keeps whatever was drawn there before, so you can draw a frame over content. Overlapping frames are the caller's concern: the last write wins, and junctions are not resolved.
+`DrawBorder` replaces every cell it draws and reads or clears nothing else. The interior of the rectangle keeps whatever was drawn there before, so you can draw a frame over content. A `Screen` resolves junctions where a ring cell has a neighbour pointing into it; a hand-built `Buffer` does not, because it has no paint phase.
 
 ## Glyph sets
 
@@ -120,7 +120,7 @@ pub func GlyphsFor(border: BorderStyle, policy: GlyphPolicy): BorderGlyphs
 pub func DrawBorderGlyphs(buf: Buffer, rect: Rect, glyphs: BorderGlyphs, style: Style, title: str)
 ```
 
-`h` draws the top and bottom edges and `v` the left and right edges. Every glyph is one codepoint. The `t_*` and `cross` fields, and `hw` and `vw`, are data for callers: `DrawBorderGlyphs` draws only the edges and corners.
+`h` draws the top and bottom edges and `v` the left and right edges. Every glyph is one codepoint. The `t_*` and `cross` fields, and `hw` and `vw`, are data for callers: `DrawBorderGlyphs` draws only the edges and corners. Junction glyphs come from the `Screen` pass, which reads the arms each cell shows rather than these fields.
 
 `GlyphsFor` maps a `BorderStyle` to a set. `None` gives the zero value with no glyphs. Under `GlyphPolicy.ASCII` every other style gives `GlyphsASCII()`. Otherwise `Single`, `Double`, and `Rounded` give the set of the same name. `DrawBorder(buf, rect, border, style, title)` is `DrawBorderGlyphs(buf, rect, GlyphsFor(border, buf.glyphs), style, title)`, so every rule on this page applies to both.
 
@@ -138,11 +138,20 @@ The ring follows the [`glyphs` policy](/reference/buffer#glyph-policy) of the bu
 
 A [`Panel`](/reference/panel) insets its child by one cell, so a `Panel` inside a `Panel` draws two rings with no gap between them. Each ring keeps its own glyph set: an outer `Single` ring and an inner `Double` ring show `┌` at the outer corner and `╔` one cell diagonally inside it.
 
+## Junctions
+
+After widgets paint, `Screen` rewrites a box-drawing cell when an orthogonal neighbour points into it. The added arm points toward the adjacent cell: a neighbour above adds `UP`, and a neighbour below adds `DOWN`; neighbours to the left or right add `LEFT` or `RIGHT`.
+
+Light, Heavy, Double, and the four mixed-weight families join. If a combination has no Unicode glyph, such as Heavy against Double, the current glyph stays unchanged. The pass never removes or reweights an existing arm. A replacement keeps the colour of the cell it replaces.
+
+`GlyphPolicy.ASCII` disables the pass, so ASCII frames stay unchanged. Title spaces occupy top-edge cells and have no arms, so no junction forms there. The pass rewrites mapped box-drawing characters, regardless of whether a built-in or custom glyph set supplied them. Unmapped characters stay unchanged.
+
+This is `Screen` behaviour. `DrawBorder` into a hand-built `Buffer` draws the ring only. The two rings of a `Panel` inside a `Panel` stay parallel and do not join: adjacent cells point along the same axis, so they are not a junction.
+
 ## Out of scope
 
 These are not part of this release:
 
-- Junctions where two rings meet. The tree has no container paint phase that sees sibling border rects, and layout gives siblings disjoint rects, so there is nothing to join. The `t_*` and `cross` fields are ready for a future join pass.
 - Shadows. They need the same paint-phase contract.
 
 ## Use it in a widget

@@ -6,7 +6,8 @@ library, not an application: user programs import it. The repository also holds
 the Mintlify documentation site (`*.mdx` at the root, `docs.json`).
 
 These are the rules every change follows, agent or human. Details live in
-[CONTRIBUTING.md](CONTRIBUTING.md), [RELEASING.md](RELEASING.md), and
+[CONTRIBUTING.md](https://github.com/curedbylethe/basalam/blob/main/CONTRIBUTING.md),
+[RELEASING.md](https://github.com/curedbylethe/basalam/blob/main/RELEASING.md), and
 [basalam-api-glossary-fa.md](basalam-api-glossary-fa.md).
 
 ## Quality gates
