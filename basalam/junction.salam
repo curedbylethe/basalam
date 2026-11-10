@@ -32,6 +32,10 @@ func _arms(ch: str): int:
         "┣": 138 end "┫": 42 end "┳": 168 end "┻": 162 end "╋": 170 end
         "║": 15 end "═": 240 end "╚": 195 end "╝": 51 end "╔": 204 end "╗": 60 end
         "╠": 207 end "╣": 63 end "╦": 252 end "╩": 243 end "╬": 255 end
+        "┍": 132 end "┑": 36 end "┕": 129 end "┙": 33 end "┝": 133 end "┥": 37 end "┯": 164 end "┷": 161 end "┿": 165 end
+        "┎": 72 end "┒": 24 end "┖": 66 end "┚": 18 end "┠": 74 end "┨": 26 end "┰": 88 end "┸": 82 end "╂": 90 end
+        "╒": 196 end "╕": 52 end "╘": 193 end "╛": 49 end "╞": 197 end "╡": 53 end "╤": 244 end "╧": 241 end "╪": 245 end
+        "╓": 76 end "╖": 28 end "╙": 67 end "╜": 19 end "╟": 79 end "╢": 31 end "╥": 92 end "╨": 83 end "╫": 95 end
         "╭": 68 end "╮": 20 end "╰": 65 end "╯": 17 end
         else: 0 end
     end
@@ -55,6 +59,10 @@ func _junction_glyph(arms: int): str:
         138: "┣" end 42: "┫" end 168: "┳" end 162: "┻" end 170: "╋" end
         15: "║" end 240: "═" end 195: "╚" end 51: "╝" end 204: "╔" end 60: "╗" end
         207: "╠" end 63: "╣" end 252: "╦" end 243: "╩" end 255: "╬" end
+        132: "┍" end 36: "┑" end 129: "┕" end 33: "┙" end 133: "┝" end 37: "┥" end 164: "┯" end 161: "┷" end 165: "┿" end
+        72: "┎" end 24: "┒" end 66: "┖" end 18: "┚" end 74: "┠" end 26: "┨" end 88: "┰" end 82: "┸" end 90: "╂" end
+        196: "╒" end 52: "╕" end 193: "╘" end 49: "╛" end 197: "╞" end 53: "╡" end 244: "╤" end 241: "╧" end 245: "╪" end
+        76: "╓" end 28: "╖" end 67: "╙" end 19: "╜" end 79: "╟" end 31: "╢" end 92: "╥" end 83: "╨" end 95: "╫" end
         else: "" end
     end
 end
