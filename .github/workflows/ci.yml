@@ -48,6 +48,19 @@ jobs:
       - name: make test-llvm
         run: make test-llvm
 
+  compiler-floor:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
+      - name: Setup Salam 0.6.0
+        uses: SalamLang/Salam/.github/actions/setup-salam@d683b2a9084617016960c34ea0581e1a04cb0cb3
+        with:
+          version: '0.6.0'
+      - name: Fetch the locked packages
+        run: salam deps
+      - name: Check the compiler floor
+        run: make check
+
   docs:
     runs-on: ubuntu-latest
     env:
