@@ -740,14 +740,31 @@ pub struct Screen:
         defer order.free()
         repeat this.regions.len() in n:
             r := this.regions.get(n)
-            this.buffer.fill(r, " ", StyleDefault)
+            mut repaint := r.intersection(area)
+            if not repaint.is_empty():
+                if repaint.x > area.x:
+                    repaint.x -= 1
+                    repaint.width += 1
+                end
+                if repaint.right() < area.right():
+                    repaint.width += 1
+                end
+                if repaint.y > area.y:
+                    repaint.y -= 1
+                    repaint.height += 1
+                end
+                if repaint.bottom() < area.bottom():
+                    repaint.height += 1
+                end
+            end
+            this.buffer.fill(repaint, " ", StyleDefault)
             repeat order.len() in i:
                 id := order.get(i)
                 w := this.tree.get(id)
                 b := w.bounds()
-                if b.intersects(r):
+                if b.intersects(repaint):
                     mut visible := b.intersection(area)
-                    visible = visible.intersection(r)
+                    visible = visible.intersection(repaint)
                     if not visible.is_empty() and this.visible_chain(id):
                         mut view := this.buffer
                         view.clip = visible
@@ -757,7 +774,7 @@ pub struct Screen:
                     end
                 end
             end
-            this._record_junction_arms(r.intersection(area))
+            this._record_junction_arms(repaint)
         end
     end
 
