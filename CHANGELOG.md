@@ -34,6 +34,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Breaking:** basalam now requires Salam 0.6.0 or later. Salam 0.6.0
+  reports unused lambda parameters, and Salam 0.6.1 rejects immutable values
+  passed to reference parameters. This release fixes both diagnostics, so your
+  source needs no change, but older compilers can no longer build the library.
 - `Buffer.ansi()` and `Buffer.diff()` append each SGR piece directly into the
   frame builder instead of building an intermediate style string and copying
   it. Rendered bytes and `SgrBuilds()` counts are unchanged; a style transition
