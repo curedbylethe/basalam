@@ -134,7 +134,7 @@ Modes stay app-level. An application that wants vim-style modes wraps the librar
 ```salam
 // Opt in to the library defaults, then add a binding of your own.
 screen.set_keymap(basalam.NewDefaultKeymap())
-screen.keymap.bind(term.Decode("n"), (screen: basalam.Screen*, event: basalam.Event): ret screen[0].focus_next() end)
+screen.keymap.bind(term.Decode("n"), (screen: basalam.Screen*, _event: basalam.Event): ret screen[0].focus_next() end)
 ```
 
 ## Limitations

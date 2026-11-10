@@ -31,10 +31,10 @@ pub struct Input:
     pub cursor_style: Style = Style { reverse = true }
     pub placeholder_style: Style = Style { fg = BrightBlack }
     pub max_length: int = 0
-    pub filter: func (str) bool = (candidate: str): ret true end
+    pub filter: func (str) bool = (_candidate: str): ret true end
     pub masked: bool = false
     pub mask_glyph: str = "*"
-    pub on_submit: func (str) bool = (value: str): ret true end
+    pub on_submit: func (str) bool = (_value: str): ret true end
 end
 ```
 

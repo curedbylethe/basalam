@@ -63,7 +63,7 @@ See [Sequences](#sequences) for the full timeout behavior.
 An action is a `func (screen: basalam.Screen*, event: basalam.Event): bool`. Only lambda literals can be stored in a function value, so every action — yours and the library's defaults — is a lambda. The screen is a pointer so an action can move focus and mark the screen dirty:
 
 ```salam
-(screen: basalam.Screen*, event: basalam.Event): ret screen[0].focus_next() end
+(screen: basalam.Screen*, _event: basalam.Event): ret screen[0].focus_next() end
 ```
 
 | Method | Description |

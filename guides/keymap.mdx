@@ -54,7 +54,7 @@ An action has the type `func (screen: basalam.Screen*, event: basalam.Event): bo
 Only lambda literals can be stored in a function value, so every action is one:
 
 ```salam
-screen.keymap.bind(term.Decode("n"), (screen: basalam.Screen*, event: basalam.Event): ret screen[0].focus_next() end)
+screen.keymap.bind(term.Decode("n"), (screen: basalam.Screen*, _event: basalam.Event): ret screen[0].focus_next() end)
 ```
 
 `bind` writes to the global scope, and a later `bind` of the same key replaces the earlier one (last write wins). `unbind` removes a global key and does nothing when none exists:
@@ -83,7 +83,7 @@ panel := screen.add(basalam.RootId, frame)
 screen.widget(panel).set_bounds(basalam.Rect { x = 2, y = 1, width = 20, height = 5 })
 
 // Runs only while the panel, or a widget inside it, has the focus.
-screen.keymap.bind_for(panel, term.Decode("x"), (screen: basalam.Screen*, event: basalam.Event): ret screen[0].focus_next() end)
+screen.keymap.bind_for(panel, term.Decode("x"), (screen: basalam.Screen*, _event: basalam.Event): ret screen[0].focus_next() end)
 ```
 
 That is a fragment of a program with a screen. [Resolution](/reference/keymap#resolution) lists the full nearest-first walk and the cost of a global-only map.
@@ -93,7 +93,7 @@ That is a fragment of a program with a screen. [Resolution](/reference/keymap#re
 `bind_seq` and `bind_for_seq` decode the string one rune at a time, so `"gg"` is two key presses. `bind_for_seq` takes the same widget ID as `bind_for`.
 
 ```salam
-screen.keymap.bind_seq("gg", (screen: basalam.Screen*, event: basalam.Event): ret screen[0].focus_next() end)
+screen.keymap.bind_seq("gg", (screen: basalam.Screen*, _event: basalam.Event): ret screen[0].focus_next() end)
 screen.keymap.pending_timeout_ms = 700 // abandon a half-typed sequence after 700ms
 ```
 
@@ -113,8 +113,8 @@ Modes are application territory: the library ships two stock maps and no mode sy
 ```salam
 func insert_map(): basalam.Keymap:
     mut km := basalam.NewKeymap()
-    km.bind(term.Decode("j"), (screen: basalam.Screen*, event: basalam.Event): ret screen[0].focus_down() end)
-    km.bind(term.Decode("\x1b"), (screen: basalam.Screen*, event: basalam.Event):
+    km.bind(term.Decode("j"), (screen: basalam.Screen*, _event: basalam.Event): ret screen[0].focus_down() end)
+    km.bind(term.Decode("\x1b"), (screen: basalam.Screen*, _event: basalam.Event):
         screen[0].set_keymap(basalam.NewDefaultKeymap())
         ret true
     end)
@@ -125,7 +125,7 @@ end
 That function is a fragment. Enter insert mode from the normal map the same way you bind any other key:
 
 ```salam
-screen.keymap.bind(term.Decode("i"), (screen: basalam.Screen*, event: basalam.Event):
+screen.keymap.bind(term.Decode("i"), (screen: basalam.Screen*, _event: basalam.Event):
     screen[0].set_keymap(insert_map())
     ret true
 end)
@@ -173,9 +173,9 @@ func main:
     second := screen.add(basalam.RootId, Field {})
 
     screen.set_keymap(basalam.NewDefaultKeymap())
-    screen.keymap.bind(term.Decode("n"), (screen: basalam.Screen*, event: basalam.Event): ret screen[0].focus_next() end)
-    screen.keymap.bind_for(first, term.Decode("x"), (screen: basalam.Screen*, event: basalam.Event): ret screen[0].focus(second) end)
-    screen.keymap.bind_seq("gg", (screen: basalam.Screen*, event: basalam.Event): ret screen[0].focus(first) end)
+    screen.keymap.bind(term.Decode("n"), (screen: basalam.Screen*, _event: basalam.Event): ret screen[0].focus_next() end)
+    screen.keymap.bind_for(first, term.Decode("x"), (screen: basalam.Screen*, _event: basalam.Event): ret screen[0].focus(second) end)
+    screen.keymap.bind_seq("gg", (screen: basalam.Screen*, _event: basalam.Event): ret screen[0].focus(first) end)
 
     screen.dirty = false
 
