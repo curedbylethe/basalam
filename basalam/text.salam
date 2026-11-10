@@ -330,7 +330,7 @@ end
 /// grid. A two-cell glyph can exceed a width of one. width <= 0 means
 /// unbounded, so each paragraph is returned unwrapped.
 pub func WrapText(text: str, width: int): Vector<str>:
-    out := Vector {} as Vector<str>
+    mut out := Vector {} as Vector<str>
     paras := str.Split(text, "\n")
     defer paras.free()
     repeat paras.len() in i:
