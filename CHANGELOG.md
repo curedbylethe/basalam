@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+### Changed
+- Rings now join where they meet for supported light, heavy, double, and mixed-weight combinations. Combinations without a Unicode glyph keep the current cell. `Screen` joins them after widgets paint; hand-built buffers do not. ASCII policy stays unchanged. (CUR-720)
 
 ## [0.5.0] - 2026-11-10
 
