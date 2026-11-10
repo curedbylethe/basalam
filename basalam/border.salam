@@ -22,8 +22,8 @@ import str
 @fa "ضخامت"
 /// The stroke weight of a border run. Light is the zero value; Heavy and
 /// Double describe the other weights of the glyph table. A BorderGlyphs
-/// records the weight of its horizontal and vertical runs so a future join
-/// pass can pick junction glyphs.
+/// records the weight of its horizontal and vertical runs for Screen's
+/// post-paint junction pass.
 pub enum Weight:
     @en "Light"
     @fa "سبک"
@@ -43,8 +43,8 @@ end
 @fa "نویسه‌های کادر"
 /// The glyphs of one border ring: edges, corners, the four T junctions and
 /// the cross, plus the weight of the horizontal and vertical runs. Every
-/// glyph is one codepoint. DrawBorderGlyphs draws the edges and corners; the
-/// junction fields are data for callers, since no join pass exists yet.
+/// glyph is one codepoint. DrawBorderGlyphs draws the edges and corners;
+/// Screen's post-paint pass selects junction glyphs from painted arms.
 pub struct BorderGlyphs:
     @en "h"
     @fa "افقی"

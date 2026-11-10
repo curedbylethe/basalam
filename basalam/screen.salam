@@ -238,6 +238,8 @@ pub struct Screen:
     // descendants, and draw_regions repaints whatever intersects either.
     regions: Vector<Rect> = Vector {}
 
+    junction_arms: Vector<int> = Vector {} as Vector<int>
+
     @en "focus_stack"
     @fa "پشته تمرکز"
     /// Widget IDs; the top (last) entry is the focused widget, and an
@@ -566,6 +568,8 @@ pub struct Screen:
     /// Resizes the back buffer to width x height and refits the root.
     pub func resize(width: int, height: int):
         this.buffer.resize(width, height)
+        this.junction_arms.free()
+        this.junction_arms = _new_junction_arms(width * height)
         this.fit_root()
     end
 
@@ -726,6 +730,7 @@ pub struct Screen:
                 w.render(view, b)
             end
         end
+        this._record_junction_arms(area)
     end
 
     func draw_regions():
@@ -752,6 +757,19 @@ pub struct Screen:
                     end
                 end
             end
+            this._record_junction_arms(r.intersection(area))
+        end
+    end
+
+    func _record_junction_arms(area: Rect):
+        repeat area.height in dy:
+            repeat area.width in dx:
+                x := area.x + dx
+                y := area.y + dy
+                if x >= 0 and x < this.buffer.width and y >= 0 and y < this.buffer.height:
+                    this.junction_arms.set(y * this.buffer.width + x, _arms(this.buffer.get(x, y).ch))
+                end
+            end
         end
     end
 
@@ -772,6 +790,7 @@ pub struct Screen:
         else:
             this.draw_regions()
         end
+        _join_junctions(this.buffer, this.junction_arms, this.glyphs)
     end
 
     @en "present"
@@ -929,6 +948,7 @@ pub struct Screen:
         this.keymap.free()
         this.stamps.free()
         this.regions.free()
+        this.junction_arms.free()
     end
 
     @en "run"
@@ -1315,7 +1335,8 @@ pub func NewScreen(root: dyn Widget, width: int, height: int): Screen:
     mut evch := chan.Chan {} as chan.Chan<Event>
     evch.init(EventCapacity as i64)
     mut s := Screen {
-        events = evch, root = root, focused = root, tree = NewTree(root), buffer = NewBuffer(width, height)
+        events = evch, root = root, focused = root, tree = NewTree(root), buffer = NewBuffer(width, height),
+        junction_arms = _new_junction_arms(width * height)
     }
     s.fit_root()
     ret s
