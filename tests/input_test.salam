@@ -290,7 +290,7 @@ func step(e &: basalam.Input, b: basalam.Buffer, seq: str):
 end
 
 func test_caret_window_invariant():
-    e := basalam.NewInput()
+    mut e := basalam.NewInput()
     mut b := basalam.NewBuffer(5, 1)
     defer b.free()
     b.focused = true
@@ -744,7 +744,7 @@ func test_submit_only_on_enter():
     submit_calls = 0
     mut e := basalam.NewInput()
     e.on_submit = (v: str): ret rec_true(v) end
-    e.filter = (c: str): ret false end
+    e.filter = (_c: str): ret false end
     _ := e.handle_event(key("a"))
     _ := e.handle_event(special(term.KeyBackspace))
     _ := e.handle_event(special(term.KeyLeft))
@@ -865,7 +865,7 @@ end
 
 func test_filter_insertions_only():
     mut e := basalam.NewInput()
-    e.filter = (c: str): ret bump() end
+    e.filter = (_c: str): ret bump() end
     base := filter_calls
     e = type_all(e, "ab")
     testing.AssertEqInt(filter_calls, base + 2)
@@ -879,7 +879,7 @@ end
 func test_filter_after_max_length():
     mut e := basalam.NewInput()
     e.max_length = 1
-    e.filter = (c: str): ret bump() end
+    e.filter = (_c: str): ret bump() end
     _ := e.handle_event(key("a"))
     base := filter_calls
     _ := e.handle_event(key("b"))

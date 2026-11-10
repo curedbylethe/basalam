@@ -132,7 +132,7 @@ end
 // tell which binding ran by reading focused_id. The closure captures id by
 // value, baking it in.
 func action_focus(id: int): func (basalam.Screen*, basalam.Event) bool:
-    ret (screen: basalam.Screen*, event: basalam.Event): ret screen[0].focus(id) end
+    ret (screen: basalam.Screen*, _event: basalam.Event): ret screen[0].focus(id) end
 end
 
 // focus_next_decline advances the focus one step and reports the key as
@@ -145,12 +145,12 @@ end
 // act_next_decline returns an action that advances the focus once and returns
 // false (declines the key).
 func act_next_decline(): func (basalam.Screen*, basalam.Event) bool:
-    ret (screen: basalam.Screen*, event: basalam.Event): ret focus_next_decline(screen) end
+    ret (screen: basalam.Screen*, _event: basalam.Event): ret focus_next_decline(screen) end
 end
 
 // act_next_consume returns an action that advances the focus and returns true.
 func act_next_consume(): func (basalam.Screen*, basalam.Event) bool:
-    ret (screen: basalam.Screen*, event: basalam.Event): ret screen[0].focus_next() end
+    ret (screen: basalam.Screen*, _event: basalam.Event): ret screen[0].focus_next() end
 end
 
 // bump_seq is the body of the timeout tests' action: it counts one run and
@@ -175,7 +175,7 @@ end
 // vim_search_decline is an on_search hook that declines the key, so a test
 // can see that the hook's boolean is the dispatch result.
 func vim_search_decline(): func (basalam.Screen*, basalam.Event) bool:
-    ret (screen: basalam.Screen*, event: basalam.Event): ret false end
+    ret (_screen: basalam.Screen*, _event: basalam.Event): ret false end
 end
 
 // new_focus_map returns a fresh keymap that binds b to moving the focus to id;
@@ -798,7 +798,7 @@ func test_mode_switch_in_action_consumes():
     defer s.close()
     w1 := s.add(basalam.RootId, Field {})
     w3 := s.add(basalam.RootId, Field {})
-    s.keymap.bind(term.Decode("a"), (screen: basalam.Screen*, event: basalam.Event): ret swap_consume(screen, w3) end)
+    s.keymap.bind(term.Decode("a"), (screen: basalam.Screen*, _event: basalam.Event): ret swap_consume(screen, w3) end)
 
     testing.AssertTrue(s.dispatch(key("a")))
     testing.AssertEqInt(s.focused_id(), w1)
@@ -814,7 +814,7 @@ func test_mode_switch_in_action_declines():
     defer s.close()
     w1 := s.add(basalam.RootId, Field {})
     w3 := s.add(basalam.RootId, Field {})
-    s.keymap.bind(term.Decode("a"), (screen: basalam.Screen*, event: basalam.Event): ret swap_decline(screen, w3) end)
+    s.keymap.bind(term.Decode("a"), (screen: basalam.Screen*, _event: basalam.Event): ret swap_decline(screen, w3) end)
 
     // The action frees the map it is running on and then declines; dispatch
     // must not crash and must return false.

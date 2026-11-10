@@ -723,7 +723,7 @@ func test_tv_activate():
     testing.AssertEqInt(tv_calls, 1)
     testing.AssertEqInt(tv_last, 1)
     mut e := tv(0, 4, true)
-    e.activate = (row: int):
+    e.activate = (_row: int):
         tv_calls = tv_calls + 1
         ret true
     end
