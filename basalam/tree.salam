@@ -27,12 +27,12 @@
  *   - the root is always ID 0 (RootId) and has no parent (NoWidget);
  *   - add() appends, so IDs are stable for the tree's lifetime and a
  *     parent's ID is always smaller than its children's. That ordering
- *     makes bubbling loop-free by construction. Focus order (R17) is the
+ *     makes bubbling loop-free by construction. Focus order is the
  *     focusable widgets outside hidden subtrees whose stamp equals the
  *     max stamp, ascending id. When nothing is raised, or that layer has
  *     no such widget, it falls back to every focusable widget outside
  *     hidden subtrees in ascending id. Paint order is ascending (stamp,
- *     id) (R16). Unraised widgets share stamp 0, so with nothing raised a
+ *     id). Unraised widgets share stamp 0, so with nothing raised a
  *     child (added after its parent) paints over it, and a later sibling
  *     paints over an earlier one.
  *
