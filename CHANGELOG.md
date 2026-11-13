@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 ### Changed
 - Rings now join where they meet for supported light, heavy, double, and mixed-weight combinations. Combinations without a Unicode glyph keep the current cell. `Screen` joins them after widgets paint; hand-built buffers do not. ASCII policy stays unchanged. (CUR-720)
+- Layout and tree doc comments no longer cite internal requirement IDs such as `(R5)`. Readers had no list to look them up in, and each sentence already states the rule.
 
 ## [0.5.0] - 2026-11-10
 

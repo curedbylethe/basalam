@@ -20,10 +20,9 @@
  * is the entry point: it stores its own rect first, computes its content box,
  * turns its ordered slot list into one rect per child, and calls each child's
  * set_bounds in slot order. A child container recurses the same way, so a
- * single set_bounds on the root drives the whole subtree (R1, pre-order DFS,
+ * single set_bounds on the root drives the whole subtree (pre-order DFS,
  * every node given set_bounds exactly once). Every rect handed to a widget
- * passes through FitRect, so it is non-empty or exactly 0x0, never negative
- * (R2).
+ * passes through FitRect, so it is non-empty or exactly 0x0, never negative.
  *
  * Two structures, one tree. A container owns the ordered `items` list that
  * defines layout. The Screen paints, dispatches events, and orders focus.
@@ -37,7 +36,7 @@
  *
  * Measurement. A pass measures before it positions. The outermost set_bounds
  * clears the memo; a nested set_bounds does not. The container stores its own
- * rect first (R1), measures what it needs, then calls each child's set_bounds
+ * rect first, measures what it needs, then calls each child's set_bounds
  * in slot order. Measurement is post-order and never calls set_bounds.
  * measured(node, axis, mw) calls Widget.measure. ok uses max(0, extent).
  * Otherwise it reads preferred_size(mw), at most once per (node, axis, mw)
@@ -150,8 +149,8 @@ end
 pub enum SizeKind:
     @en "Fill"
     @fa "پرکردن فضا"
-    /// A weighted share of whatever is left after the Fixed children (R5).
-    /// On a cross axis, Fill behaves like Pref and the weight is ignored (R8).
+    /// A weighted share of whatever is left after the Fixed children.
+    /// On a cross axis, Fill behaves like Pref and the weight is ignored.
     Fill
     @en "Fixed"
     @fa "ثابت"
@@ -161,7 +160,7 @@ pub enum SizeKind:
     @fa "ترجیحی"
     /// The child's preferred size. On a main axis a measured Pref is reserved
     /// like Fixed; one that cannot measure is Fill weight 1. On a cross axis
-    /// it is the measured natural size (R8).
+    /// it is the measured natural size.
     Pref
 end
 
@@ -237,7 +236,7 @@ pub struct LayoutSlot:
 
     @en "margin"
     @fa "حاشیه بیرونی"
-    /// Space reserved inside the slot, before alignment (R4). Zero by default.
+    /// Space reserved inside the slot, before alignment. Zero by default.
     pub margin: Insets = Insets {}
 
     @en "width"
@@ -289,7 +288,7 @@ end
 /// A container that lays its children left to right along the x axis. Slots
 /// are packed from the content start; set_gap inserts that many cells between
 /// them. A measured main-axis Pref is reserved like Fixed. Fill then shares
-/// the content width left after that reservation and the gap budget (R5). A
+/// the content width left after that reservation and the gap budget. A
 /// child fills the content height unless its align_y places it otherwise.
 /// Set padding with set_padding; a child's margin, size and alignment with
 /// the slot methods. Children are positioned, not painted, so add them to
@@ -299,12 +298,12 @@ pub struct Row:
 
     @en "pad"
     @fa "فاصله درونی"
-    /// The inset between the container's bounds and its content box (R3).
+    /// The inset between the container's bounds and its content box.
     pub pad: Insets = Insets {}
 
     @en "gap"
     @fa "فاصله"
-    /// Cells between adjacent slots on the main axis (R5). Zero by default.
+    /// Cells between adjacent slots on the main axis. Zero by default.
     /// A negative value clamps to 0.
     pub gap: int = 0
 
@@ -323,7 +322,7 @@ pub struct Row:
 
     @en "set_margin"
     @fa "تنظیم حاشیه بیرونی"
-    /// Sets the margin of the slot at i (R4). An out-of-range index is
+    /// Sets the margin of the slot at i. An out-of-range index is
     /// ignored.
     pub func set_margin(i: int, margin: Insets):
         _slotMargin(this.items, i, margin)
@@ -331,35 +330,35 @@ pub struct Row:
 
     @en "set_width"
     @fa "تنظیم عرض"
-    /// Sets the x-axis size request of the slot at i (R5).
+    /// Sets the x-axis size request of the slot at i.
     pub func set_width(i: int, size: LayoutSize):
         _slotWidth(this.items, i, size)
     end
 
     @en "set_height"
     @fa "تنظیم ارتفاع"
-    /// Sets the y-axis size request of the slot at i (R7).
+    /// Sets the y-axis size request of the slot at i.
     pub func set_height(i: int, size: LayoutSize):
         _slotHeight(this.items, i, size)
     end
 
     @en "set_align"
     @fa "تنظیم تراز"
-    /// Sets both cross-axis alignments of the slot at i (R7).
+    /// Sets both cross-axis alignments of the slot at i.
     pub func set_align(i: int, align_x: CrossAlign, align_y: CrossAlign):
         _slotAlign(this.items, i, align_x, align_y)
     end
 
     @en "set_padding"
     @fa "تنظیم فاصله درونی"
-    /// Sets the container's padding (R3).
+    /// Sets the container's padding.
     pub func set_padding(pad: Insets):
         this.pad = pad
     end
 
     @en "set_gap"
     @fa "تنظیم فاصله"
-    /// Sets the main-axis gap between slots (R5). A negative value clamps
+    /// Sets the main-axis gap between slots. A negative value clamps
     /// to 0.
     pub func set_gap(gap: int):
         this.gap = _clampNeg(gap)
@@ -381,7 +380,7 @@ pub struct Row:
     @en "set_bounds"
     @fa "تنظیم محدوده"
     /// Stores the container's own rect (normalised), measures, then lays out
-    /// and moves every child in slot order (R1). Overrides the BaseWidget
+    /// and moves every child in slot order. Overrides the BaseWidget
     /// default.
     pub func set_bounds(bounds: Rect):
         _enter_pass()
@@ -401,19 +400,19 @@ end
 /// A container that lays its children top to bottom along the y axis. The
 /// mirror of Row: a measured main-axis Pref is reserved like Fixed, then
 /// Fill shares the content height left after that reservation and the gap
-/// budget (R5). A child fills the content width unless its align_x places it
+/// budget. A child fills the content width unless its align_x places it
 /// otherwise. See Row for the slot, padding and gap methods.
 pub struct Column:
     pub use BaseWidget
 
     @en "pad"
     @fa "فاصله درونی"
-    /// The inset between the container's bounds and its content box (R3).
+    /// The inset between the container's bounds and its content box.
     pub pad: Insets = Insets {}
 
     @en "gap"
     @fa "فاصله"
-    /// Cells between adjacent slots on the main axis (R5). Zero by default.
+    /// Cells between adjacent slots on the main axis. Zero by default.
     /// A negative value clamps to 0.
     pub gap: int = 0
 
@@ -432,7 +431,7 @@ pub struct Column:
 
     @en "set_margin"
     @fa "تنظیم حاشیه بیرونی"
-    /// Sets the margin of the slot at i (R4). An out-of-range index is
+    /// Sets the margin of the slot at i. An out-of-range index is
     /// ignored.
     pub func set_margin(i: int, margin: Insets):
         _slotMargin(this.items, i, margin)
@@ -440,35 +439,35 @@ pub struct Column:
 
     @en "set_width"
     @fa "تنظیم عرض"
-    /// Sets the x-axis size request of the slot at i (R7).
+    /// Sets the x-axis size request of the slot at i.
     pub func set_width(i: int, size: LayoutSize):
         _slotWidth(this.items, i, size)
     end
 
     @en "set_height"
     @fa "تنظیم ارتفاع"
-    /// Sets the y-axis size request of the slot at i (R5).
+    /// Sets the y-axis size request of the slot at i.
     pub func set_height(i: int, size: LayoutSize):
         _slotHeight(this.items, i, size)
     end
 
     @en "set_align"
     @fa "تنظیم تراز"
-    /// Sets both cross-axis alignments of the slot at i (R7).
+    /// Sets both cross-axis alignments of the slot at i.
     pub func set_align(i: int, align_x: CrossAlign, align_y: CrossAlign):
         _slotAlign(this.items, i, align_x, align_y)
     end
 
     @en "set_padding"
     @fa "تنظیم فاصله درونی"
-    /// Sets the container's padding (R3).
+    /// Sets the container's padding.
     pub func set_padding(pad: Insets):
         this.pad = pad
     end
 
     @en "set_gap"
     @fa "تنظیم فاصله"
-    /// Sets the main-axis gap between slots (R5). A negative value clamps
+    /// Sets the main-axis gap between slots. A negative value clamps
     /// to 0.
     pub func set_gap(gap: int):
         this.gap = _clampNeg(gap)
@@ -488,7 +487,7 @@ pub struct Column:
     @en "set_bounds"
     @fa "تنظیم محدوده"
     /// Stores the container's own rect (normalised), measures, then lays out
-    /// and moves every child in slot order (R1). Overrides the BaseWidget
+    /// and moves every child in slot order. Overrides the BaseWidget
     /// default.
     pub func set_bounds(bounds: Rect):
         _enter_pass()
@@ -506,17 +505,17 @@ end
 @en "Grid"
 @fa "شبکه"
 /// A container that divides its content box into a fixed rows x cols grid
-/// (R9) and places each child by its explicit (row, col) (R10). Columns and
+/// and places each child by its explicit (row, col). Columns and
 /// rows share the space equally, the remainder to the earliest; an
 /// out-of-range or negative cell is a 0x0 slot at the content origin, and the
-/// child is still visited. set_span extends a cell by whole tracks (R15).
+/// child is still visited. set_span extends a cell by whole tracks.
 /// Two children in one cell share it and overlap.
 pub struct Grid:
     pub use BaseWidget
 
     @en "pad"
     @fa "فاصله درونی"
-    /// The inset between the container's bounds and its content box (R3).
+    /// The inset between the container's bounds and its content box.
     pub pad: Insets = Insets {}
 
     @en "items"
@@ -544,7 +543,7 @@ pub struct Grid:
 
     @en "set_margin"
     @fa "تنظیم حاشیه بیرونی"
-    /// Sets the margin of the slot at i (R4). An out-of-range index is
+    /// Sets the margin of the slot at i. An out-of-range index is
     /// ignored.
     pub func set_margin(i: int, margin: Insets):
         _slotMargin(this.items, i, margin)
@@ -552,35 +551,35 @@ pub struct Grid:
 
     @en "set_width"
     @fa "تنظیم عرض"
-    /// Sets the x-axis size request of the slot at i (R7).
+    /// Sets the x-axis size request of the slot at i.
     pub func set_width(i: int, size: LayoutSize):
         _slotWidth(this.items, i, size)
     end
 
     @en "set_height"
     @fa "تنظیم ارتفاع"
-    /// Sets the y-axis size request of the slot at i (R7).
+    /// Sets the y-axis size request of the slot at i.
     pub func set_height(i: int, size: LayoutSize):
         _slotHeight(this.items, i, size)
     end
 
     @en "set_align"
     @fa "تنظیم تراز"
-    /// Sets both cross-axis alignments of the slot at i (R7).
+    /// Sets both cross-axis alignments of the slot at i.
     pub func set_align(i: int, align_x: CrossAlign, align_y: CrossAlign):
         _slotAlign(this.items, i, align_x, align_y)
     end
 
     @en "set_cell"
     @fa "تنظیم خانه"
-    /// Sets the slot's grid cell (R10).
+    /// Sets the slot's grid cell.
     pub func set_cell(i: int, row: int, col: int):
         _slotCell(this.items, i, row, col)
     end
 
     @en "set_span"
     @fa "تنظیم گستره"
-    /// Sets how many rows and columns the slot at i covers (R15). A
+    /// Sets how many rows and columns the slot at i covers. A
     /// non-positive count is stored as 1. An out-of-range index is ignored.
     pub func set_span(i: int, rows: int, cols: int):
         _slotSpan(this.items, i, rows, cols)
@@ -588,7 +587,7 @@ pub struct Grid:
 
     @en "set_padding"
     @fa "تنظیم فاصله درونی"
-    /// Sets the container's padding (R3).
+    /// Sets the container's padding.
     pub func set_padding(pad: Insets):
         this.pad = pad
     end
@@ -596,7 +595,7 @@ pub struct Grid:
     @en "set_bounds"
     @fa "تنظیم محدوده"
     /// Stores the container's own rect (normalised), measures, then lays out
-    /// and moves every child in slot order (R1). Overrides the BaseWidget
+    /// and moves every child in slot order. Overrides the BaseWidget
     /// default. Grid cannot measure; measure stays the BaseWidget default.
     pub func set_bounds(bounds: Rect):
         _enter_pass()
@@ -613,8 +612,8 @@ end
 
 @en "Stack"
 @fa "پشته"
-/// A container that gives every child the content box minus its own margin
-/// (R11), so children overlap exactly. Size and alignment fields are ignored.
+/// A container that gives every child the content box minus its own
+/// margin, so children overlap exactly. Size and alignment fields are ignored.
 /// The container does not paint or raise; Screen's paint order decides which
 /// child draws on top. A zero-margin child is exactly the content box.
 pub struct Stack:
@@ -622,7 +621,7 @@ pub struct Stack:
 
     @en "pad"
     @fa "فاصله درونی"
-    /// The inset between the container's bounds and its content box (R3).
+    /// The inset between the container's bounds and its content box.
     pub pad: Insets = Insets {}
 
     @en "items"
@@ -640,7 +639,7 @@ pub struct Stack:
 
     @en "set_margin"
     @fa "تنظیم حاشیه بیرونی"
-    /// Sets the margin of the slot at i (R4). An out-of-range index is
+    /// Sets the margin of the slot at i. An out-of-range index is
     /// ignored.
     pub func set_margin(i: int, margin: Insets):
         _slotMargin(this.items, i, margin)
@@ -672,7 +671,7 @@ pub struct Stack:
 
     @en "set_padding"
     @fa "تنظیم فاصله درونی"
-    /// Sets the container's padding (R3).
+    /// Sets the container's padding.
     pub func set_padding(pad: Insets):
         this.pad = pad
     end
@@ -680,7 +679,7 @@ pub struct Stack:
     @en "set_bounds"
     @fa "تنظیم محدوده"
     /// Stores the container's own rect (normalised), measures, then lays out
-    /// and moves every child in slot order (R1). Overrides the BaseWidget
+    /// and moves every child in slot order. Overrides the BaseWidget
     /// default. Stack cannot measure; measure stays the BaseWidget default.
     pub func set_bounds(bounds: Rect):
         _enter_pass()
@@ -826,7 +825,7 @@ func _resolveMain(items: Vector<LayoutSlot>, main_is_width: bool, mw: int): Vect
     ret out
 end
 
-// R8 natural width. Null (cannot measure) yields avail. mw <= 0 yields 0
+// Natural width. Null (cannot measure) yields avail. mw <= 0 yields 0
 // with no call.
 func _naturalWidth(child: dyn Widget, max_width: int, avail: int): int:
     got := _measured(child, Axis.X, max_width)
@@ -836,7 +835,7 @@ func _naturalWidth(child: dyn Widget, max_width: int, avail: int): int:
     ret got.n
 end
 
-// R8 natural height at max_width (the resolved width). Null yields avail.
+// Natural height at max_width (the resolved width). Null yields avail.
 func _naturalHeight(child: dyn Widget, max_width: int, avail: int): int:
     got := _measured(child, Axis.Y, max_width)
     if not got.known:
@@ -845,7 +844,7 @@ func _naturalHeight(child: dyn Widget, max_width: int, avail: int): int:
     ret got.n
 end
 
-// R7/R8 natural width on a non-stretch cross axis: Fixed is taken directly.
+// Natural width on a non-stretch cross axis: Fixed is taken directly.
 // Fill and Pref both measure.
 func _crossWidth(child: dyn Widget, size: LayoutSize, max_width: int, avail: int): int:
     if size.kind == SizeKind.Fixed:
@@ -854,7 +853,7 @@ func _crossWidth(child: dyn Widget, size: LayoutSize, max_width: int, avail: int
     ret _naturalWidth(child, max_width, avail)
 end
 
-// R7/R8 natural height on a non-stretch cross axis, as _crossWidth for Y.
+// Natural height on a non-stretch cross axis, as _crossWidth for Y.
 // max_width is the resolved width.
 func _crossHeight(child: dyn Widget, size: LayoutSize, max_width: int, avail: int): int:
     if size.kind == SizeKind.Fixed:
@@ -942,7 +941,7 @@ func _slotSpan(items &: Vector<LayoutSlot>, i: int, rows: int, cols: int):
     items.set(i, s)
 end
 
-// R5/R6/R7: the shared Row and Column engine. A measured main-axis Pref is
+// The shared Row and Column engine. A measured main-axis Pref is
 // turned into Fixed before SplitMain; a Pref that cannot measure becomes
 // Fill weight 1. SplitMain then reserves each Fixed size at max(0, cells),
 // subtracts gap * max(0, k - 1) (k counts every slot, including zero-size
@@ -958,7 +957,7 @@ end
 // alignment (Stretch by default), ignores weight, and is not inset by gap.
 // x is measured at box.width before y is measured at the resolved width.
 // main_is_width selects Row (true) or Column (false). Every resulting rect
-// is clipped to content last (R6).
+// is clipped to content last.
 func _arrangeLinear(content: Rect, items: Vector<LayoutSlot>, main_is_width: bool, gap: int): Vector<Rect>:
     g := _clampNeg(gap)
     length := main_is_width ? content.width : content.height
@@ -999,7 +998,7 @@ func _arrangeLinear(content: Rect, items: Vector<LayoutSlot>, main_is_width: boo
     ret out
 end
 
-// R9/R10/R15: grid tracks plus explicit (row, col) placement. An out-of-range
+// Grid tracks plus explicit (row, col) placement. An out-of-range
 // or negative origin is a 0x0 slot at the content origin; the span is ignored
 // and the child is still placed once. An in-range span is the sum of that
 // many tracks from the origin. A non-positive span means 1, and the count is
@@ -1055,7 +1054,7 @@ func _arrangeGrid(content: Rect, items: Vector<LayoutSlot>, rows: int, cols: int
     ret out
 end
 
-// R11: every child is the content box minus its own margin, clipped to
+// Every child is the content box minus its own margin, clipped to
 // content. Size and alignment fields are ignored.
 func _arrangeStack(content: Rect, items: Vector<LayoutSlot>): Vector<Rect>:
     out := Vector {} as Vector<Rect>
@@ -1082,7 +1081,7 @@ end
 
 @en "FitRect"
 @fa "جاسازی مستطیل"
-/// The cells shared by r and box (R2). When they do not intersect, a 0x0 rect
+/// The cells shared by r and box. When they do not intersect, a 0x0 rect
 /// at the nearest point of box to r: the result is never empty in the
 /// negative sense, so a rect that leaves this function is either non-empty or
 /// exactly 0x0.
@@ -1099,7 +1098,7 @@ end
 
 @en "InsetRect"
 @fa "کاستن از لبه‌های مستطیل"
-/// Insets r by i, then clips the result back inside r (R3, R4). Each side is
+/// Insets r by i, then clips the result back inside r. Each side is
 /// first clamped to 0, so a negative padding or margin adds nothing. Padding
 /// larger than r gives an empty content box anchored inside r; the returned
 /// rect is never negative.
@@ -1114,7 +1113,7 @@ end
 
 @en "SplitMain"
 @fa "تقسیم محور اصلی"
-/// Splits a main-axis length of `length` cells between sizes, in order (R5).
+/// Splits a main-axis length of `length` cells between sizes, in order.
 /// Fixed takes max(0, cells) and ignores weight. `gap` is the cells between
 /// adjacent slots. A negative gap clamps to 0. The budget is
 /// gap * max(0, k - 1), where k is the slot count, including zero-size slots;
@@ -1195,7 +1194,7 @@ end
 
 @en "TrackSizes"
 @fa "اندازه‌های بخش‌های شبکه"
-/// Divides a total length into n grid tracks (R9). Assumes total >= 0
+/// Divides a total length into n grid tracks. Assumes total >= 0
 /// (content lengths are never negative; on a negative total the division
 /// truncates toward zero and the exact-sum claim below does not hold).
 /// Track k is floor(total/n) plus one for each of the earliest total mod n
@@ -1217,7 +1216,7 @@ end
 
 @en "PlaceAxisSize"
 @fa "اندازه در محور"
-/// The length a child takes on one axis (R7). Stretch, or a non-positive
+/// The length a child takes on one axis. Stretch, or a non-positive
 /// avail, gives max(0, avail); otherwise the natural size clamped into
 /// [0, avail].
 pub func PlaceAxisSize(avail: int, align: CrossAlign, natural: int): int:
@@ -1229,7 +1228,7 @@ end
 
 @en "PlaceAxisOffset"
 @fa "جابه‌جایی در محور"
-/// The offset of a child from the box start on one axis (R7). Stretch, or a
+/// The offset of a child from the box start on one axis. Stretch, or a
 /// non-positive avail, gives 0; otherwise the natural size is clamped into
 /// [0, avail] and the free space is split per align: Start 0, Center
 /// floor(free/2) with the odd cell trailing, End free.
