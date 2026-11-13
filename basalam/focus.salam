@@ -61,8 +61,13 @@ pub const DirRight := 3
 @fa "نزدیک‌ترین"
 /// Finds the candidate nearest to `from` in direction dir (DirUp, DirDown,
 /// DirLeft, DirRight) and returns its index in candidates, or -1 when no
-/// candidate qualifies. The rules are spelled out in the comments of the
-/// function body. O(n): every candidate is looked at once.
+/// candidate qualifies. A candidate qualifies when it lies entirely beyond
+/// the edge of `from` that faces dir (touching counts) and shares at least
+/// one row (moving left or right) or column (moving up or down) with
+/// `from`; empty rects never qualify. Among qualifying candidates the
+/// smallest gap wins, then the smallest offset between the two centers on
+/// the other axis, then the lowest index. O(n): every candidate is looked
+/// at once.
 pub func Nearest(from: Rect, candidates: Vector<Rect>, dir: int): int:
     horizontal := dir == DirLeft or dir == DirRight
     // Doubled centers (2 * x + width) keep the center arithmetic exact:
