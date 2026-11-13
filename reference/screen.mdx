@@ -21,7 +21,7 @@ keywords:
   - "dirty"
 ---
 
-A `Screen` owns the terminal session. It holds the widget [tree](/reference/tree), the [buffer](/reference/buffer), and the channel the input thread sends [events](/reference/event) on. You create one per program.
+A `Screen` owns the terminal session. It holds the widget [tree](/reference/tree), the [buffer](/reference/buffer), and the queue of incoming [events](/reference/event), which you reach through `post` and `next_event`. You create one per program.
 
 ```salam
 mut screen := basalam.NewTerminalScreen(MyRoot {})
@@ -45,10 +45,6 @@ pub func NewTerminalScreen(root: dyn Widget): Screen
 `NewTerminalScreen` does the same with the current terminal size.
 
 ## Fields
-
-<ResponseField name="events" type="chan.Chan<Event>">
-  The input thread sends events on this `std/chan` channel directly.
-</ResponseField>
 
 <ResponseField name="root" type="dyn Widget">
   The root widget (ID `0`). It always covers the whole screen.
