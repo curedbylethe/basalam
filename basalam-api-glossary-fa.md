@@ -708,7 +708,6 @@ end
 | Constant | `PollMs` | Terminal event polling interval in milliseconds | بازه پایش به میلی‌ثانیه |
 | Constant | `EventCapacity` | Event channel capacity | ظرفیت رویداد |
 | Type | `Screen` | Terminal session, widget tree, focus and rendering loop | صفحه |
-| Field | `Screen.events` | Incoming event channel | رویدادها |
 | Field | `Screen.root` | Root widget | ریشه |
 | Field | `Screen.focused` | Currently focused widget | ویجت متمرکز |
 | Field | `Screen.buffer` | Frame buffer | بافر |

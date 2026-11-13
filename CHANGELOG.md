@@ -11,6 +11,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Layout and tree doc comments no longer cite internal requirement IDs such as `(R5)`. Readers had no list to look them up in, and each sentence already states the rule.
 - The `Nearest` doc comment now states its qualifying and ranking rules. It used to point readers at comments in the function body, which generated docs do not show.
 
+### Removed
+- **Breaking:** `Screen.events` is no longer public. Use `post` to queue an event and `next_event` to read one. Receiving from or closing the channel directly could take events away from the loop or break `stop()`.
+
 ## [0.5.0] - 2026-11-10
 
 ### Added

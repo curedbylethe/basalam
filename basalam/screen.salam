@@ -160,10 +160,10 @@ end
 /// The terminal session: widget tree, back buffer, focus, and the event
 /// loop. Create it with NewScreen.
 pub struct Screen:
-    @en "events"
-    @fa "رویدادها"
-    /// The channel the input thread sends events on and next_event reads.
-    pub events: chan.Chan<Event>
+    // The channel the input thread sends events on and next_event reads.
+    // Private: post and next_event are the way in and out, and a caller
+    // that receives or closes it directly would steal events or break stop.
+    events: chan.Chan<Event>
 
     @en "root"
     @fa "ریشه"
